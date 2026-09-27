@@ -1,6 +1,6 @@
 // NegoTrip HQ — offline support. Serves the saved app when there's no network,
 // and always tries the network first so updates show up right away.
-const CACHE = "negotrip-hq-v1";
+const CACHE = "negotrip-hq-v2";
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {

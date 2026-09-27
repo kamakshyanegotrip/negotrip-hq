@@ -13,10 +13,11 @@
 <meta name="apple-mobile-web-app-title" content="NegoTrip HQ">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <style>
 :root{
   --bg:#F2F3F7; --surface:#FFFFFF; --surface-2:#E8EAF1; --ink:#1B1F3A; --ink-2:#565B7A; --line:#D9DCE6;
-  --accent:#A8321E; --accent-ink:#FFFFFF; --gold:#C98A12; --ok:#2F7D6B; --danger:#B3261E; --scrim:rgba(16,18,42,.45);
+  --accent:#A8321E; --accent-ink:#FFFFFF; --gold:#C98A12; --ok:#2F7D6B; --warn:#B7791F; --danger:#B3261E; --scrim:rgba(16,18,42,.45);
   --p0:#A8321E; --p1:#C27A0E; --p2:#2F7D6B; --p3:#3E4C9A; --p4:#6A4BA8; --p5:#7B5A2A; --p6:#8A3E6E; --p7:#1F7A99; --p8:#5E7A1F; --p9:#44506B;
   --tile-ink:#FFFFFF;
   --shadow:0 1px 2px rgba(27,31,58,.06),0 4px 14px rgba(27,31,58,.05);
@@ -28,7 +29,7 @@
   :root:not([data-theme="light"]){
     color-scheme:dark;
     --bg:#10122A; --surface:#1A1D3A; --surface-2:#23274A; --ink:#ECEDF7; --ink-2:#A3A7C6; --line:#2E3358;
-    --accent:#E0654E; --accent-ink:#10122A; --gold:#E9B24A; --ok:#4DB39A; --danger:#F08070; --scrim:rgba(0,0,0,.55);
+    --accent:#E0654E; --accent-ink:#10122A; --gold:#E9B24A; --ok:#4DB39A; --warn:#E9B24A; --danger:#F08070; --scrim:rgba(0,0,0,.55);
     --p0:#E0654E; --p1:#E3A23A; --p2:#4DB39A; --p3:#8390E0; --p4:#A98BE6; --p5:#C9A36A; --p6:#D57AB0; --p7:#5BBBD9; --p8:#A3C45A; --p9:#8E9AB8;
     --tile-ink:#10122A; --shadow:0 1px 2px rgba(0,0,0,.3);
   }
@@ -36,31 +37,46 @@
 :root[data-theme="dark"]{
   color-scheme:dark;
   --bg:#10122A; --surface:#1A1D3A; --surface-2:#23274A; --ink:#ECEDF7; --ink-2:#A3A7C6; --line:#2E3358;
-  --accent:#E0654E; --accent-ink:#10122A; --gold:#E9B24A; --ok:#4DB39A; --danger:#F08070; --scrim:rgba(0,0,0,.55);
+  --accent:#E0654E; --accent-ink:#10122A; --gold:#E9B24A; --ok:#4DB39A; --warn:#E9B24A; --danger:#F08070; --scrim:rgba(0,0,0,.55);
   --p0:#E0654E; --p1:#E3A23A; --p2:#4DB39A; --p3:#8390E0; --p4:#A98BE6; --p5:#C9A36A; --p6:#D57AB0; --p7:#5BBBD9; --p8:#A3C45A; --p9:#8E9AB8;
   --tile-ink:#10122A; --shadow:0 1px 2px rgba(0,0,0,.3);
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--bg)}
+html{padding-top:env(safe-area-inset-top,0px);background:var(--bg)}
 body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
-.wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:18px 56px}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:18px 110px}
 a{color:inherit;text-decoration:none}
 button{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+.num{font-variant-numeric:tabular-nums}
 
-.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:12px}
-.mark{width:44px;height:44px;border-radius:12px;background:var(--ink);display:grid;place-items:center;flex:none}
+.mark{width:44px;height:44px;border-radius:12px;background:#1B1F3A;display:grid;place-items:center;flex:none}
 .mark svg{width:28px;height:28px}
 .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
 h1{font-family:var(--display);font-weight:800;font-size:clamp(26px,5vw,34px);line-height:1;margin:2px 0 0;letter-spacing:-.02em}
-.status{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)}
-.status i{width:8px;height:8px;border-radius:50%;background:var(--ink-2)}
-.status.sync i{background:var(--ok)}
-.status.local i{background:var(--gold)}
+.me{display:flex;align-items:center;gap:10px}
+.avatar{width:36px;height:36px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;font-weight:600;font-size:13px;flex:none;overflow:hidden}
+.me-name{font-size:13.5px;font-weight:600;line-height:1.2}
+.me-role{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.linkbtn{border:0;background:none;color:var(--ink-2);font-size:12.5px;cursor:pointer;padding:4px 6px;border-radius:6px;text-decoration:underline}
 
-.search{margin-top:18px;position:relative}
+/* tabs */
+.navtabs{display:flex;gap:6px;margin-top:18px}
+.navtab{height:38px;padding:0 14px;border-radius:10px;border:1px solid transparent;background:transparent;cursor:pointer;font-weight:600;font-size:14px;color:var(--ink-2);display:flex;align-items:center;gap:8px}
+.navtab svg{width:18px;height:18px}
+.navtab[aria-current="page"]{background:var(--surface);border-color:var(--line);color:var(--ink)}
+.navtab .badge{font-family:var(--mono);font-size:10.5px;background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:1px 6px}
+@media (max-width:640px){
+  .navtabs{position:fixed;left:0;right:0;bottom:0;z-index:25;margin:0;background:var(--surface);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));justify-content:space-around}
+  .navtab{flex-direction:column;height:auto;gap:2px;padding:6px 8px;font-size:11px;border:0}
+  .navtab[aria-current="page"]{background:transparent;color:var(--accent)}
+  .navtab .badge{position:absolute;margin:-4px 0 0 18px}
+}
+
+.search{margin-top:16px;position:relative}
 .search input{width:100%;height:48px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:16px;padding:0 44px;box-shadow:var(--shadow)}
 .search input::placeholder{color:var(--ink-2)}
 .search svg{position:absolute;left:14px;top:14px;width:20px;height:20px;color:var(--ink-2)}
@@ -75,9 +91,10 @@ h1{font-family:var(--display);font-weight:800;font-size:clamp(26px,5vw,34px);lin
 .chip.add{border-style:dashed;color:var(--ink-2)}
 
 section{margin-top:22px}
-.sec-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.sec-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 h2{font-family:var(--display);font-weight:600;font-size:19px;margin:0;display:flex;align-items:center;gap:9px;letter-spacing:-.01em}
 h2 .sw{width:10px;height:10px;border-radius:3px;background:var(--c)}
+.vis{font-size:12px;color:var(--ink-2);margin-top:2px}
 .sec-tools{display:flex;gap:4px}
 .icon-btn{border:0;background:transparent;color:var(--ink-2);height:32px;padding:0 10px;border-radius:8px;cursor:pointer;font-size:13px}
 .icon-btn:hover{background:var(--surface-2);color:var(--ink)}
@@ -91,7 +108,7 @@ h2 .sw{width:10px;height:10px;border-radius:3px;background:var(--c)}
 .ico{width:40px;height:40px;border-radius:11px;background:var(--c);color:var(--tile-ink);display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:16px;letter-spacing:-.02em;flex:none}
 .tname{font-weight:600;font-size:14.5px;line-height:1.25;word-break:break-word;padding-right:52px}
 .tsub{font-size:12.5px;color:var(--ink-2);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.tmeta{margin-top:auto;font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tmeta{margin-top:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tbtns{position:absolute;top:6px;right:6px;z-index:2;display:flex}
 .tbtn{width:32px;height:32px;border:0;background:transparent;border-radius:9px;cursor:pointer;display:grid;place-items:center;color:var(--ink-2)}
 .tbtn:hover{background:var(--surface-2)}
@@ -105,26 +122,61 @@ h2 .sw{width:10px;height:10px;border-radius:3px;background:var(--c)}
 .pin span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .muted-box{font-size:13px;color:var(--ink-2);padding:12px 14px;border:1px dashed var(--line);border-radius:12px}
 
-.welcome{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px}
-.welcome h2{font-size:22px}
-.welcome p{color:var(--ink-2);max-width:60ch;margin:6px 0 14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px}
+.card h2{font-size:21px}
+.card p{color:var(--ink-2);max-width:62ch;margin:6px 0 14px}
 .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:16px}
 .step{background:var(--bg);border-radius:12px;padding:12px;font-size:13.5px}
 .step b{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--accent);margin-bottom:3px}
 
+/* lists (people, invites, activity) */
+.list{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row .grow{flex:1;min-width:0}
+.row .t1{font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .t2{font-size:12.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row.click{cursor:pointer}
+.row.click:hover{background:var(--bg)}
+.pill{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
+.pill.owner{background:var(--ink);color:var(--bg)}
+.pill.manager{background:color-mix(in srgb,var(--p3) 18%,transparent);color:var(--p3)}
+.pill.pending{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
+.pill.suspended{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger)}
+.btn-sm{height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap}
+.btn-sm.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+/* access grid */
+.matrix-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+table.matrix{border-collapse:collapse;min-width:100%;font-size:13.5px}
+.matrix th,.matrix td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}
+.matrix thead th{font-weight:600;font-size:12.5px;position:sticky;top:0;background:var(--surface)}
+.matrix th.rowh{text-align:left;position:sticky;left:0;background:var(--surface);font-weight:600;z-index:1}
+.matrix tr:last-child td,.matrix tr:last-child th{border-bottom:0}
+.matrix .dot{display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--c);margin-right:6px}
+.tick{width:22px;height:22px;accent-color:var(--accent);cursor:pointer}
+
 .fab{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:20;height:52px;padding:0 20px 0 16px;border-radius:16px;border:0;background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px;cursor:pointer;box-shadow:0 6px 20px rgba(168,50,30,.35)}
 .fab svg{width:20px;height:20px}
+@media (max-width:640px){.fab{bottom:calc(76px + env(safe-area-inset-bottom,0px))}}
 
 /* sheet */
 .scrim{position:fixed;inset:0;background:var(--scrim);z-index:30}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:31;background:var(--surface);border-radius:20px 20px 0 0;max-height:88vh;overflow-y:auto;padding:8px 16px calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 30px rgba(0,0,0,.2)}
-@media (min-width:640px){.sheet{left:50%;right:auto;bottom:auto;top:50%;transform:translate(-50%,-50%);width:min(520px,calc(100% - 32px));border-radius:18px;padding:16px 20px 20px}}
+@media (min-width:640px){.sheet{left:50%;right:auto;bottom:auto;top:50%;transform:translate(-50%,-50%);width:min(540px,calc(100% - 32px));border-radius:18px;padding:16px 20px 20px}}
 .grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:4px auto 12px}
 @media (min-width:640px){.grab{display:none}}
 .sheet h3{font-family:var(--display);font-weight:600;font-size:20px;margin:0 0 14px}
+.sheet h4{font-size:13px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);margin:18px 0 8px;font-weight:500}
 .field{margin-bottom:12px}
 label{display:block;font-size:12px;color:var(--ink-2);margin-bottom:4px}
-.sheet input,.sheet select{width:100%;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:16px;padding:0 12px}
+.sheet input:not([type=checkbox]):not([type=radio]),.sheet select,.sheet textarea{width:100%;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:16px;padding:0 12px}
+.sheet textarea{height:auto;min-height:130px;padding:10px;font-family:var(--mono);font-size:12px}
+.checks{display:flex;flex-direction:column;gap:2px;max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:6px}
+.checks label{display:flex;align-items:center;gap:10px;color:var(--ink);font-size:14px;margin:0;padding:7px 8px;border-radius:8px;cursor:pointer}
+.checks label:hover{background:var(--bg)}
+.checks input{width:18px;height:18px;accent-color:var(--accent)}
+.checks .sub{margin-left:auto;font-size:12px;color:var(--ink-2)}
 .swatches{display:flex;flex-wrap:wrap;gap:8px}
 .swatch{width:34px;height:34px;border-radius:10px;border:2px solid transparent;background:var(--c);cursor:pointer}
 .swatch[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--surface)}
@@ -136,30 +188,34 @@ label{display:block;font-size:12px;color:var(--ink-2);margin-bottom:4px}
 .btn:disabled{opacity:.5;cursor:default}
 .err{color:var(--danger);font-size:13px;margin-top:8px}
 .hint{font-size:12.5px;color:var(--ink-2);margin-top:4px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13.5px}
+.kv dt{color:var(--ink-2)}
+.kv dd{margin:0}
 
-details.help{margin-top:26px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
-details.help summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between}
-details.help summary::-webkit-details-marker{display:none}
-details.help summary::after{content:"+";font-family:var(--mono);color:var(--ink-2)}
-details.help[open] summary::after{content:"–"}
-details.help ol{padding-left:18px;margin:10px 0 0;color:var(--ink-2);font-size:13.5px;max-width:65ch}
-details.help b{color:var(--ink)}
+/* sign-in screen */
+.gate{min-height:calc(100vh - 40px);display:grid;place-items:center;padding:24px 16px}
+.gate .card{max-width:420px;width:100%;text-align:center;padding:28px 22px}
+.gate .mark{margin:0 auto 14px;width:56px;height:56px;border-radius:15px}
+.gate .mark svg{width:36px;height:36px}
+.gate h1{font-size:30px}
+.gate p{margin:10px auto 20px}
+.gbtn{display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 20px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-weight:600;font-size:15px;cursor:pointer;box-shadow:var(--shadow)}
+.gbtn svg{width:20px;height:20px}
+.gate .small{font-size:12.5px;color:var(--ink-2);margin-top:16px}
+
 .none{padding:30px 0;text-align:center;color:var(--ink-2)}
+.loading{padding:60px 0;text-align:center;color:var(--ink-2)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:40;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;max-width:calc(100% - 32px)}
-.backup{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px}
-.backup .btn{height:40px;font-size:14px}
-.sheet textarea{width:100%;min-height:140px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:12px;padding:10px;resize:vertical}
-.or{font-size:12px;color:var(--ink-2);text-align:center;margin:10px 0}
-.filebtn{display:flex;align-items:center;justify-content:center;height:44px;border-radius:11px;border:1px dashed var(--line);cursor:pointer;font-weight:600;background:var(--bg)}
-.filebtn input{position:absolute;opacity:0;width:1px;height:1px}
-.radio-row{display:flex;gap:14px;flex-wrap:wrap;font-size:14px;margin-top:12px}
-.radio-row label{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:14px;margin:0}
+.banner{margin-top:14px;padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--gold) 16%,var(--surface));border:1px solid color-mix(in srgb,var(--gold) 40%,transparent);font-size:13.5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.banner .grow{flex:1;min-width:200px}
 @media (prefers-reduced-motion: reduce){.tile{transition:none}.tile:active{transform:none}}
 </style>
 </head>
 <body>
 
-<div class="wrap">
+<div id="gate" class="gate" hidden></div>
+
+<div id="app" class="wrap" hidden>
   <header class="top">
     <div class="brand">
       <div class="mark" aria-hidden="true">
@@ -170,366 +226,578 @@ details.help b{color:var(--ink)}
         <h1>NegoTrip HQ</h1>
       </div>
     </div>
-    <div class="status local" id="status"><i></i><span>Saved on this device</span></div>
+    <div class="me" id="me"></div>
   </header>
 
-  <div class="search">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-    <input id="q" type="search" placeholder="Search your tools" autocomplete="off" aria-label="Search tools">
-    <button class="clear" id="clear" aria-label="Clear search" hidden>✕</button>
-  </div>
+  <nav class="navtabs" id="navtabs" aria-label="Sections"></nav>
 
-  <nav class="chips" id="chips" aria-label="Categories"></nav>
-
-  <div id="welcome" class="welcome" hidden>
-    <h2>Set up your launcher</h2>
-    <p>Everything here is yours to arrange. Create categories for how you work, then add a tile for each tool you open often.</p>
-    <div class="steps">
-      <div class="step"><b>STEP 1</b>Create a category, for example Research or Sales &amp; Marketing.</div>
-      <div class="step"><b>STEP 2</b>Add a tool with its name and link, and pick its category.</div>
-      <div class="step"><b>STEP 3</b>Tap ☆ on the tools you use most so they sit in Pinned.</div>
-    </div>
-    <div class="actions" style="margin-top:0">
-      <button class="btn" data-act="new-cat">Create a category</button>
-      <button class="btn ghost" data-act="new-tool">Add a tool</button>
-      <button class="btn ghost" data-act="import">Import a backup</button>
-    </div>
-  </div>
-
-  <section id="pinSec" hidden>
-    <div class="sec-head"><h2>Pinned</h2></div>
-    <div class="pinned" id="pinned"></div>
-  </section>
-
-  <div id="sections"></div>
-
-  <details class="help">
-    <summary>Use it like an app on your phone</summary>
-    <ol>
-      <li><b>Android (Chrome):</b> open this page, tap ⋮ → <b>Install app</b> or <b>Add to Home screen</b>.</li>
-      <li><b>iPhone (Safari):</b> open this page, tap Share → <b>Add to Home Screen</b>.</li>
-      <li>Your categories, tools and pins are saved in this device's browser. Use Backup below to copy them to another device.</li>
-    </ol>
-  </details>
-
-  <details class="help" id="backupBox">
-    <summary>Backup &amp; move to another device</summary>
-    <ol>
-      <li><b>Export</b> on the device that has your tools. Save the file, or copy the text.</li>
-      <li>Open this page on the other device and tap <b>Import</b>. Pick the file or paste the text.</li>
-    </ol>
-    <div class="backup">
-      <button class="btn" data-act="export">Export</button>
-      <button class="btn ghost" data-act="import">Import</button>
-    </div>
-  </details>
+  <main id="view"></main>
 </div>
 
 <button class="fab" id="fab" data-act="new-tool" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add tool</button>
-
 <div class="scrim" id="scrim" hidden></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script>
+/* ================= config ================= */
+const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
+const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key; access is enforced by database rules
 const PALETTE = 10;
+
+/* ================= helpers ================= */
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
-const initials = n => (n.replace(/[^\p{L}\p{N} ]/gu," ").split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("") || "•").toUpperCase();
+const initials = n => (String(n||"").replace(/[^\p{L}\p{N} ]/gu," ").split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("") || "•").toUpperCase();
 const host = u => { try { return new URL(u).hostname.replace(/^www\./,""); } catch(e){ return u; } };
-const normUrl = u => { u = u.trim(); if (!u) return ""; if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = "https://" + u; try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : ""; } catch(e){ return ""; } };
+const normUrl = u => { u = String(u||"").trim(); if (!u) return ""; if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = "https://" + u; try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : ""; } catch(e){ return ""; } };
+const isEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+const when = d => { if (!d) return "never"; const t = new Date(d), s = (Date.now()-t)/1000;
+  if (s < 60) return "just now"; if (s < 3600) return Math.floor(s/60)+" min ago"; if (s < 86400) return Math.floor(s/3600)+" h ago";
+  if (s < 86400*7) return Math.floor(s/86400)+" d ago"; return t.toLocaleDateString("en-IN",{day:"numeric",month:"short"}); };
 const starSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>';
 const dotsSvg = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
-
-/* ---------- storage: this device's browser ---------- */
-let cats = [], tools = [];
-const canEdit = true;
-let active = "all", query = "";
-try { active = localStorage.getItem("hq.cat") || "all"; } catch(e){}
-
-let storageOk = true;
-const local = {
-  load(){ try { cats = JSON.parse(localStorage.getItem("hq.cats")||"[]"); tools = JSON.parse(localStorage.getItem("hq.tools")||"[]"); } catch(e){ cats=[]; tools=[]; storageOk=false; } },
-  save(){ try { localStorage.setItem("hq.cats",JSON.stringify(cats)); localStorage.setItem("hq.tools",JSON.stringify(tools)); storageOk=true; } catch(e){ storageOk=false; } setStatus(); }
+const ICONS = {
+  tools:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>',
+  people:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.6.2 4.4 2 5 5.4"/></svg>',
+  access:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
+  activity:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>'
 };
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+const G_LOGO = '<svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+const MARK = '<div class="mark" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="#E9B24A" stroke-width="2.4"/><circle cx="16" cy="16" r="4.2" fill="#E0654E"/><path d="M16 3v5M16 24v5M3 16h5M24 16h5" stroke="#E9B24A" stroke-width="2.4" stroke-linecap="round"/></svg></div>';
 
-async function put(kind, obj){
-  const arr = kind==="categories" ? cats : tools;
-  const i = arr.findIndex(x=>x.id===obj.id); if (i>=0) arr[i]=obj; else arr.push(obj);
-  local.save(); render();
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2400); }
+function errText(e){
+  const m = (e && (e.message||e.error_description||"")) || "";
+  if (/duplicate|unique/i.test(m)) return "That already exists.";
+  if (/row-level security|permission|not allowed|Only the owner/i.test(m)) return "You don't have permission to make this change.";
+  if (/Failed to fetch|NetworkError|network/i.test(m)) return "No connection. Check your internet and try again.";
+  return m || "Something went wrong. Try again.";
 }
-async function drop(kind, id){
-  if (kind==="categories") cats = cats.filter(x=>x.id!==id); else tools = tools.filter(x=>x.id!==id);
-  local.save(); render();
+async function run(q){ const {data,error} = await q; if (error) throw error; return data; }
+
+/* ================= state ================= */
+const sb = (window.supabase && window.supabase.createClient) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:true, detectSessionInUrl:true, flowType:"pkce"}}) : null;
+const S = { user:null, me:null, cats:[], tools:[], pins:new Set(), grants:[], teams:[], members:[], people:[], invites:[], opens:[],
+  tab:"tools", active:"all", query:"" };
+try { S.active = localStorage.getItem("hq.cat") || "all"; } catch(e){}
+
+const isOwner = () => S.me && S.me.role==="owner" && S.me.status==="active";
+const myManagedTeams = () => S.members.filter(m=>m.user_id===S.me?.id && m.is_manager).map(m=>m.team_id);
+const isManager = () => !isOwner() && myManagedTeams().length>0;
+const managedCats = () => { const t = new Set(myManagedTeams()); return new Set(S.grants.filter(g=>g.team_id && t.has(g.team_id) && g.category_id).map(g=>g.category_id)); };
+const canEditTool = t => isOwner() || (t && t.category_id && managedCats().has(t.category_id));
+const canAddTools = () => isOwner() || managedCats().size>0;
+const catById = id => S.cats.find(c=>c.id===id);
+const teamById = id => S.teams.find(t=>t.id===id);
+const personById = id => S.people.find(p=>p.id===id);
+const colorOf = t => { const c = catById(t.category_id); return `var(--p${c ? c.color : 9})`; };
+const sortedCats = () => S.cats.slice().sort((a,b)=>(a.sort_order??0)-(b.sort_order??0) || a.name.localeCompare(b.name));
+const displayName = p => p ? (p.name || p.email.split("@")[0]) : "Someone";
+const teamsOf = uid => S.members.filter(m=>m.user_id===uid).map(m=>({...teamById(m.team_id), is_manager:m.is_manager})).filter(t=>t.id);
+const myTeamMemberIds = () => { const t = new Set(myManagedTeams()); return new Set(S.members.filter(m=>t.has(m.team_id)).map(m=>m.user_id)); };
+
+/* ================= data ================= */
+async function loadAll(){
+  const [cats, tools, pins, grants, teams, members, people] = await Promise.all([
+    run(sb.from("categories").select("*")),
+    run(sb.from("tools").select("*")),
+    run(sb.from("pins").select("tool_id")),
+    run(sb.from("grants").select("*")),
+    run(sb.from("teams").select("*").order("name")),
+    run(sb.from("team_members").select("*")),
+    run(sb.from("profiles").select("*").order("created_at"))
+  ]);
+  Object.assign(S, {cats, tools, grants, teams, members, people, pins:new Set(pins.map(p=>p.tool_id))});
+  S.me = people.find(p=>p.id===S.user.id) || S.me;
+  S.invites = isOwner() ? await run(sb.from("invites").select("*").order("invited_at",{ascending:false})) : [];
 }
-function setStatus(){
-  const s = $("#status");
-  s.className = "status " + (storageOk ? "local" : "");
-  s.querySelector("span").textContent = storageOk ? "Saved on this device" : "Not saving: browser storage is blocked";
+async function loadActivity(){
+  S.opens = await run(sb.from("tool_opens").select("user_id,tool_id,opened_at").order("opened_at",{ascending:false}).limit(150));
+}
+async function refresh(){ try { await loadAll(); } catch(e){ toast(errText(e)); } render(); }
+
+/* ================= gate screens ================= */
+function gate(html){ $("#app").hidden = true; $("#fab").hidden = true; const g=$("#gate"); g.innerHTML = html; g.hidden = false; }
+function showSignIn(msg){
+  gate(`<div class="card">${MARK}<h1>NegoTrip HQ</h1>
+    <p>Your NegoTrip tools in one place. Sign in with the Google account your invitation was sent to.</p>
+    <button class="gbtn" data-act="signin">${G_LOGO}Sign in with Google</button>
+    ${msg?`<div class="err" style="margin-top:14px">${esc(msg)}</div>`:""}
+    <div class="small">Only people invited by NegoTrip can see tools here.</div></div>`);
+}
+function showWaiting(p){
+  const susp = p.status==="suspended";
+  gate(`<div class="card">${MARK}<h1>${susp?"Access paused":"Waiting for access"}</h1>
+    <p>${susp ? "Your access to NegoTrip HQ has been paused. Contact the NegoTrip office if you think this is a mistake."
+              : `You're signed in as <b>${esc(p.email)}</b>, but this account hasn't been given access yet. Ask the NegoTrip office to approve it, then tap Check again.`}</p>
+    ${susp?"":`<button class="gbtn" data-act="recheck">Check again</button>`}
+    <div class="small"><button class="linkbtn" data-act="signout">Sign out</button> · Not your account? Sign out and use another.</div></div>`);
 }
 
-/* ---------- rendering ---------- */
-const catById = id => cats.find(c=>c.id===id);
-const colorOf = t => { const c = catById(t.cat); return `var(--p${c ? c.color : 9})`; };
-const sortedCats = () => cats.slice().sort((a,b)=>(a.order??0)-(b.order??0) || a.name.localeCompare(b.name));
+/* ================= app shell ================= */
+function renderShell(){
+  $("#gate").hidden = true; $("#app").hidden = false;
+  const me = S.me;
+  const roleLabel = isOwner() ? "Owner" : isManager() ? "Manager" : "Staff";
+  const pic = S.user?.user_metadata?.avatar_url;
+  $("#me").innerHTML = `<div style="text-align:right"><div class="me-name">${esc(displayName(me))}</div><div class="me-role">${roleLabel} · <button class="linkbtn" data-act="signout" style="padding:0">Sign out</button></div></div>
+    <div class="avatar">${pic?`<img src="${esc(pic)}" alt="" width="36" height="36" referrerpolicy="no-referrer" onerror="this.remove()">`:esc(initials(displayName(me)))}</div>`;
+  const pending = S.people.filter(p=>p.status==="pending").length;
+  const tabs = [["tools","Tools",ICONS.tools]];
+  if (isOwner() || isManager()) tabs.push(["people", isOwner()?"People":"My team", ICONS.people, isOwner()?pending:0]);
+  if (isOwner()) tabs.push(["access","Access",ICONS.access]);
+  if (isOwner() || isManager()) tabs.push(["activity","Activity",ICONS.activity]);
+  if (!tabs.some(t=>t[0]===S.tab)) S.tab = "tools";
+  $("#navtabs").hidden = tabs.length < 2;
+  $("#navtabs").innerHTML = tabs.map(([id,label,ic,badge])=>`<button class="navtab" data-tab="${id}" ${S.tab===id?'aria-current="page"':""}>${ic}${label}${badge?`<span class="badge">${badge}</span>`:""}</button>`).join("");
+}
+function render(){
+  if (!S.me) return;
+  renderShell();
+  $("#fab").hidden = !(S.tab==="tools" && canAddTools() && (S.cats.length || S.tools.length));
+  if (S.tab==="tools") renderTools();
+  else if (S.tab==="people") renderPeople();
+  else if (S.tab==="access") renderAccess();
+  else if (S.tab==="activity") renderActivity();
+}
 
+/* ================= tools view ================= */
+function visibleTo(catId){
+  const names = S.grants.filter(g=>g.category_id===catId && g.team_id).map(g=>teamById(g.team_id)?.name).filter(Boolean);
+  return names.length ? "Visible to " + names.join(", ") : "Only you (no team has this category yet)";
+}
 function tileHtml(t){
+  const pinned = S.pins.has(t.id);
   return `<div class="tile" style="--c:${colorOf(t)}">
-    <a class="hit" href="${esc(t.url)}" target="_blank" rel="noopener" aria-label="Open ${esc(t.name)}"></a>
+    <a class="hit" href="${esc(t.url)}" target="_blank" rel="noopener" data-open="${t.id}" aria-label="Open ${esc(t.name)}"></a>
     <div class="ico" aria-hidden="true">${esc(initials(t.name))}</div>
     <div><div class="tname">${esc(t.name)}</div>${t.note?`<div class="tsub">${esc(t.note)}</div>`:""}</div>
     <div class="tmeta">${esc(host(t.url))}</div>
-    ${canEdit?`<div class="tbtns">
-      <button class="tbtn" data-pin="${t.id}" aria-pressed="${!!t.pinned}" aria-label="${t.pinned?"Unpin":"Pin"} ${esc(t.name)}">${starSvg}</button>
-      <button class="tbtn" data-edit="${t.id}" aria-label="Edit ${esc(t.name)}">${dotsSvg}</button>
-    </div>`:""}
+    <div class="tbtns">
+      <button class="tbtn" data-pin="${t.id}" aria-pressed="${pinned}" aria-label="${pinned?"Unpin":"Pin"} ${esc(t.name)}">${starSvg}</button>
+      ${canEditTool(t)?`<button class="tbtn" data-edit="${t.id}" aria-label="Edit ${esc(t.name)}">${dotsSvg}</button>`:""}
+    </div>
   </div>`;
 }
-
-function render(){
+function importBanner(){
+  if (!isOwner()) return "";
+  let n = 0; try { n = JSON.parse(localStorage.getItem("hq.tools")||"[]").length; } catch(e){}
+  let dismissed = false; try { dismissed = localStorage.getItem("hq.importDone")==="1"; } catch(e){}
+  if (!n || dismissed) return "";
+  return `<div class="banner"><div class="grow"><b>${n} tool${n>1?"s":""} saved on this device</b> from the earlier version. Move them into your account so they appear everywhere.</div>
+    <button class="btn-sm primary" data-act="import-local">Move them in</button><button class="btn-sm" data-act="dismiss-import">Not now</button></div>`;
+}
+function renderTools(){
   const sc = sortedCats();
-  const uncategorized = tools.filter(t=>!catById(t.cat));
-  if (active!=="all" && active!=="none" && !catById(active)) active = "all";
+  const uncategorized = S.tools.filter(t=>!catById(t.category_id));
+  if (S.active!=="all" && S.active!=="none" && !catById(S.active)) S.active = "all";
+  const empty = !S.cats.length && !S.tools.length;
 
-  // chips
-  const chips = [`<button class="chip" data-cat="all" aria-pressed="${active==="all"}">All <span class="n">${tools.length}</span></button>`]
-    .concat(sc.map(c=>`<button class="chip" data-cat="${c.id}" aria-pressed="${active===c.id}" style="--c:var(--p${c.color})"><i></i>${esc(c.name)} <span class="n">${tools.filter(t=>t.cat===c.id).length}</span></button>`));
-  if (uncategorized.length) chips.push(`<button class="chip" data-cat="none" aria-pressed="${active==="none"}" style="--c:var(--p9)"><i></i>Uncategorized <span class="n">${uncategorized.length}</span></button>`);
-  if (canEdit) chips.push(`<button class="chip add" data-act="new-cat">+ Category</button>`);
-  $("#chips").innerHTML = chips.join("");
+  if (empty){
+    $("#view").innerHTML = isOwner() ? `${importBanner()}<div class="card" style="margin-top:22px">
+        <h2>Set up your launcher</h2>
+        <p>Create categories for how NegoTrip works, add a tile for each tool, then decide on the Access tab which teams see which categories.</p>
+        <div class="steps">
+          <div class="step"><b>STEP 1</b>Create a category, for example Research or Sales &amp; Marketing.</div>
+          <div class="step"><b>STEP 2</b>Add tools with their name and link.</div>
+          <div class="step"><b>STEP 3</b>Invite your team on the People tab and tick what each team can open on Access.</div>
+        </div>
+        <div class="actions" style="margin-top:0"><button class="btn" data-act="new-cat">Create a category</button><button class="btn ghost" data-act="new-tool">Add a tool</button></div>
+      </div>`
+      : `<div class="card" style="margin-top:22px"><h2>No tools yet</h2><p>Nothing has been shared with you yet. Once the NegoTrip office gives you access, your tools will appear here.</p></div>`;
+    return;
+  }
 
-  const empty = !cats.length && !tools.length;
-  $("#welcome").hidden = !(empty && canEdit);
-  $("#fab").hidden = !canEdit || empty;
+  const q = S.query.toLowerCase().trim();
+  const match = t => !q || (t.name+" "+(t.note||"")+" "+t.url+" "+(catById(t.category_id)?.name||"")).toLowerCase().includes(q);
+  const chips = [`<button class="chip" data-cat="all" aria-pressed="${S.active==="all"}">All <span class="n">${S.tools.length}</span></button>`]
+    .concat(sc.map(c=>`<button class="chip" data-cat="${c.id}" aria-pressed="${S.active===c.id}" style="--c:var(--p${c.color})"><i></i>${esc(c.name)} <span class="n">${S.tools.filter(t=>t.category_id===c.id).length}</span></button>`));
+  if (uncategorized.length) chips.push(`<button class="chip" data-cat="none" aria-pressed="${S.active==="none"}" style="--c:var(--p9)"><i></i>Uncategorized <span class="n">${uncategorized.length}</span></button>`);
+  if (isOwner()) chips.push(`<button class="chip add" data-act="new-cat">+ Category</button>`);
 
-  // pinned
-  const pins = tools.filter(t=>t.pinned).sort((a,b)=>a.name.localeCompare(b.name));
-  $("#pinSec").hidden = !!query || !pins.length;
-  $("#pinned").innerHTML = pins.map(t=>`<a class="pin" href="${esc(t.url)}" target="_blank" rel="noopener" style="--c:${colorOf(t)}"><div class="ico" aria-hidden="true">${esc(initials(t.name))}</div><span>${esc(t.name)}</span></a>`).join("");
+  const pins = S.tools.filter(t=>S.pins.has(t.id)).sort((a,b)=>a.name.localeCompare(b.name));
+  const groups = sc.map(c=>({c, id:c.id, list:S.tools.filter(t=>t.category_id===c.id && match(t))}));
+  groups.push({c:{name:"Uncategorized",color:9}, id:"none", list:uncategorized.filter(match)});
+  const shown = groups.filter(g => (S.active==="all" || S.active===g.id) && (g.list.length || (!q && g.id!=="none" && (isOwner()||managedCats().has(g.id)))));
 
-  // sections
-  const q = query.toLowerCase().trim();
-  const match = t => !q || (t.name+" "+(t.note||"")+" "+t.url+" "+(catById(t.cat)?.name||"")).toLowerCase().includes(q);
-  const groups = sc.map(c=>({c, id:c.id, list: tools.filter(t=>t.cat===c.id && match(t))}));
-  groups.push({c:{name:"Uncategorized",color:9}, id:"none", list: uncategorized.filter(match)});
-  const shown = groups.filter(g => (active==="all" || active===g.id) && (g.list.length || (!q && g.id!=="none" && (active===g.id || active==="all"))));
-  if (empty){ $("#sections").innerHTML = ""; return; }
-  if (!shown.length){ $("#sections").innerHTML = `<div class="none">${q?`No tools match “${esc(query)}”.`:"Nothing here yet."}</div>`; return; }
-
-  $("#sections").innerHTML = shown.map(g=>{
+  const sections = shown.length ? shown.map(g=>{
     const list = g.list.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    const canAddHere = g.id!=="none" && (isOwner() || managedCats().has(g.id));
     return `<section style="--c:var(--p${g.c.color})">
-      <div class="sec-head"><h2><span class="sw"></span>${esc(g.c.name)}</h2>
-        ${canEdit?`<div class="sec-tools">${g.id!=="none"?`<button class="icon-btn" data-act="new-tool" data-in="${g.id}">+ Add</button><button class="icon-btn" data-editcat="${g.id}">Edit</button>`:""}</div>`:""}
+      <div class="sec-head"><div><h2><span class="sw"></span>${esc(g.c.name)}</h2>${isOwner()&&g.id!=="none"?`<div class="vis">${esc(visibleTo(g.id))}</div>`:""}</div>
+        <div class="sec-tools">${canAddHere?`<button class="icon-btn" data-act="new-tool" data-in="${g.id}">+ Add</button>`:""}${isOwner()&&g.id!=="none"?`<button class="icon-btn" data-editcat="${g.id}">Edit</button>`:""}</div>
       </div>
-      ${list.length?`<div class="grid">${list.map(tileHtml).join("")}</div>`
-        :`<div class="muted-box">No tools in this category yet.${canEdit?` Use + Add to put one here.`:""}</div>`}
+      ${list.length?`<div class="grid">${list.map(tileHtml).join("")}</div>`:`<div class="muted-box">No tools in this category yet.</div>`}
     </section>`;
-  }).join("");
+  }).join("") : `<div class="none">${q?`No tools match “${esc(S.query)}”.`:"Nothing here yet."}</div>`;
+
+  const hadFocus = document.activeElement && document.activeElement.id==="q";
+  $("#view").innerHTML = `${importBanner()}
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input id="q" type="search" placeholder="Search your tools" autocomplete="off" aria-label="Search tools" value="${esc(S.query)}">
+      <button class="clear" data-act="clear-q" aria-label="Clear search" ${S.query?"":"hidden"}>✕</button>
+    </div>
+    <nav class="chips" aria-label="Categories">${chips.join("")}</nav>
+    ${pins.length && !q ? `<section><div class="sec-head"><h2>Pinned</h2></div><div class="pinned">${pins.map(t=>`<a class="pin" href="${esc(t.url)}" target="_blank" rel="noopener" data-open="${t.id}" style="--c:${colorOf(t)}"><div class="ico" aria-hidden="true">${esc(initials(t.name))}</div><span>${esc(t.name)}</span></a>`).join("")}</div></section>`:""}
+    ${sections}`;
+  if (hadFocus){ const i=$("#q"); i.focus(); i.setSelectionRange(i.value.length,i.value.length); }
 }
 
-/* ---------- sheets ---------- */
-let lastFocus = null;
-function openSheet(html){
-  lastFocus = document.activeElement;
-  $("#sheet").innerHTML = `<div class="grab"></div>` + html;
-  $("#sheet").hidden = false; $("#scrim").hidden = false;
-  setTimeout(()=>{ const f=$("#sheet input"); f&&f.focus(); }, 30);
+/* ================= people view ================= */
+function personRow(p){
+  const teams = teamsOf(p.id);
+  const pills = [];
+  if (p.status!=="active") pills.push(`<span class="pill ${p.status}">${p.status==="pending"?"Waiting":"Paused"}</span>`);
+  if (p.role==="owner") pills.push(`<span class="pill owner">Owner</span>`);
+  else if (teams.some(t=>t.is_manager)) pills.push(`<span class="pill manager">Manager</span>`);
+  return `<div class="row ${isOwner()?"click":""}" ${isOwner()?`data-person="${p.id}"`:""}>
+    <div class="avatar">${esc(initials(displayName(p)))}</div>
+    <div class="grow"><div class="t1">${esc(displayName(p))}</div><div class="t2">${esc(p.email)}${teams.length?" · "+teams.map(t=>esc(t.name)).join(", "):""}</div></div>
+    <div style="display:flex;gap:6px;align-items:center">${pills.join("")}<span class="t2 num" style="min-width:64px;text-align:right">${esc(when(p.last_seen))}</span></div>
+  </div>`;
 }
-function closeSheet(){ $("#sheet").hidden = true; $("#scrim").hidden = true; $("#sheet").innerHTML=""; lastFocus&&lastFocus.focus&&lastFocus.focus(); }
-function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2200); }
-function errMsg(e){ return e && e.code==="quota_exceeded" ? "Storage is full. Delete some tools and try again." : e && e.code==="invalid_argument" ? "You don't have permission to change this launcher." : "Couldn't save. Check your connection and try again."; }
+function renderPeople(){
+  if (!isOwner()){
+    const ids = myTeamMemberIds();
+    const list = S.people.filter(p=>ids.has(p.id));
+    const myTeams = myManagedTeams().map(teamById).filter(Boolean);
+    $("#view").innerHTML = `<section><div class="sec-head"><div><h2>My team</h2><div class="vis">${myTeams.map(t=>esc(t.name)).join(", ")}</div></div></div>
+      <div class="list">${list.map(personRow).join("") || `<div class="row"><div class="grow t2">No one in your team yet.</div></div>`}</div>
+      <p class="hint" style="margin-top:10px">To give someone in your team a single extra tool, open that tool's ⋯ menu on the Tools tab. Only the owner can add or remove people.</p></section>`;
+    return;
+  }
+  const pending = S.people.filter(p=>p.status==="pending");
+  const others = S.people.filter(p=>p.status!=="pending").sort((a,b)=>(a.role==="owner"?-1:0)-(b.role==="owner"?-1:0) || displayName(a).localeCompare(displayName(b)));
+  $("#view").innerHTML = `
+    ${pending.length?`<section><div class="sec-head"><h2>Waiting for approval</h2></div>
+      <div class="list">${pending.map(p=>`<div class="row"><div class="avatar">${esc(initials(displayName(p)))}</div>
+        <div class="grow"><div class="t1">${esc(displayName(p))}</div><div class="t2">${esc(p.email)} · signed in ${esc(when(p.created_at))}</div></div>
+        <button class="btn-sm primary" data-approve="${p.id}">Approve</button></div>`).join("")}</div>
+      <p class="hint">These people signed in without an invite. Approve only the ones you recognise; the rest keep seeing nothing.</p></section>`:""}
+    <section><div class="sec-head"><h2>People</h2><button class="btn-sm primary" data-act="invite">+ Invite</button></div>
+      <div class="list">${others.map(personRow).join("")}</div></section>
+    ${S.invites.length?`<section><div class="sec-head"><h2>Invited, not signed in yet</h2></div>
+      <div class="list">${S.invites.map(i=>`<div class="row"><div class="grow"><div class="t1">${esc(i.email)}</div><div class="t2">${i.role==="manager"?"Manager":"Staff"}${i.team_id&&teamById(i.team_id)?" · "+esc(teamById(i.team_id).name):""} · invited ${esc(when(i.invited_at))}</div></div>
+        <button class="btn-sm" data-uninvite="${esc(i.email)}">Cancel invite</button></div>`).join("")}</div>
+      <p class="hint">Send them the link <b>kamakshyanegotrip.github.io/negotrip-hq</b> and ask them to sign in with this Google account.</p></section>`:""}
+    <section><div class="sec-head"><h2>Teams</h2><button class="btn-sm" data-act="new-team">+ Team</button></div>
+      <div class="list">${S.teams.length ? S.teams.map(t=>{ const n=S.members.filter(m=>m.team_id===t.id).length; const mg=S.members.filter(m=>m.team_id===t.id&&m.is_manager).map(m=>displayName(personById(m.user_id)));
+        return `<div class="row click" data-team="${t.id}"><div class="grow"><div class="t1">${esc(t.name)}</div><div class="t2">${n} ${n===1?"person":"people"}${mg.length?" · Manager: "+mg.map(esc).join(", "):""}</div></div><span class="t2">Edit</span></div>`; }).join("")
+        : `<div class="row"><div class="grow t2">No teams yet. Create teams like Sales or Operations, then give each team its categories on the Access tab.</div></div>`}</div></section>`;
+}
+
+/* ================= access view (owner) ================= */
+function renderAccess(){
+  const sc = sortedCats();
+  if (!S.teams.length || !sc.length){
+    $("#view").innerHTML = `<div class="card" style="margin-top:22px"><h2>Access</h2><p>You need at least one team and one category first. Create teams on the People tab and categories on the Tools tab.</p></div>`;
+    return;
+  }
+  const has = (team,cat) => S.grants.some(g=>g.team_id===team && g.category_id===cat);
+  const extra = S.grants.filter(g=>g.tool_id);
+  $("#view").innerHTML = `<section><div class="sec-head"><div><h2>Who sees which category</h2><div class="vis">Tick a box to give a whole team every tool in that category, including tools you add later.</div></div></div>
+    <div class="matrix-wrap"><table class="matrix"><thead><tr><th class="rowh">Team</th>${sc.map(c=>`<th style="--c:var(--p${c.color})"><span class="dot"></span>${esc(c.name)}</th>`).join("")}</tr></thead>
+    <tbody>${S.teams.map(t=>`<tr><th class="rowh">${esc(t.name)}</th>${sc.map(c=>`<td><input type="checkbox" class="tick" data-grant="${t.id}|${c.id}" ${has(t.id,c.id)?"checked":""} aria-label="${esc(t.name)} can open ${esc(c.name)}"></td>`).join("")}</tr>`).join("")}</tbody></table></div></section>
+    <section><div class="sec-head"><div><h2>Single-tool extras</h2><div class="vis">Tools shared one at a time, outside the grid. Change these from each tool's ⋯ menu.</div></div></div>
+      <div class="list">${extra.length ? extra.map(g=>{ const t=S.tools.find(x=>x.id===g.tool_id); const who = g.team_id ? "Team "+(teamById(g.team_id)?.name||"?") : displayName(personById(g.user_id));
+        return `<div class="row"><div class="grow"><div class="t1">${esc(t?.name||"Deleted tool")}</div><div class="t2">${esc(who)}</div></div><button class="btn-sm" data-ungrant="${g.id}">Remove</button></div>`; }).join("")
+        : `<div class="row"><div class="grow t2">None yet.</div></div>`}</div></section>`;
+}
+
+/* ================= activity view ================= */
+async function renderActivity(){
+  $("#view").innerHTML = `<div class="loading">Loading activity…</div>`;
+  try { await loadActivity(); } catch(e){ $("#view").innerHTML = `<div class="none">${esc(errText(e))}</div>`; return; }
+  if (S.tab!=="activity") return;
+  const scope = isOwner() ? S.people : S.people.filter(p=>myTeamMemberIds().has(p.id));
+  const seen = scope.filter(p=>p.status==="active").sort((a,b)=>new Date(b.last_seen||0)-new Date(a.last_seen||0));
+  const counts = {}; S.opens.forEach(o=>{ counts[o.tool_id]=(counts[o.tool_id]||0)+1; });
+  const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  $("#view").innerHTML = `
+    <section><div class="sec-head"><h2>Last active</h2></div>
+      <div class="list">${seen.map(p=>`<div class="row"><div class="avatar">${esc(initials(displayName(p)))}</div><div class="grow"><div class="t1">${esc(displayName(p))}</div><div class="t2">${esc(p.email)}</div></div><span class="t2 num">${esc(when(p.last_seen))}</span></div>`).join("") || `<div class="row"><div class="grow t2">No one yet.</div></div>`}</div></section>
+    ${top.length?`<section><div class="sec-head"><h2>Most opened</h2><span class="vis">last ${S.opens.length} opens</span></div>
+      <div class="list">${top.map(([id,n])=>{ const t=S.tools.find(x=>x.id===id); return `<div class="row"><div class="ico" style="--c:${t?colorOf(t):"var(--p9)"};width:32px;height:32px;font-size:13px;border-radius:9px">${esc(initials(t?.name||"?"))}</div><div class="grow"><div class="t1">${esc(t?.name||"Tool no longer visible")}</div></div><span class="t2 num">${n}×</span></div>`; }).join("")}</div></section>`:""}
+    <section><div class="sec-head"><h2>Recent opens</h2></div>
+      <div class="list">${S.opens.slice(0,40).map(o=>{ const t=S.tools.find(x=>x.id===o.tool_id); return `<div class="row"><div class="grow"><div class="t1">${esc(displayName(personById(o.user_id)))}</div><div class="t2">opened ${esc(t?.name||"a tool")}</div></div><span class="t2 num">${esc(when(o.opened_at))}</span></div>`; }).join("") || `<div class="row"><div class="grow t2">No tools opened yet.</div></div>`}</div></section>`;
+}
+
+/* ================= sheets ================= */
+let lastFocus=null;
+function openSheet(html){ lastFocus=document.activeElement; $("#sheet").innerHTML=`<div class="grab"></div>`+html; $("#sheet").hidden=false; $("#scrim").hidden=false; setTimeout(()=>{const f=$("#sheet input:not([type=checkbox]):not([type=radio])"); f&&f.focus();},30); }
+function closeSheet(){ $("#sheet").hidden=true; $("#scrim").hidden=true; $("#sheet").innerHTML=""; lastFocus&&lastFocus.focus&&lastFocus.focus(); }
+function showErr(sel,msg){ const el=$(sel); if(el){ el.textContent=msg; el.hidden=false; } }
+function armDelete(btn, go){ btn.addEventListener("click", async ()=>{ if(!btn.classList.contains("armed")){ btn.classList.add("armed"); btn.textContent="Tap again to confirm"; return; } btn.disabled=true; await go(); btn.disabled=false; }); }
+function busy(form, on){ form.querySelectorAll("button").forEach(b=>b.disabled=on); }
 
 function catSheet(c){
-  const isNew = !c; c = c || {name:"", color: cats.length % PALETTE};
-  let color = c.color;
-  const count = c.id ? tools.filter(t=>t.cat===c.id).length : 0;
+  const isNew=!c; c=c||{name:"",color:S.cats.length%PALETTE}; let color=c.color;
+  const count = c.id ? S.tools.filter(t=>t.category_id===c.id).length : 0;
   openSheet(`<h3 id="sheetTitle">${isNew?"New category":"Edit category"}</h3>
     <form id="catForm">
       <div class="field"><label for="cName">Name</label><input id="cName" maxlength="40" required value="${esc(c.name)}" placeholder="e.g. Research"></div>
       <div class="field"><label>Colour</label><div class="swatches" id="sw">${Array.from({length:PALETTE},(_,i)=>`<button type="button" class="swatch" data-color="${i}" aria-label="Colour ${i+1}" aria-pressed="${i===color}" style="--c:var(--p${i})"></button>`).join("")}</div></div>
       <div class="err" id="cErr" hidden></div>
-      <div class="actions">
-        <button class="btn" type="submit">${isNew?"Create":"Save"}</button>
-        <button class="btn ghost" type="button" data-act="close">Cancel</button>
-        ${isNew?"":`<button class="btn danger" type="button" id="cDel">Delete</button>`}
-      </div>
-      ${!isNew && count?`<div class="hint">Deleting keeps its ${count} tool${count>1?"s":""} and moves ${count>1?"them":"it"} to Uncategorized.</div>`:""}
+      <div class="actions"><button class="btn" type="submit">${isNew?"Create":"Save"}</button><button class="btn ghost" type="button" data-act="close">Cancel</button>${isNew?"":`<button class="btn danger" type="button" id="cDel">Delete</button>`}</div>
+      ${!isNew&&count?`<div class="hint">Deleting keeps its ${count} tool${count>1?"s":""} and moves ${count>1?"them":"it"} to Uncategorized. Teams lose access to ${count>1?"them":"it"}.</div>`:""}
     </form>`);
-  $("#sw").addEventListener("click", e=>{ const b=e.target.closest("[data-color]"); if(!b) return; color=+b.dataset.color; $("#sw").querySelectorAll(".swatch").forEach(s=>s.setAttribute("aria-pressed", s===b)); });
-  $("#catForm").addEventListener("submit", async e=>{
-    e.preventDefault();
-    const name = $("#cName").value.trim();
-    if (!name) return;
-    if (cats.some(x=>x.id!==c.id && x.name.toLowerCase()===name.toLowerCase())){ showErr("#cErr","You already have a category with that name."); return; }
-    const obj = {id: c.id || uid(), name, color, order: c.order ?? Date.now()};
-    try { await put("categories", obj); closeSheet(); toast(isNew?`Created “${name}”`:"Saved"); if(isNew){ active=obj.id; remember(); render(); } }
-    catch(err){ showErr("#cErr", errMsg(err)); }
-  });
-  const del = $("#cDel");
-  if (del) del.addEventListener("click", async ()=>{
-    if (!del.classList.contains("armed")){ del.classList.add("armed"); del.textContent="Tap again to delete"; return; }
-    try {
-      for (const t of tools.filter(t=>t.cat===c.id)) await put("tools", {...t, cat:""});
-      await drop("categories", c.id); closeSheet(); toast(`Deleted “${c.name}”`);
-    } catch(err){ showErr("#cErr", errMsg(err)); }
-  });
+  $("#sw").addEventListener("click",e=>{const b=e.target.closest("[data-color]"); if(!b)return; color=+b.dataset.color; $("#sw").querySelectorAll(".swatch").forEach(s=>s.setAttribute("aria-pressed",s===b));});
+  $("#catForm").addEventListener("submit", async e=>{ e.preventDefault(); const f=e.target; const name=$("#cName").value.trim(); if(!name)return;
+    busy(f,true);
+    try { if(isNew){ const r = await run(sb.from("categories").insert({name,color}).select().single()); S.active=r.id; }
+          else await run(sb.from("categories").update({name,color}).eq("id",c.id));
+          closeSheet(); toast(isNew?`Created “${name}”`:"Saved"); await refresh(); }
+    catch(err){ busy(f,false); showErr("#cErr",errText(err)); } });
+  const d=$("#cDel"); if(d) armDelete(d, async()=>{ try{ await run(sb.from("categories").delete().eq("id",c.id)); closeSheet(); toast(`Deleted “${c.name}”`); await refresh(); }catch(err){ showErr("#cErr",errText(err)); } });
 }
 
 function toolSheet(t, presetCat){
-  const isNew = !t;
-  t = t || {name:"", url:"", note:"", cat: presetCat || (catById(active)?active:(sortedCats()[0]?.id||"")), pinned:false};
-  const opts = sortedCats().map(c=>`<option value="${c.id}" ${c.id===t.cat?"selected":""}>${esc(c.name)}</option>`).join("");
+  const isNew=!t;
+  const allowedCats = isOwner() ? sortedCats() : sortedCats().filter(c=>managedCats().has(c.id));
+  t = t || {name:"",url:"",note:"",category_id: presetCat || (allowedCats.some(c=>c.id===S.active)?S.active:(allowedCats[0]?.id||""))};
+  const opts = allowedCats.map(c=>`<option value="${c.id}" ${c.id===t.category_id?"selected":""}>${esc(c.name)}</option>`).join("");
+  // single-tool sharing
+  const shareTeams = isOwner() ? S.teams : [];
+  const sharePeople = isOwner() ? S.people.filter(p=>p.status==="active" && p.role!=="owner") : S.people.filter(p=>myTeamMemberIds().has(p.id) && p.id!==S.me.id);
+  const cur = t.id ? S.grants.filter(g=>g.tool_id===t.id) : [];
+  const hasTeam = id => cur.some(g=>g.team_id===id), hasUser = id => cur.some(g=>g.user_id===id);
+  const viaCat = t.category_id ? S.grants.filter(g=>g.category_id===t.category_id && g.team_id).map(g=>teamById(g.team_id)?.name).filter(Boolean) : [];
   openSheet(`<h3 id="sheetTitle">${isNew?"Add a tool":"Edit tool"}</h3>
     <form id="toolForm">
       <div class="field"><label for="tName">Name</label><input id="tName" maxlength="60" required value="${esc(t.name)}" placeholder="e.g. IRCTC Agent Login"></div>
       <div class="field"><label for="tUrl">Link</label><input id="tUrl" required inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" value="${esc(t.url)}" placeholder="https://…"></div>
-      <div class="field"><label for="tCat">Category</label>
-        <select id="tCat">${opts}<option value="" ${!catById(t.cat)?"selected":""}>Uncategorized</option><option value="__new">+ New category…</option></select>
-        <input id="tNewCat" maxlength="40" placeholder="New category name" style="margin-top:8px" hidden>
-      </div>
-      <div class="field"><label for="tNote">Short note (optional)</label><input id="tNote" maxlength="90" value="${esc(t.note)}" placeholder="What it's for"></div>
+      <div class="field"><label for="tCat">Category</label><select id="tCat">${opts}${isOwner()?`<option value="" ${!catById(t.category_id)?"selected":""}>Uncategorized (only you)</option>`:""}</select>
+        ${viaCat.length?`<div class="hint">Everyone in ${viaCat.map(esc).join(", ")} already sees tools in this category.</div>`:""}</div>
+      <div class="field"><label for="tNote">Short note (optional)</label><input id="tNote" maxlength="90" value="${esc(t.note||"")}" placeholder="What it's for"></div>
+      ${(shareTeams.length||sharePeople.length)?`<h4>Also share this one tool with</h4>
+        <div class="checks" id="share">
+          ${shareTeams.map(x=>`<label><input type="checkbox" data-share-team="${x.id}" ${hasTeam(x.id)?"checked":""}>Team: ${esc(x.name)}</label>`).join("")}
+          ${sharePeople.map(p=>`<label><input type="checkbox" data-share-user="${p.id}" ${hasUser(p.id)?"checked":""}>${esc(displayName(p))}<span class="sub">${esc(p.email)}</span></label>`).join("")}
+        </div>`:""}
       <div class="err" id="tErr" hidden></div>
-      <div class="actions">
-        <button class="btn" type="submit">${isNew?"Add tool":"Save"}</button>
-        <button class="btn ghost" type="button" data-act="close">Cancel</button>
-        ${isNew?"":`<button class="btn danger" type="button" id="tDel">Delete</button>`}
-      </div>
+      <div class="actions"><button class="btn" type="submit">${isNew?"Add tool":"Save"}</button><button class="btn ghost" type="button" data-act="close">Cancel</button>${isNew?"":`<button class="btn danger" type="button" id="tDel">Delete</button>`}</div>
     </form>`);
-  $("#tCat").addEventListener("change", e=>{ const n=e.target.value==="__new"; $("#tNewCat").hidden=!n; if(n) $("#tNewCat").focus(); });
   $("#toolForm").addEventListener("submit", async e=>{
-    e.preventDefault();
+    e.preventDefault(); const f=e.target;
     const name=$("#tName").value.trim(), url=normUrl($("#tUrl").value);
-    if (!name) return;
-    if (!url){ showErr("#tErr","That link doesn't look right. Paste a web address such as https://example.com."); return; }
+    if(!name) return;
+    if(!url){ showErr("#tErr","That link doesn't look right. Paste a web address such as https://example.com."); return; }
+    const category_id = $("#tCat").value || null;
+    if(!isOwner() && !category_id){ showErr("#tErr","Pick one of your team's categories."); return; }
+    busy(f,true);
     try {
-      let cat = $("#tCat").value;
-      if (cat==="__new"){
-        const cn = $("#tNewCat").value.trim();
-        if (!cn){ showErr("#tErr","Type a name for the new category."); return; }
-        const existing = cats.find(x=>x.name.toLowerCase()===cn.toLowerCase());
-        if (existing) cat = existing.id;
-        else { const nc={id:uid(), name:cn, color:cats.length%PALETTE, order:Date.now()}; await put("categories", nc); cat = nc.id; }
+      let id = t.id;
+      const body = {name, url, note:$("#tNote").value.trim()||null, category_id};
+      if(isNew){ const r = await run(sb.from("tools").insert({...body, created_by:S.me.id}).select().single()); id = r.id; }
+      else await run(sb.from("tools").update(body).eq("id",id));
+      // sync single-tool grants
+      const wantT = [...f.querySelectorAll("[data-share-team]")].filter(i=>i.checked).map(i=>i.dataset.shareTeam);
+      const wantU = [...f.querySelectorAll("[data-share-user]")].filter(i=>i.checked).map(i=>i.dataset.shareUser);
+      const curG = S.grants.filter(g=>g.tool_id===id);
+      const adds = [...wantT.filter(x=>!curG.some(g=>g.team_id===x)).map(x=>({team_id:x,tool_id:id,granted_by:S.me.id})),
+                    ...wantU.filter(x=>!curG.some(g=>g.user_id===x)).map(x=>({user_id:x,tool_id:id,granted_by:S.me.id}))];
+      const removes = curG.filter(g=>(g.team_id && shareTeams.some(x=>x.id===g.team_id) && !wantT.includes(g.team_id)) || (g.user_id && sharePeople.some(p=>p.id===g.user_id) && !wantU.includes(g.user_id))).map(g=>g.id);
+      if (adds.length) await run(sb.from("grants").insert(adds));
+      if (removes.length) await run(sb.from("grants").delete().in("id",removes));
+      closeSheet(); toast(isNew?`Added “${name}”`:"Saved"); await refresh();
+    } catch(err){ busy(f,false); showErr("#tErr",errText(err)); }
+  });
+  const d=$("#tDel"); if(d) armDelete(d, async()=>{ try{ await run(sb.from("tools").delete().eq("id",t.id)); closeSheet(); toast(`Deleted “${t.name}”`); await refresh(); }catch(err){ showErr("#tErr",errText(err)); } });
+}
+
+function inviteSheet(){
+  openSheet(`<h3 id="sheetTitle">Invite someone</h3>
+    <form id="invForm">
+      <div class="field"><label for="iEmail">Their Google email</label><input id="iEmail" type="email" required autocapitalize="off" placeholder="name@gmail.com"></div>
+      <div class="field"><label for="iRole">Role</label><select id="iRole"><option value="staff">Staff: opens the tools you give them</option><option value="manager">Manager: also adds tools in their team's categories</option></select></div>
+      <div class="field"><label for="iTeam">Team</label><select id="iTeam"><option value="">No team yet</option>${S.teams.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select>
+        ${S.teams.length?"":`<div class="hint">Create teams first to put people straight into one.</div>`}</div>
+      <div class="err" id="iErr" hidden></div>
+      <div class="actions"><button class="btn" type="submit">Add invite</button><button class="btn ghost" type="button" data-act="close">Cancel</button></div>
+      <div class="hint">No email is sent. Tell them to open <b>kamakshyanegotrip.github.io/negotrip-hq</b> and sign in with this Google account.</div>
+    </form>`);
+  $("#invForm").addEventListener("submit", async e=>{ e.preventDefault(); const f=e.target;
+    const email=$("#iEmail").value.trim().toLowerCase(); if(!isEmail(email)){ showErr("#iErr","Enter a full email address."); return; }
+    const existing = S.people.find(p=>p.email===email);
+    const role=$("#iRole").value, team_id=$("#iTeam").value||null;
+    busy(f,true);
+    try {
+      if (existing){ // already signed in: approve directly
+        await run(sb.from("profiles").update({status:"active", role: existing.role==="owner"?"owner":(role==="manager"?"manager":"staff")}).eq("id",existing.id));
+        if (team_id) await run(sb.from("team_members").upsert({team_id, user_id:existing.id, is_manager:role==="manager"}));
+        closeSheet(); toast(`${email} already signed in. Access given.`);
+      } else {
+        await run(sb.from("invites").upsert({email, role, team_id}));
+        closeSheet(); toast(`Invited ${email}`);
       }
-      await put("tools", {id:t.id||uid(), name, url, note:$("#tNote").value.trim(), cat, pinned:!!t.pinned, created:t.created||Date.now()});
-      closeSheet(); toast(isNew?`Added “${name}”`:"Saved");
-    } catch(err){ showErr("#tErr", errMsg(err)); }
-  });
-  const del = $("#tDel");
-  if (del) del.addEventListener("click", async ()=>{
-    if (!del.classList.contains("armed")){ del.classList.add("armed"); del.textContent="Tap again to delete"; return; }
-    try { await drop("tools", t.id); closeSheet(); toast(`Deleted “${t.name}”`); } catch(err){ showErr("#tErr", errMsg(err)); }
-  });
+      await refresh();
+    } catch(err){ busy(f,false); showErr("#iErr",errText(err)); } });
 }
-function showErr(sel,msg){ const el=$(sel); el.textContent=msg; el.hidden=false; }
-function remember(){ try{ localStorage.setItem("hq.cat",active); }catch(e){} }
 
-/* ---------- backup ---------- */
-function backupText(){
-  return JSON.stringify({app:"negotrip-hq", version:1, exported:new Date().toISOString(), categories:cats, tools}, null, 2);
-}
-function exportSheet(){
-  const text = backupText();
-  const fname = "negotrip-hq-backup-" + new Date().toISOString().slice(0,10) + ".json";
-  openSheet(`<h3 id="sheetTitle">Export your launcher</h3>
-    <p class="hint" style="margin:0 0 12px">${cats.length} categor${cats.length===1?"y":"ies"} and ${tools.length} tool${tools.length===1?"":"s"}. Save the file, or copy the text and send it to yourself on WhatsApp or email.</p>
-    <div class="actions" style="margin-top:0">
-      <button class="btn" type="button" id="xSave">Save file</button>
-      <button class="btn ghost" type="button" id="xCopy">Copy text</button>
-      ${navigator.canShare ? `<button class="btn ghost" type="button" id="xShare">Share…</button>` : ""}
-      <button class="btn ghost" type="button" data-act="close">Done</button>
-    </div>
-    <div class="field" style="margin-top:14px"><label for="xText">Backup text</label><textarea id="xText" readonly>${esc(text)}</textarea></div>`);
-  $("#xSave").addEventListener("click", ()=>{
-    const url = URL.createObjectURL(new Blob([text], {type:"application/json"}));
-    const a = document.createElement("a"); a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 2000); toast("Backup file saved");
-  });
-  $("#xCopy").addEventListener("click", async ()=>{
-    try { await navigator.clipboard.writeText(text); toast("Copied"); }
-    catch(e){ const t=$("#xText"); t.focus(); t.select(); toast("Selected. Press copy on your keyboard."); }
-  });
-  const sh = $("#xShare");
-  if (sh) sh.addEventListener("click", async ()=>{
-    const file = new File([text], fname, {type:"application/json"});
+function teamSheet(team){
+  const isNew=!team; team=team||{name:""};
+  const inTeam = id => S.members.find(m=>m.team_id===team.id && m.user_id===id);
+  const people = S.people.filter(p=>p.status!=="pending" && p.role!=="owner");
+  openSheet(`<h3 id="sheetTitle">${isNew?"New team":"Edit team"}</h3>
+    <form id="teamForm">
+      <div class="field"><label for="tmName">Team name</label><input id="tmName" maxlength="40" required value="${esc(team.name)}" placeholder="e.g. Sales"></div>
+      ${people.length?`<h4>Members</h4><div class="checks">${people.map(p=>{ const m=inTeam(p.id); return `<label><input type="checkbox" data-member="${p.id}" ${m?"checked":""}>${esc(displayName(p))}
+          <span class="sub"><select data-mgr="${p.id}" style="height:30px;font-size:13px;width:auto;padding:0 6px"><option value="0">Staff</option><option value="1" ${m&&m.is_manager?"selected":""}>Manager</option></select></span></label>`; }).join("")}</div>
+        <div class="hint">A manager can add tools in the categories this team has, and share single tools with people in this team.</div>`:`<div class="hint">Invite people on the People tab, then add them here.</div>`}
+      <div class="err" id="tmErr" hidden></div>
+      <div class="actions"><button class="btn" type="submit">${isNew?"Create team":"Save"}</button><button class="btn ghost" type="button" data-act="close">Cancel</button>${isNew?"":`<button class="btn danger" type="button" id="tmDel">Delete team</button>`}</div>
+    </form>`);
+  $("#teamForm").addEventListener("submit", async e=>{ e.preventDefault(); const f=e.target; const name=$("#tmName").value.trim(); if(!name)return;
+    busy(f,true);
     try {
-      if (navigator.canShare({files:[file]})) await navigator.share({files:[file], title:"NegoTrip HQ backup"});
-      else await navigator.share({title:"NegoTrip HQ backup", text});
-    } catch(e){ /* the person closed the share menu */ }
-  });
-}
-function importSheet(){
-  openSheet(`<h3 id="sheetTitle">Import a backup</h3>
-    <label class="filebtn">Choose backup file<input type="file" id="iFile" accept=".json,application/json,text/plain"></label>
-    <div class="or">or paste the backup text</div>
-    <div class="field"><label for="iText">Backup text</label><textarea id="iText" placeholder='{"app":"negotrip-hq", …}'></textarea></div>
-    <div class="radio-row" role="radiogroup" aria-label="How to import">
-      <label><input type="radio" name="iMode" value="merge" checked> Add to what's here</label>
-      <label><input type="radio" name="iMode" value="replace"> Replace everything</label>
-    </div>
-    <div class="err" id="iErr" hidden></div>
-    <div class="actions">
-      <button class="btn" type="button" id="iGo">Import</button>
-      <button class="btn ghost" type="button" data-act="close">Cancel</button>
-    </div>`);
-  $("#iFile").addEventListener("change", e=>{
-    const f = e.target.files && e.target.files[0]; if (!f) return;
-    const r = new FileReader(); r.onload = ()=>{ $("#iText").value = r.result; }; r.readAsText(f);
-  });
-  $("#iGo").addEventListener("click", ()=>{
-    let data;
-    try { data = JSON.parse($("#iText").value); } catch(e){ showErr("#iErr","That isn't a NegoTrip HQ backup. Pick the exported file or paste its full text."); return; }
-    if (!data || !Array.isArray(data.categories) || !Array.isArray(data.tools)){ showErr("#iErr","That isn't a NegoTrip HQ backup. Pick the exported file or paste its full text."); return; }
-    const okCat = c => c && typeof c.id==="string" && typeof c.name==="string";
-    const okTool = t => t && typeof t.id==="string" && typeof t.name==="string" && normUrl(String(t.url||""));
-    const inC = data.categories.filter(okCat).map(c=>({id:c.id, name:c.name.slice(0,40), color:Math.abs(+c.color||0)%PALETTE, order:+c.order||Date.now()}));
-    const inT = data.tools.filter(okTool).map(t=>({id:t.id, name:t.name.slice(0,60), url:normUrl(String(t.url)), note:String(t.note||"").slice(0,90), cat:String(t.cat||""), pinned:!!t.pinned, created:+t.created||Date.now()}));
-    const mode = document.querySelector('input[name="iMode"]:checked').value;
-    if (mode==="replace"){ cats = inC; tools = inT; }
-    else {
-      const cIds = new Set(cats.map(c=>c.id)), tIds = new Set(tools.map(t=>t.id));
-      cats = cats.concat(inC.filter(c=>!cIds.has(c.id)));
-      tools = tools.concat(inT.filter(t=>!tIds.has(t.id)));
-    }
-    local.save(); closeSheet(); render();
-    toast(`Imported ${inC.length} categor${inC.length===1?"y":"ies"} and ${inT.length} tool${inT.length===1?"":"s"}`);
-  });
+      let id=team.id;
+      if(isNew){ const r=await run(sb.from("teams").insert({name}).select().single()); id=r.id; }
+      else if(name!==team.name) await run(sb.from("teams").update({name}).eq("id",id));
+      const rows=[...f.querySelectorAll("[data-member]")];
+      const want=rows.filter(i=>i.checked).map(i=>({team_id:id,user_id:i.dataset.member,is_manager:f.querySelector(`[data-mgr="${i.dataset.member}"]`).value==="1"}));
+      const drop=rows.filter(i=>!i.checked && S.members.some(m=>m.team_id===id&&m.user_id===i.dataset.member)).map(i=>i.dataset.member);
+      if(want.length) await run(sb.from("team_members").upsert(want));
+      if(drop.length) await run(sb.from("team_members").delete().eq("team_id",id).in("user_id",drop));
+      closeSheet(); toast(isNew?`Created “${name}”`:"Saved"); await refresh();
+    } catch(err){ busy(f,false); showErr("#tmErr",errText(err)); } });
+  const d=$("#tmDel"); if(d) armDelete(d, async()=>{ try{ await run(sb.from("teams").delete().eq("id",team.id)); closeSheet(); toast(`Deleted “${team.name}”`); await refresh(); }catch(err){ showErr("#tmErr",errText(err)); } });
 }
 
-/* ---------- events ---------- */
+function personSheet(p){
+  const teams = teamsOf(p.id);
+  // tools this person can open (owner's view of all grants)
+  const tIds = new Set(teams.map(t=>t.id));
+  const catIds = new Set(S.grants.filter(g=>g.category_id && (tIds.has(g.team_id) || g.user_id===p.id)).map(g=>g.category_id));
+  const direct = new Set(S.grants.filter(g=>g.tool_id && (tIds.has(g.team_id) || g.user_id===p.id)).map(g=>g.tool_id));
+  const theirTools = p.role==="owner" ? S.tools : S.tools.filter(t=>catIds.has(t.category_id) || direct.has(t.id));
+  const isMe = p.id===S.me.id;
+  openSheet(`<h3 id="sheetTitle">${esc(displayName(p))}</h3>
+    <dl class="kv"><dt>Email</dt><dd>${esc(p.email)}</dd><dt>Status</dt><dd>${p.status==="active"?"Active":p.status==="pending"?"Waiting for approval":"Paused"}</dd>
+      <dt>Teams</dt><dd>${teams.length?teams.map(t=>esc(t.name)+(t.is_manager?" (manager)":"")).join(", "):"None"}</dd><dt>Last active</dt><dd>${esc(when(p.last_seen))}</dd></dl>
+    ${isMe?"":`<div class="actions">
+      ${p.status==="active"?`<button class="btn ghost" id="pPause">Pause access</button>`:`<button class="btn" id="pResume">Give access again</button>`}
+      <span class="hint" style="margin:0">Teams are changed from the Teams list on the People tab.</span></div>`}
+    <h4>Can open ${theirTools.length} tool${theirTools.length===1?"":"s"}</h4>
+    <div class="checks" style="max-height:260px">${theirTools.length?theirTools.map(t=>`<label style="cursor:default"><span class="ico" style="--c:${colorOf(t)};width:26px;height:26px;font-size:11px;border-radius:7px">${esc(initials(t.name))}</span>${esc(t.name)}<span class="sub">${esc(host(t.url))}</span></label>`).join(""):`<div class="hint" style="padding:8px">Nothing yet.</div>`}</div>
+    ${isMe?"":`<div class="hint">When someone leaves: pause their access here, then remove them inside each of these tools too (Google Ads, n8n and so on). Pausing only hides the links.</div>`}
+    <div class="err" id="pErr" hidden></div>
+    <div class="actions"><button class="btn ghost" data-act="close">Close</button></div>`);
+  const set = async status => { try{ await run(sb.from("profiles").update({status}).eq("id",p.id)); closeSheet(); toast(status==="active"?"Access given":"Access paused"); await refresh(); }catch(err){ showErr("#pErr",errText(err)); } };
+  $("#pPause")?.addEventListener("click",()=>set("suspended"));
+  $("#pResume")?.addEventListener("click",()=>set("active"));
+}
+
+function approveSheet(p){
+  openSheet(`<h3 id="sheetTitle">Approve ${esc(displayName(p))}</h3>
+    <form id="apForm"><p class="hint" style="margin:0 0 12px">${esc(p.email)}</p>
+      <div class="field"><label for="apRole">Role</label><select id="apRole"><option value="staff">Staff</option><option value="manager">Manager</option></select></div>
+      <div class="field"><label for="apTeam">Team</label><select id="apTeam"><option value="">No team yet</option>${S.teams.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></div>
+      <div class="err" id="apErr" hidden></div>
+      <div class="actions"><button class="btn" type="submit">Approve</button><button class="btn ghost" type="button" data-act="close">Cancel</button><button class="btn danger" type="button" id="apNo">Keep blocked</button></div>
+    </form>`);
+  $("#apForm").addEventListener("submit", async e=>{ e.preventDefault(); const f=e.target; busy(f,true);
+    const role=$("#apRole").value, team_id=$("#apTeam").value||null;
+    try { await run(sb.from("profiles").update({status:"active", role}).eq("id",p.id));
+      if(team_id) await run(sb.from("team_members").upsert({team_id,user_id:p.id,is_manager:role==="manager"}));
+      closeSheet(); toast("Approved"); await refresh(); }
+    catch(err){ busy(f,false); showErr("#apErr",errText(err)); } });
+  $("#apNo").addEventListener("click", async ()=>{ try{ await run(sb.from("profiles").update({status:"suspended"}).eq("id",p.id)); closeSheet(); toast("Kept blocked"); await refresh(); }catch(err){ showErr("#apErr",errText(err)); } });
+}
+
+/* import from the earlier device-only version */
+async function importLocal(){
+  let oc=[], ot=[]; try{ oc=JSON.parse(localStorage.getItem("hq.cats")||"[]"); ot=JSON.parse(localStorage.getItem("hq.tools")||"[]"); }catch(e){}
+  if(!ot.length && !oc.length) return;
+  try {
+    const map = {};
+    for (const c of oc){
+      const ex = S.cats.find(x=>x.name.toLowerCase()===String(c.name).toLowerCase());
+      if (ex){ map[c.id]=ex.id; continue; }
+      const r = await run(sb.from("categories").insert({name:String(c.name).slice(0,40), color:Math.abs(+c.color||0)%PALETTE}).select().single());
+      map[c.id]=r.id; S.cats.push(r);
+    }
+    const rows = ot.map(t=>({name:String(t.name).slice(0,60), url:normUrl(t.url), note:(t.note||null), category_id:map[t.cat]||null, created_by:S.me.id})).filter(r=>r.url);
+    let made = [];
+    if (rows.length) made = await run(sb.from("tools").insert(rows).select());
+    const pinIds = ot.filter(t=>t.pinned).map(t=>made.find(m=>m.name===String(t.name).slice(0,60))?.id).filter(Boolean);
+    if (pinIds.length) await run(sb.from("pins").upsert(pinIds.map(tool_id=>({user_id:S.me.id,tool_id}))));
+    try{ localStorage.setItem("hq.importDone","1"); }catch(e){}
+    toast(`Moved ${made.length} tool${made.length===1?"":"s"} into your account`); await refresh();
+  } catch(err){ toast(errText(err)); }
+}
+
+/* ================= events ================= */
 document.addEventListener("click", async e=>{
   const act = e.target.closest("[data-act]");
   if (act){
     const a = act.dataset.act;
     if (a==="close") return closeSheet();
+    if (a==="signin"){ act.disabled=true; const {error}=await sb.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.origin+location.pathname, queryParams:{prompt:"select_account"}}}); if(error){ act.disabled=false; showSignIn(errText(error)); } return; }
+    if (a==="signout"){ await sb.auth.signOut(); location.reload(); return; }
+    if (a==="recheck"){ return boot(); }
     if (a==="new-cat") return catSheet(null);
     if (a==="new-tool") return toolSheet(null, act.dataset.in);
-    if (a==="export") return exportSheet();
-    if (a==="import") return importSheet();
+    if (a==="invite") return inviteSheet();
+    if (a==="new-team") return teamSheet(null);
+    if (a==="clear-q"){ S.query=""; renderTools(); $("#q")?.focus(); return; }
+    if (a==="import-local") return importLocal();
+    if (a==="dismiss-import"){ try{ localStorage.setItem("hq.importDone","1"); }catch(e){} return render(); }
   }
-  const chip = e.target.closest("[data-cat]");
-  if (chip){ active = chip.dataset.cat; remember(); render(); return; }
-  const ec = e.target.closest("[data-editcat]");
-  if (ec){ catSheet(catById(ec.dataset.editcat)); return; }
-  const et = e.target.closest("[data-edit]");
-  if (et){ toolSheet(tools.find(t=>t.id===et.dataset.edit)); return; }
+  const tab = e.target.closest("[data-tab]"); if (tab){ S.tab=tab.dataset.tab; window.scrollTo(0,0); return render(); }
+  const chip = e.target.closest("[data-cat]"); if (chip){ S.active=chip.dataset.cat; try{localStorage.setItem("hq.cat",S.active);}catch(x){} return renderTools(); }
+  const ec = e.target.closest("[data-editcat]"); if (ec) return catSheet(catById(ec.dataset.editcat));
+  const et = e.target.closest("[data-edit]"); if (et) return toolSheet(S.tools.find(t=>t.id===et.dataset.edit));
+  const pr = e.target.closest("[data-person]"); if (pr) return personSheet(personById(pr.dataset.person));
+  const tm = e.target.closest("[data-team]"); if (tm) return teamSheet(teamById(tm.dataset.team));
+  const ap = e.target.closest("[data-approve]"); if (ap) return approveSheet(personById(ap.dataset.approve));
+  const un = e.target.closest("[data-uninvite]"); if (un){ try{ await run(sb.from("invites").delete().eq("email",un.dataset.uninvite)); toast("Invite cancelled"); await refresh(); }catch(err){ toast(errText(err)); } return; }
+  const ug = e.target.closest("[data-ungrant]"); if (ug){ try{ await run(sb.from("grants").delete().eq("id",ug.dataset.ungrant)); toast("Removed"); await refresh(); }catch(err){ toast(errText(err)); } return; }
+  const op = e.target.closest("[data-open]"); if (op){ sb.from("tool_opens").insert({user_id:S.me.id, tool_id:op.dataset.open}).then(()=>{}); return; }
   const p = e.target.closest("[data-pin]");
-  if (p){
-    const t = tools.find(x=>x.id===p.dataset.pin); if(!t) return;
-    p.disabled = true;
-    try { await put("tools", {...t, pinned:!t.pinned}); } catch(err){ toast(errMsg(err)); }
-    p.disabled = false;
-  }
+  if (p){ const id=p.dataset.pin; p.disabled=true;
+    try { if (S.pins.has(id)){ await run(sb.from("pins").delete().eq("user_id",S.me.id).eq("tool_id",id)); S.pins.delete(id); }
+          else { await run(sb.from("pins").insert({user_id:S.me.id, tool_id:id})); S.pins.add(id); } renderTools(); }
+    catch(err){ toast(errText(err)); p.disabled=false; } }
 });
+document.addEventListener("change", async e=>{
+  const g = e.target.closest("[data-grant]"); if (!g) return;
+  const [team_id, category_id] = g.dataset.grant.split("|"); g.disabled = true;
+  try {
+    if (g.checked) await run(sb.from("grants").insert({team_id, category_id, granted_by:S.me.id}));
+    else await run(sb.from("grants").delete().eq("team_id",team_id).eq("category_id",category_id));
+    await loadAll(); toast(g.checked?`${teamById(team_id)?.name} can now open ${catById(category_id)?.name}`:"Access removed");
+  } catch(err){ g.checked=!g.checked; toast(errText(err)); }
+  g.disabled = false;
+});
+document.addEventListener("input", e=>{ if (e.target.id==="q"){ S.query=e.target.value; renderTools(); } });
 $("#scrim").addEventListener("click", closeSheet);
 document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !$("#sheet").hidden) closeSheet(); });
-$("#q").addEventListener("input", e=>{ query=e.target.value; $("#clear").hidden=!query; render(); });
-$("#clear").addEventListener("click", ()=>{ query=""; $("#q").value=""; $("#clear").hidden=true; render(); $("#q").focus(); });
 
-/* ---------- boot ---------- */
-local.load(); render(); setStatus();
-window.addEventListener("storage", e=>{ if (e.key==="hq.cats"||e.key==="hq.tools"){ local.load(); render(); } });
+/* ================= boot ================= */
+async function boot(){
+  if (!sb){ gate(`<div class="card">${MARK}<h1>NegoTrip HQ</h1><p>Couldn't load. Check your internet connection and reload the page.</p></div>`); return; }
+  const { data:{ session } } = await sb.auth.getSession();
+  if (!session){ const q=new URLSearchParams(location.search); showSignIn(q.get("error_description")||""); return; }
+  S.user = session.user;
+  gate(`<div class="loading">Loading your tools…</div>`);
+  let me = null;
+  for (let i=0;i<3 && !me;i++){ // the profile is created right after first sign-in
+    const {data} = await sb.from("profiles").select("*").eq("id",S.user.id).maybeSingle(); me = data;
+    if (!me) await new Promise(r=>setTimeout(r,700));
+  }
+  if (!me){ showSignIn("Signed in, but your profile couldn't be created. Try again in a minute."); return; }
+  S.me = me;
+  if (me.status!=="active"){ showWaiting(me); return; }
+  sb.from("profiles").update({last_seen:new Date().toISOString(), name: me.name || S.user.user_metadata?.full_name || null}).eq("id",me.id).then(()=>{});
+  try { await loadAll(); } catch(e){ gate(`<div class="card">${MARK}<h1>NegoTrip HQ</h1><p>${esc(errText(e))}</p><button class="gbtn" data-act="recheck">Try again</button></div>`); return; }
+  if (location.search || location.hash) history.replaceState(null,"",location.pathname);
+  render();
+}
+if (sb) sb.auth.onAuthStateChange((ev)=>{ if (ev==="SIGNED_OUT"){ S.me=null; showSignIn(""); } });
+boot();
+
 if ("serviceWorker" in navigator && location.protocol==="https:"){
   window.addEventListener("load", ()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 }
