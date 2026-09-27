@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>NegoTrip HQ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#1B1F3A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="NegoTrip HQ">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+:root{
+  --bg:#F2F3F7; --surface:#FFFFFF; --surface-2:#E8EAF1; --ink:#1B1F3A; --ink-2:#565B7A; --line:#D9DCE6;
+  --accent:#A8321E; --accent-ink:#FFFFFF; --gold:#C98A12; --ok:#2F7D6B; --danger:#B3261E; --scrim:rgba(16,18,42,.45);
+  --p0:#A8321E; --p1:#C27A0E; --p2:#2F7D6B; --p3:#3E4C9A; --p4:#6A4BA8; --p5:#7B5A2A; --p6:#8A3E6E; --p7:#1F7A99; --p8:#5E7A1F; --p9:#44506B;
+  --tile-ink:#FFFFFF;
+  --shadow:0 1px 2px rgba(27,31,58,.06),0 4px 14px rgba(27,31,58,.05);
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Figtree",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#10122A; --surface:#1A1D3A; --surface-2:#23274A; --ink:#ECEDF7; --ink-2:#A3A7C6; --line:#2E3358;
+    --accent:#E0654E; --accent-ink:#10122A; --gold:#E9B24A; --ok:#4DB39A; --danger:#F08070; --scrim:rgba(0,0,0,.55);
+    --p0:#E0654E; --p1:#E3A23A; --p2:#4DB39A; --p3:#8390E0; --p4:#A98BE6; --p5:#C9A36A; --p6:#D57AB0; --p7:#5BBBD9; --p8:#A3C45A; --p9:#8E9AB8;
+    --tile-ink:#10122A; --shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#10122A; --surface:#1A1D3A; --surface-2:#23274A; --ink:#ECEDF7; --ink-2:#A3A7C6; --line:#2E3358;
+  --accent:#E0654E; --accent-ink:#10122A; --gold:#E9B24A; --ok:#4DB39A; --danger:#F08070; --scrim:rgba(0,0,0,.55);
+  --p0:#E0654E; --p1:#E3A23A; --p2:#4DB39A; --p3:#8390E0; --p4:#A98BE6; --p5:#C9A36A; --p6:#D57AB0; --p7:#5BBBD9; --p8:#A3C45A; --p9:#8E9AB8;
+  --tile-ink:#10122A; --shadow:0 1px 2px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--bg)}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:18px 56px}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px}
+.mark{width:44px;height:44px;border-radius:12px;background:var(--ink);display:grid;place-items:center;flex:none}
+.mark svg{width:28px;height:28px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(26px,5vw,34px);line-height:1;margin:2px 0 0;letter-spacing:-.02em}
+.status{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)}
+.status i{width:8px;height:8px;border-radius:50%;background:var(--ink-2)}
+.status.sync i{background:var(--ok)}
+.status.local i{background:var(--gold)}
+
+.search{margin-top:18px;position:relative}
+.search input{width:100%;height:48px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:16px;padding:0 44px;box-shadow:var(--shadow)}
+.search input::placeholder{color:var(--ink-2)}
+.search svg{position:absolute;left:14px;top:14px;width:20px;height:20px;color:var(--ink-2)}
+.search .clear{position:absolute;right:8px;top:8px;width:32px;height:32px;border:0;background:transparent;border-radius:8px;cursor:pointer;color:var(--ink-2)}
+
+.chips{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);margin-inline:-16px;padding:12px 16px 10px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;display:flex;align-items:center;gap:7px;height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:14px;font-weight:500;white-space:nowrap}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip .n{font-family:var(--mono);font-size:11px;opacity:.6}
+.chip.add{border-style:dashed;color:var(--ink-2)}
+
+section{margin-top:22px}
+.sec-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+h2{font-family:var(--display);font-weight:600;font-size:19px;margin:0;display:flex;align-items:center;gap:9px;letter-spacing:-.01em}
+h2 .sw{width:10px;height:10px;border-radius:3px;background:var(--c)}
+.sec-tools{display:flex;gap:4px}
+.icon-btn{border:0;background:transparent;color:var(--ink-2);height:32px;padding:0 10px;border-radius:8px;cursor:pointer;font-size:13px}
+.icon-btn:hover{background:var(--surface-2);color:var(--ink)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+@media (max-width:520px){.grid{grid-template-columns:1fr 1fr;gap:8px}}
+.tile{position:relative;display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;min-height:112px;transition:transform .12s ease,border-color .12s ease}
+.tile:hover{border-color:var(--c)}
+.tile:active{transform:scale(.98)}
+.tile a.hit{position:absolute;inset:0;border-radius:14px;z-index:1}
+.ico{width:40px;height:40px;border-radius:11px;background:var(--c);color:var(--tile-ink);display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:16px;letter-spacing:-.02em;flex:none}
+.tname{font-weight:600;font-size:14.5px;line-height:1.25;word-break:break-word;padding-right:52px}
+.tsub{font-size:12.5px;color:var(--ink-2);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tmeta{margin-top:auto;font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbtns{position:absolute;top:6px;right:6px;z-index:2;display:flex}
+.tbtn{width:32px;height:32px;border:0;background:transparent;border-radius:9px;cursor:pointer;display:grid;place-items:center;color:var(--ink-2)}
+.tbtn:hover{background:var(--surface-2)}
+.tbtn svg{width:18px;height:18px}
+.tbtn[aria-pressed="true"]{color:var(--gold)}
+.tbtn[aria-pressed="true"] svg{fill:currentColor}
+
+.pinned{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+.pin{flex:none;width:86px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;font-size:12px;line-height:1.2}
+.pin .ico{width:54px;height:54px;border-radius:15px;font-size:19px;box-shadow:var(--shadow)}
+.pin span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.muted-box{font-size:13px;color:var(--ink-2);padding:12px 14px;border:1px dashed var(--line);border-radius:12px}
+
+.welcome{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px}
+.welcome h2{font-size:22px}
+.welcome p{color:var(--ink-2);max-width:60ch;margin:6px 0 14px}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:16px}
+.step{background:var(--bg);border-radius:12px;padding:12px;font-size:13.5px}
+.step b{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--accent);margin-bottom:3px}
+
+.fab{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:20;height:52px;padding:0 20px 0 16px;border-radius:16px;border:0;background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px;cursor:pointer;box-shadow:0 6px 20px rgba(168,50,30,.35)}
+.fab svg{width:20px;height:20px}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:30}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:31;background:var(--surface);border-radius:20px 20px 0 0;max-height:88vh;overflow-y:auto;padding:8px 16px calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 30px rgba(0,0,0,.2)}
+@media (min-width:640px){.sheet{left:50%;right:auto;bottom:auto;top:50%;transform:translate(-50%,-50%);width:min(520px,calc(100% - 32px));border-radius:18px;padding:16px 20px 20px}}
+.grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:4px auto 12px}
+@media (min-width:640px){.grab{display:none}}
+.sheet h3{font-family:var(--display);font-weight:600;font-size:20px;margin:0 0 14px}
+.field{margin-bottom:12px}
+label{display:block;font-size:12px;color:var(--ink-2);margin-bottom:4px}
+.sheet input,.sheet select{width:100%;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:16px;padding:0 12px}
+.swatches{display:flex;flex-wrap:wrap;gap:8px}
+.swatch{width:34px;height:34px;border-radius:10px;border:2px solid transparent;background:var(--c);cursor:pointer}
+.swatch[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--surface)}
+.actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center}
+.btn{height:44px;padding:0 18px;border-radius:11px;border:0;background:var(--accent);color:var(--accent-ink);font-weight:600;cursor:pointer}
+.btn.ghost{background:var(--surface-2);color:var(--ink)}
+.btn.danger{background:transparent;color:var(--danger);border:1px solid var(--line);margin-left:auto}
+.btn.danger.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
+.btn:disabled{opacity:.5;cursor:default}
+.err{color:var(--danger);font-size:13px;margin-top:8px}
+.hint{font-size:12.5px;color:var(--ink-2);margin-top:4px}
+
+details.help{margin-top:26px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
+details.help summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between}
+details.help summary::-webkit-details-marker{display:none}
+details.help summary::after{content:"+";font-family:var(--mono);color:var(--ink-2)}
+details.help[open] summary::after{content:"–"}
+details.help ol{padding-left:18px;margin:10px 0 0;color:var(--ink-2);font-size:13.5px;max-width:65ch}
+details.help b{color:var(--ink)}
+.none{padding:30px 0;text-align:center;color:var(--ink-2)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:40;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;max-width:calc(100% - 32px)}
+.backup{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px}
+.backup .btn{height:40px;font-size:14px}
+.sheet textarea{width:100%;min-height:140px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:12px;padding:10px;resize:vertical}
+.or{font-size:12px;color:var(--ink-2);text-align:center;margin:10px 0}
+.filebtn{display:flex;align-items:center;justify-content:center;height:44px;border-radius:11px;border:1px dashed var(--line);cursor:pointer;font-weight:600;background:var(--bg)}
+.filebtn input{position:absolute;opacity:0;width:1px;height:1px}
+.radio-row{display:flex;gap:14px;flex-wrap:wrap;font-size:14px;margin-top:12px}
+.radio-row label{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:14px;margin:0}
+@media (prefers-reduced-motion: reduce){.tile{transition:none}.tile:active{transform:none}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="#E9B24A" stroke-width="2.4"/><circle cx="16" cy="16" r="4.2" fill="#E0654E"/><path d="M16 3v5M16 24v5M3 16h5M24 16h5" stroke="#E9B24A" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <div class="eyebrow">Negotrip Pvt Ltd · Odisha</div>
+        <h1>NegoTrip HQ</h1>
+      </div>
+    </div>
+    <div class="status" id="status"><i></i><span>Connecting…</span></div>
+  </header>
+
+  <div class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+    <input id="q" type="search" placeholder="Search your tools" autocomplete="off" aria-label="Search tools">
+    <button class="clear" id="clear" aria-label="Clear search" hidden>✕</button>
+  </div>
+
+  <nav class="chips" id="chips" aria-label="Categories"></nav>
+
+  <div id="welcome" class="welcome" hidden>
+    <h2>Set up your launcher</h2>
+    <p>Everything here is yours to arrange. Create categories for how you work, then add a tile for each tool you open often.</p>
+    <div class="steps">
+      <div class="step"><b>STEP 1</b>Create a category, for example Research or Sales &amp; Marketing.</div>
+      <div class="step"><b>STEP 2</b>Add a tool with its name and link, and pick its category.</div>
+      <div class="step"><b>STEP 3</b>Tap ☆ on the tools you use most so they sit in Pinned.</div>
+    </div>
+    <div class="actions" style="margin-top:0">
+      <button class="btn" data-act="new-cat">Create a category</button>
+      <button class="btn ghost" data-act="new-tool">Add a tool</button>
+      <button class="btn ghost" data-act="import">Import a backup</button>
+    </div>
+  </div>
+
+  <section id="pinSec" hidden>
+    <div class="sec-head"><h2>Pinned</h2></div>
+    <div class="pinned" id="pinned"></div>
+  </section>
+
+  <div id="sections"></div>
+
+  <details class="help">
+    <summary>Use it like an app on your phone</summary>
+    <ol>
+      <li><b>Android (Chrome):</b> open this page, tap ⋮ → <b>Install app</b> or <b>Add to Home screen</b>.</li>
+      <li><b>iPhone (Safari):</b> open this page, tap Share → <b>Add to Home Screen</b>.</li>
+      <li>Your categories, tools and pins are saved in this device's browser. Use Backup below to copy them to another device.</li>
+    </ol>
+  </details>
+
+  <details class="help" id="backupBox">
+    <summary>Backup &amp; move to another device</summary>
+    <ol>
+      <li><b>Export</b> on the device that has your tools. Save the file, or copy the text.</li>
+      <li>Open this page on the other device and tap <b>Import</b>. Pick the file or paste the text.</li>
+    </ol>
+    <div class="backup">
+      <button class="btn" data-act="export">Export</button>
+      <button class="btn ghost" data-act="import">Import</button>
+    </div>
+  </details>
+</div>
+
+<button class="fab" id="fab" data-act="new-tool" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add tool</button>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+const PALETTE = 10;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
+const initials = n => (n.replace(/[^\p{L}\p{N} ]/gu," ").split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join("") || "•").toUpperCase();
+const host = u => { try { return new URL(u).hostname.replace(/^www\./,""); } catch(e){ return u; } };
+const normUrl = u => { u = u.trim(); if (!u) return ""; if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = "https://" + u; try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : ""; } catch(e){ return ""; } };
+const starSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>';
+const dotsSvg = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
+
+/* ---------- storage: this device's browser ---------- */
+let cats = [], tools = [];
+const canEdit = true;
+let active = "all", query = "";
+try { active = localStorage.getItem("hq.cat") || "all"; } catch(e){}
+
+let storageOk = true;
+const local = {
+  load(){ try { cats = JSON.parse(localStorage.getItem("hq.cats")||"[]"); tools = JSON.parse(localStorage.getItem("hq.tools")||"[]"); } catch(e){ cats=[]; tools=[]; storageOk=false; } },
+  save(){ try { localStorage.setItem("hq.cats",JSON.stringify(cats)); localStorage.setItem("hq.tools",JSON.stringify(tools)); storageOk=true; } catch(e){ storageOk=false; } setStatus(); }
+};
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+
+async function put(kind, obj){
+  const arr = kind==="categories" ? cats : tools;
+  const i = arr.findIndex(x=>x.id===obj.id); if (i>=0) arr[i]=obj; else arr.push(obj);
+  local.save(); render();
+}
+async function drop(kind, id){
+  if (kind==="categories") cats = cats.filter(x=>x.id!==id); else tools = tools.filter(x=>x.id!==id);
+  local.save(); render();
+}
+function setStatus(){
+  const s = $("#status");
+  s.className = "status " + (storageOk ? "local" : "");
+  s.querySelector("span").textContent = storageOk ? "Saved on this device" : "Not saving: browser storage is blocked";
+}
+
+/* ---------- rendering ---------- */
+const catById = id => cats.find(c=>c.id===id);
+const colorOf = t => { const c = catById(t.cat); return `var(--p${c ? c.color : 9})`; };
+const sortedCats = () => cats.slice().sort((a,b)=>(a.order??0)-(b.order??0) || a.name.localeCompare(b.name));
+
+function tileHtml(t){
+  return `<div class="tile" style="--c:${colorOf(t)}">
+    <a class="hit" href="${esc(t.url)}" target="_blank" rel="noopener" aria-label="Open ${esc(t.name)}"></a>
+    <div class="ico" aria-hidden="true">${esc(initials(t.name))}</div>
+    <div><div class="tname">${esc(t.name)}</div>${t.note?`<div class="tsub">${esc(t.note)}</div>`:""}</div>
+    <div class="tmeta">${esc(host(t.url))}</div>
+    ${canEdit?`<div class="tbtns">
+      <button class="tbtn" data-pin="${t.id}" aria-pressed="${!!t.pinned}" aria-label="${t.pinned?"Unpin":"Pin"} ${esc(t.name)}">${starSvg}</button>
+      <button class="tbtn" data-edit="${t.id}" aria-label="Edit ${esc(t.name)}">${dotsSvg}</button>
+    </div>`:""}
+  </div>`;
+}
+
+function render(){
+  const sc = sortedCats();
+  const uncategorized = tools.filter(t=>!catById(t.cat));
+  if (active!=="all" && active!=="none" && !catById(active)) active = "all";
+
+  // chips
+  const chips = [`<button class="chip" data-cat="all" aria-pressed="${active==="all"}">All <span class="n">${tools.length}</span></button>`]
+    .concat(sc.map(c=>`<button class="chip" data-cat="${c.id}" aria-pressed="${active===c.id}" style="--c:var(--p${c.color})"><i></i>${esc(c.name)} <span class="n">${tools.filter(t=>t.cat===c.id).length}</span></button>`));
+  if (uncategorized.length) chips.push(`<button class="chip" data-cat="none" aria-pressed="${active==="none"}" style="--c:var(--p9)"><i></i>Uncategorized <span class="n">${uncategorized.length}</span></button>`);
+  if (canEdit) chips.push(`<button class="chip add" data-act="new-cat">+ Category</button>`);
+  $("#chips").innerHTML = chips.join("");
+
+  const empty = !cats.length && !tools.length;
+  $("#welcome").hidden = !(empty && canEdit);
+  $("#fab").hidden = !canEdit || empty;
+
+  // pinned
+  const pins = tools.filter(t=>t.pinned).sort((a,b)=>a.name.localeCompare(b.name));
+  $("#pinSec").hidden = !!query || !pins.length;
+  $("#pinned").innerHTML = pins.map(t=>`<a class="pin" href="${esc(t.url)}" target="_blank" rel="noopener" style="--c:${colorOf(t)}"><div class="ico" aria-hidden="true">${esc(initials(t.name))}</div><span>${esc(t.name)}</span></a>`).join("");
+
+  // sections
+  const q = query.toLowerCase().trim();
+  const match = t => !q || (t.name+" "+(t.note||"")+" "+t.url+" "+(catById(t.cat)?.name||"")).toLowerCase().includes(q);
+  const groups = sc.map(c=>({c, id:c.id, list: tools.filter(t=>t.cat===c.id && match(t))}));
+  groups.push({c:{name:"Uncategorized",color:9}, id:"none", list: uncategorized.filter(match)});
+  const shown = groups.filter(g => (active==="all" || active===g.id) && (g.list.length || (!q && g.id!=="none" && (active===g.id || active==="all"))));
+  if (empty){ $("#sections").innerHTML = ""; return; }
+  if (!shown.length){ $("#sections").innerHTML = `<div class="none">${q?`No tools match “${esc(query)}”.`:"Nothing here yet."}</div>`; return; }
+
+  $("#sections").innerHTML = shown.map(g=>{
+    const list = g.list.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    return `<section style="--c:var(--p${g.c.color})">
+      <div class="sec-head"><h2><span class="sw"></span>${esc(g.c.name)}</h2>
+        ${canEdit?`<div class="sec-tools">${g.id!=="none"?`<button class="icon-btn" data-act="new-tool" data-in="${g.id}">+ Add</button><button class="icon-btn" data-editcat="${g.id}">Edit</button>`:""}</div>`:""}
+      </div>
+      ${list.length?`<div class="grid">${list.map(tileHtml).join("")}</div>`
+        :`<div class="muted-box">No tools in this category yet.${canEdit?` Use + Add to put one here.`:""}</div>`}
+    </section>`;
+  }).join("");
+}
+
+/* ---------- sheets ---------- */
+let lastFocus = null;
+function openSheet(html){
+  lastFocus = document.activeElement;
+  $("#sheet").innerHTML = `<div class="grab"></div>` + html;
+  $("#sheet").hidden = false; $("#scrim").hidden = false;
+  setTimeout(()=>{ const f=$("#sheet input"); f&&f.focus(); }, 30);
+}
+function closeSheet(){ $("#sheet").hidden = true; $("#scrim").hidden = true; $("#sheet").innerHTML=""; lastFocus&&lastFocus.focus&&lastFocus.focus(); }
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,2200); }
+function errMsg(e){ return e && e.code==="quota_exceeded" ? "Storage is full. Delete some tools and try again." : e && e.code==="invalid_argument" ? "You don't have permission to change this launcher." : "Couldn't save. Check your connection and try again."; }
+
+function catSheet(c){
+  const isNew = !c; c = c || {name:"", color: cats.length % PALETTE};
+  let color = c.color;
+  const count = c.id ? tools.filter(t=>t.cat===c.id).length : 0;
+  openSheet(`<h3 id="sheetTitle">${isNew?"New category":"Edit category"}</h3>
+    <form id="catForm">
+      <div class="field"><label for="cName">Name</label><input id="cName" maxlength="40" required value="${esc(c.name)}" placeholder="e.g. Research"></div>
+      <div class="field"><label>Colour</label><div class="swatches" id="sw">${Array.from({length:PALETTE},(_,i)=>`<button type="button" class="swatch" data-color="${i}" aria-label="Colour ${i+1}" aria-pressed="${i===color}" style="--c:var(--p${i})"></button>`).join("")}</div></div>
+      <div class="err" id="cErr" hidden></div>
+      <div class="actions">
+        <button class="btn" type="submit">${isNew?"Create":"Save"}</button>
+        <button class="btn ghost" type="button" data-act="close">Cancel</button>
+        ${isNew?"":`<button class="btn danger" type="button" id="cDel">Delete</button>`}
+      </div>
+      ${!isNew && count?`<div class="hint">Deleting keeps its ${count} tool${count>1?"s":""} and moves ${count>1?"them":"it"} to Uncategorized.</div>`:""}
+    </form>`);
+  $("#sw").addEventListener("click", e=>{ const b=e.target.closest("[data-color]"); if(!b) return; color=+b.dataset.color; $("#sw").querySelectorAll(".swatch").forEach(s=>s.setAttribute("aria-pressed", s===b)); });
+  $("#catForm").addEventListener("submit", async e=>{
+    e.preventDefault();
+    const name = $("#cName").value.trim();
+    if (!name) return;
+    if (cats.some(x=>x.id!==c.id && x.name.toLowerCase()===name.toLowerCase())){ showErr("#cErr","You already have a category with that name."); return; }
+    const obj = {id: c.id || uid(), name, color, order: c.order ?? Date.now()};
+    try { await put("categories", obj); closeSheet(); toast(isNew?`Created “${name}”`:"Saved"); if(isNew){ active=obj.id; remember(); render(); } }
+    catch(err){ showErr("#cErr", errMsg(err)); }
+  });
+  const del = $("#cDel");
+  if (del) del.addEventListener("click", async ()=>{
+    if (!del.classList.contains("armed")){ del.classList.add("armed"); del.textContent="Tap again to delete"; return; }
+    try {
+      for (const t of tools.filter(t=>t.cat===c.id)) await put("tools", {...t, cat:""});
+      await drop("categories", c.id); closeSheet(); toast(`Deleted “${c.name}”`);
+    } catch(err){ showErr("#cErr", errMsg(err)); }
+  });
+}
+
+function toolSheet(t, presetCat){
+  const isNew = !t;
+  t = t || {name:"", url:"", note:"", cat: presetCat || (catById(active)?active:(sortedCats()[0]?.id||"")), pinned:false};
+  const opts = sortedCats().map(c=>`<option value="${c.id}" ${c.id===t.cat?"selected":""}>${esc(c.name)}</option>`).join("");
+  openSheet(`<h3 id="sheetTitle">${isNew?"Add a tool":"Edit tool"}</h3>
+    <form id="toolForm">
+      <div class="field"><label for="tName">Name</label><input id="tName" maxlength="60" required value="${esc(t.name)}" placeholder="e.g. IRCTC Agent Login"></div>
+      <div class="field"><label for="tUrl">Link</label><input id="tUrl" required inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" value="${esc(t.url)}" placeholder="https://…"></div>
+      <div class="field"><label for="tCat">Category</label>
+        <select id="tCat">${opts}<option value="" ${!catById(t.cat)?"selected":""}>Uncategorized</option><option value="__new">+ New category…</option></select>
+        <input id="tNewCat" maxlength="40" placeholder="New category name" style="margin-top:8px" hidden>
+      </div>
+      <div class="field"><label for="tNote">Short note (optional)</label><input id="tNote" maxlength="90" value="${esc(t.note)}" placeholder="What it's for"></div>
+      <div class="err" id="tErr" hidden></div>
+      <div class="actions">
+        <button class="btn" type="submit">${isNew?"Add tool":"Save"}</button>
+        <button class="btn ghost" type="button" data-act="close">Cancel</button>
+        ${isNew?"":`<button class="btn danger" type="button" id="tDel">Delete</button>`}
+      </div>
+    </form>`);
+  $("#tCat").addEventListener("change", e=>{ const n=e.target.value==="__new"; $("#tNewCat").hidden=!n; if(n) $("#tNewCat").focus(); });
+  $("#toolForm").addEventListener("submit", async e=>{
+    e.preventDefault();
+    const name=$("#tName").value.trim(), url=normUrl($("#tUrl").value);
+    if (!name) return;
+    if (!url){ showErr("#tErr","That link doesn't look right. Paste a web address such as https://example.com."); return; }
+    try {
+      let cat = $("#tCat").value;
+      if (cat==="__new"){
+        const cn = $("#tNewCat").value.trim();
+        if (!cn){ showErr("#tErr","Type a name for the new category."); return; }
+        const existing = cats.find(x=>x.name.toLowerCase()===cn.toLowerCase());
+        if (existing) cat = existing.id;
+        else { const nc={id:uid(), name:cn, color:cats.length%PALETTE, order:Date.now()}; await put("categories", nc); cat = nc.id; }
+      }
+      await put("tools", {id:t.id||uid(), name, url, note:$("#tNote").value.trim(), cat, pinned:!!t.pinned, created:t.created||Date.now()});
+      closeSheet(); toast(isNew?`Added “${name}”`:"Saved");
+    } catch(err){ showErr("#tErr", errMsg(err)); }
+  });
+  const del = $("#tDel");
+  if (del) del.addEventListener("click", async ()=>{
+    if (!del.classList.contains("armed")){ del.classList.add("armed"); del.textContent="Tap again to delete"; return; }
+    try { await drop("tools", t.id); closeSheet(); toast(`Deleted “${t.name}”`); } catch(err){ showErr("#tErr", errMsg(err)); }
+  });
+}
+function showErr(sel,msg){ const el=$(sel); el.textContent=msg; el.hidden=false; }
+function remember(){ try{ localStorage.setItem("hq.cat",active); }catch(e){} }
+
+/* ---------- backup ---------- */
+function backupText(){
+  return JSON.stringify({app:"negotrip-hq", version:1, exported:new Date().toISOString(), categories:cats, tools}, null, 2);
+}
+function exportSheet(){
+  const text = backupText();
+  const fname = "negotrip-hq-backup-" + new Date().toISOString().slice(0,10) + ".json";
+  openSheet(`<h3 id="sheetTitle">Export your launcher</h3>
+    <p class="hint" style="margin:0 0 12px">${cats.length} categor${cats.length===1?"y":"ies"} and ${tools.length} tool${tools.length===1?"":"s"}. Save the file, or copy the text and send it to yourself on WhatsApp or email.</p>
+    <div class="actions" style="margin-top:0">
+      <button class="btn" type="button" id="xSave">Save file</button>
+      <button class="btn ghost" type="button" id="xCopy">Copy text</button>
+      ${navigator.canShare ? `<button class="btn ghost" type="button" id="xShare">Share…</button>` : ""}
+      <button class="btn ghost" type="button" data-act="close">Done</button>
+    </div>
+    <div class="field" style="margin-top:14px"><label for="xText">Backup text</label><textarea id="xText" readonly>${esc(text)}</textarea></div>`);
+  $("#xSave").addEventListener("click", ()=>{
+    const url = URL.createObjectURL(new Blob([text], {type:"application/json"}));
+    const a = document.createElement("a"); a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 2000); toast("Backup file saved");
+  });
+  $("#xCopy").addEventListener("click", async ()=>{
+    try { await navigator.clipboard.writeText(text); toast("Copied"); }
+    catch(e){ const t=$("#xText"); t.focus(); t.select(); toast("Selected. Press copy on your keyboard."); }
+  });
+  const sh = $("#xShare");
+  if (sh) sh.addEventListener("click", async ()=>{
+    const file = new File([text], fname, {type:"application/json"});
+    try {
+      if (navigator.canShare({files:[file]})) await navigator.share({files:[file], title:"NegoTrip HQ backup"});
+      else await navigator.share({title:"NegoTrip HQ backup", text});
+    } catch(e){ /* the person closed the share menu */ }
+  });
+}
+function importSheet(){
+  openSheet(`<h3 id="sheetTitle">Import a backup</h3>
+    <label class="filebtn">Choose backup file<input type="file" id="iFile" accept=".json,application/json,text/plain"></label>
+    <div class="or">or paste the backup text</div>
+    <div class="field"><label for="iText">Backup text</label><textarea id="iText" placeholder='{"app":"negotrip-hq", …}'></textarea></div>
+    <div class="radio-row" role="radiogroup" aria-label="How to import">
+      <label><input type="radio" name="iMode" value="merge" checked> Add to what's here</label>
+      <label><input type="radio" name="iMode" value="replace"> Replace everything</label>
+    </div>
+    <div class="err" id="iErr" hidden></div>
+    <div class="actions">
+      <button class="btn" type="button" id="iGo">Import</button>
+      <button class="btn ghost" type="button" data-act="close">Cancel</button>
+    </div>`);
+  $("#iFile").addEventListener("change", e=>{
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    const r = new FileReader(); r.onload = ()=>{ $("#iText").value = r.result; }; r.readAsText(f);
+  });
+  $("#iGo").addEventListener("click", ()=>{
+    let data;
+    try { data = JSON.parse($("#iText").value); } catch(e){ showErr("#iErr","That isn't a NegoTrip HQ backup. Pick the exported file or paste its full text."); return; }
+    if (!data || !Array.isArray(data.categories) || !Array.isArray(data.tools)){ showErr("#iErr","That isn't a NegoTrip HQ backup. Pick the exported file or paste its full text."); return; }
+    const okCat = c => c && typeof c.id==="string" && typeof c.name==="string";
+    const okTool = t => t && typeof t.id==="string" && typeof t.name==="string" && normUrl(String(t.url||""));
+    const inC = data.categories.filter(okCat).map(c=>({id:c.id, name:c.name.slice(0,40), color:Math.abs(+c.color||0)%PALETTE, order:+c.order||Date.now()}));
+    const inT = data.tools.filter(okTool).map(t=>({id:t.id, name:t.name.slice(0,60), url:normUrl(String(t.url)), note:String(t.note||"").slice(0,90), cat:String(t.cat||""), pinned:!!t.pinned, created:+t.created||Date.now()}));
+    const mode = document.querySelector('input[name="iMode"]:checked').value;
+    if (mode==="replace"){ cats = inC; tools = inT; }
+    else {
+      const cIds = new Set(cats.map(c=>c.id)), tIds = new Set(tools.map(t=>t.id));
+      cats = cats.concat(inC.filter(c=>!cIds.has(c.id)));
+      tools = tools.concat(inT.filter(t=>!tIds.has(t.id)));
+    }
+    local.save(); closeSheet(); render();
+    toast(`Imported ${inC.length} categor${inC.length===1?"y":"ies"} and ${inT.length} tool${inT.length===1?"":"s"}`);
+  });
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click", async e=>{
+  const act = e.target.closest("[data-act]");
+  if (act){
+    const a = act.dataset.act;
+    if (a==="close") return closeSheet();
+    if (a==="new-cat") return catSheet(null);
+    if (a==="new-tool") return toolSheet(null, act.dataset.in);
+    if (a==="export") return exportSheet();
+    if (a==="import") return importSheet();
+  }
+  const chip = e.target.closest("[data-cat]");
+  if (chip){ active = chip.dataset.cat; remember(); render(); return; }
+  const ec = e.target.closest("[data-editcat]");
+  if (ec){ catSheet(catById(ec.dataset.editcat)); return; }
+  const et = e.target.closest("[data-edit]");
+  if (et){ toolSheet(tools.find(t=>t.id===et.dataset.edit)); return; }
+  const p = e.target.closest("[data-pin]");
+  if (p){
+    const t = tools.find(x=>x.id===p.dataset.pin); if(!t) return;
+    p.disabled = true;
+    try { await put("tools", {...t, pinned:!t.pinned}); } catch(err){ toast(errMsg(err)); }
+    p.disabled = false;
+  }
+});
+$("#scrim").addEventListener("click", closeSheet);
+document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !$("#sheet").hidden) closeSheet(); });
+$("#q").addEventListener("input", e=>{ query=e.target.value; $("#clear").hidden=!query; render(); });
+$("#clear").addEventListener("click", ()=>{ query=""; $("#q").value=""; $("#clear").hidden=true; render(); $("#q").focus(); });
+
+/* ---------- boot ---------- */
+local.load(); render(); setStatus();
+window.addEventListener("storage", e=>{ if (e.key==="hq.cats"||e.key==="hq.tools"){ local.load(); render(); } });
+if ("serviceWorker" in navigator && location.protocol==="https:"){
+  window.addEventListener("load", ()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>
