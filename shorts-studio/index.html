@@ -495,7 +495,7 @@ async function hearVoice(){
   try{
     const text = (S.job.scenes[0] && S.job.scenes[0].narration) || "Welcome to NegoTrip.";
     const buf = await getVoice(text, $("#rVoice").value);
-    const ctx=audioCtx(); await ctx.resume(); const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); s.start();
+    const ctx=audioCtx(); await Promise.race([ctx.resume(), sleep(1500)]); const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); s.start();
   }catch(e){ toast(e.message); }
   b.disabled=false; b.textContent="▶ Hear this voice";
 }
@@ -538,7 +538,7 @@ async function prepare(){
   const job=S.job, voice=$("#rVoice").value, quality=$("#rQual").value, n=job.scenes.length;
   try{
     await document.fonts.load('800 80px "Bricolage Grotesque"').catch(()=>{});
-    const ctx=audioCtx(); await ctx.resume();
+    const ctx=audioCtx(); ctx.resume().catch(()=>{});
     const scenes=[]; let steps=0; const totalSteps=n*2+1;
     const tick=(msg)=>{ steps++; setBar(steps/totalSteps); setLog(msg); };
     // voices, two at a time
@@ -653,7 +653,8 @@ function drawFrame(t){
 function stopPlayback(){ if(R.stopFn) R.stopFn(true); }
 async function play(record){
   const P=R.prepared; if(!P || R.playing) return;
-  const ctx=audioCtx(); await ctx.resume();
+  const ctx=audioCtx(); await Promise.race([ctx.resume(), sleep(1500)]);
+  if(ctx.state!=="running"){ toast("Click the button again to allow sound."); return; }
   R.playing=true;
   const playBtn=$("#playBtn"), recBtn=$("#recBtn"), prepBtn=$("#prepBtn");
   playBtn.textContent = "■ Stop"; recBtn.disabled=true; prepBtn.disabled=true; if(record) playBtn.disabled=false;
