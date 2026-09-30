@@ -546,14 +546,13 @@ async function prepare(){
     let next=0;
     async function worker(){ while(next<n){ const i=next++; const txt=(job.scenes[i].narration||"").trim(); voices[i] = txt ? await getVoice(txt, voice) : null; tick(`Voiceover ${voices.filter(Boolean).length}/${n}`); } }
     await Promise.all([worker(),worker()]);
-    // clips, one at a time (large files)
-    for(let i=0;i<n;i++){
-      const sc=job.scenes[i];
-      let video=null;
+    // clips, three at a time
+    const vids=new Array(n); let nextClip=0, gotClips=0;
+    async function clipWorker(){ while(nextClip<n){ const i=nextClip++; const sc=job.scenes[i]; let video=null;
       try{ const url=await getClipUrl(sc, quality); if(url) video=await loadVideo(url); }catch(e){ toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
-      tick(`Footage ${i+1}/${n}`);
-      scenes.push({sc, video});
-    }
+      vids[i]=video; gotClips++; tick(`Footage ${gotClips}/${n}`); } }
+    await Promise.all([clipWorker(),clipWorker(),clipWorker()]);
+    for(let i=0;i<n;i++) scenes.push({sc:job.scenes[i], video:vids[i]});
     // timeline
     let t=0;
     scenes.forEach((s,i)=>{
