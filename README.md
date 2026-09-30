@@ -41,3 +41,4 @@ Nothing is visible by default. People who sign in without an invite wait as "pen
 | `sw.js` | Lets the app open without internet |
 | `icon.svg`, `icon-192.png`, `icon-512.png` | App icons |
 | `supabase/` | Database design and tests |
+| `shorts-studio/` | Shorts Studio: AI travel Shorts made in the browser. Uses the HQ sign-in; the backend is the "Shorts Studio API" and "Destination Shorts Engine" workflows in n8n. Access = owner, or anyone who can see a tool whose link contains `shorts-studio`. |
