@@ -518,6 +518,7 @@ function loadVideo(src){
     v.src=src; v.load();
   });
 }
+function waitVisible(){ if(document.visibilityState==='visible') return Promise.resolve(); setLog('Waiting for this tab to be visible…'); return new Promise(res=>{ const f=()=>{ if(document.visibilityState==='visible'){ document.removeEventListener('visibilitychange',f); res(); } }; document.addEventListener('visibilitychange',f); }); }
 function seek(v,t){ return new Promise(res=>{ if(Math.abs(v.currentTime-t)<0.05) return res(); const done=()=>res(); v.addEventListener("seeked",done,{once:true}); v.currentTime=t; setTimeout(done,3000); }); }
 function speechBounds(buf){
   const d=buf.getChannelData(0), sr=buf.sampleRate, win=Math.floor(sr*0.01); let first=-1,last=-1;
@@ -547,12 +548,18 @@ async function prepare(){
     async function worker(){ while(next<n){ const i=next++; const txt=(job.scenes[i].narration||"").trim(); voices[i] = txt ? await getVoice(txt, voice) : null; tick(`Voiceover ${voices.filter(Boolean).length}/${n}`); } }
     await Promise.all([worker(),worker()]);
     // clips, three at a time
-    const vids=new Array(n); let nextClip=0, gotClips=0;
-    async function clipWorker(){ while(nextClip<n){ const i=nextClip++; const sc=job.scenes[i]; let video=null;
-      try{ const url=await getClipUrl(sc, quality); if(url) video=await loadVideo(url); }catch(e){ toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
-      vids[i]=video; gotClips++; tick(`Footage ${gotClips}/${n}`); } }
+    const urls=new Array(n); let nextClip=0, gotClips=0;
+    async function clipWorker(){ while(nextClip<n){ const i=nextClip++;
+      try{ urls[i]=await getClipUrl(job.scenes[i], quality); }catch(e){ urls[i]=null; toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
+      gotClips++; tick(`Footage ${gotClips}/${n} downloaded`); } }
     await Promise.all([clipWorker(),clipWorker(),clipWorker()]);
-    for(let i=0;i<n;i++) scenes.push({sc:job.scenes[i], video:vids[i]});
+    await waitVisible();
+    for(let i=0;i<n;i++){
+      let video=null;
+      if(urls[i]) try{ video=await loadVideo(urls[i]); }catch(e){ toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
+      setLog(`Opening clip ${i+1}/${n}`);
+      scenes.push({sc:job.scenes[i], video});
+    }
     // timeline
     let t=0;
     scenes.forEach((s,i)=>{
