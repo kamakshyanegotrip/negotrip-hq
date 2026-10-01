@@ -217,6 +217,9 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:12px 0}
 .fitrow{border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--surface)}
 .fitlab{display:flex;gap:8px;align-items:center;font-weight:600;font-size:13.5px}
 .fitrow .aihost{margin-top:6px}
+/* AI director */
+.director .aichat.open{background:var(--bg)}
+.director .aimsgs{max-height:420px}
 </style>
 </head>
 <body>
@@ -460,6 +463,7 @@ function renderJob(){
       <div><div class="eyebrow">${esc(j.request?.destination)} · ${esc(j.request?.angle)} · ${esc(j.request?.language)} · job ${esc(j.job_id)}</div><h2>${esc(j.title)}</h2><div class="muted small">Planned length about ${total}s · ${j.scenes.length} scenes</div></div>
       <div class="btns"><span class="pill num" id="readyPill"></span><a class="btn" href="#make" id="toMake">Make the video ↓</a></div>
     </div>
+    <div class="director"><div class="small muted" style="margin:12px 0 6px"><b style="color:var(--accent)">✦ AI director</b> · tell the AI what you want changed anywhere in the video: script, scenes, order, footage, framing, looks, titles, captions, voice, language, music, caption for posting. It proposes the exact changes; you apply them.</div><div class="aihost" data-key="director"></div></div>
   </div>
 
   <div class="card">
@@ -510,6 +514,8 @@ function renderJob(){
   bindJob();
   initRenderPanel();
   mountChat(document.querySelector('.aihost[data-key="script"]'), "script", scriptDef());
+  if(!S.chats.director) S.chats.director={open:true,msgs:[],draft:""};
+  mountDirector();
   mountChat(document.querySelector('.aihost[data-key="caption"]'), "caption", captionDef());
 }
 
@@ -936,6 +942,7 @@ function renderEditor(){
     <div class="scrubrow"><input type="range" id="scrub" min="0" max="${P.total.toFixed(2)}" step="0.05" value="${(R.scrub||0).toFixed(2)}" aria-label="Preview position"><span class="log" id="scrubLab"></span></div>
     <div class="strip" role="list">${S.job.scenes.map((x,k)=>{ const c=x.card?null:x.footage; return `<div class="chip2 ${k===i?"on":""}" role="listitem"><button class="pick" data-sel="${k}" aria-pressed="${k===i}">${thumbHtml(c,"")}<span>${k+1} · ${(P.scenes[k]?P.scenes[k].dur:0).toFixed(1)}s</span></button><div class="mv"><button data-mv="${k}:-1" ${k===0?"disabled":""} aria-label="Move scene ${k+1} earlier">◀</button><button data-mv="${k}:1" ${k===S.job.scenes.length-1?"disabled":""} aria-label="Move scene ${k+1} later">▶</button></div></div>`; }).join("")}</div>
     <div class="fitbar"><button class="btn-sm primary" id="fitAll" ${S.fitBusy?"disabled":""}>✦ AI: fit visuals to the text (all scenes)</button><button class="btn-sm" id="fitOne" ${S.fitBusy?"disabled":""}>Check scene ${i+1} only</button><span class="small muted" id="fitStatus">${esc(S.fitStatus||"Looks at the real frames of each clip and fixes framing, timing and looks to match the narration and title.")}</span></div>
+    <div class="aihost" data-key="director"></div>
     <div id="fitReport"></div>
     <div class="tabs2" role="tablist">${["Clip","Look & text","Audio","Whole video"].map((t,k)=>`<button role="tab" data-tab="${k}" aria-selected="${(S.editTab||0)===k}">${t}</button>`).join("")}</div>
     <div class="insp">
@@ -984,11 +991,12 @@ function renderEditor(){
         <div class="field"><label for="gCta">Call to action</label><input type="text" id="gCta" maxlength="50" value="${esc((S.job.cta&&S.job.cta.on_screen)||"")}"></div>
         <button class="btn-sm" id="gReset">Reset whole-video style</button>
       </div>
-      <div class="aihost" id="editChat" data-key="${(S.editTab||0)===3?"edit:3":`edit:${S.editTab||0}:${esc(sc.id)}`}"></div>
+      ${(S.editTab||0)<3?`<div class="aihost" id="editChat" data-key="scene:${esc(sc.id)}"></div>`:`<p class="small muted" style="margin:10px 0 0">For changes across the whole video, use the ✦ AI director above.</p>`}
     </div>`;
   bindEditor();
-  const eh=$("#editChat"); if(eh) mountChat(eh, eh.dataset.key, editDef(S.editTab||0));
+  const eh=$("#editChat"); if(eh) mountChat(eh, eh.dataset.key, sceneDef(i));
   renderFitReport();
+  mountDirector();
   $("#fitAll").onclick=()=>runFit(S.job.scenes.map((_,k)=>k));
   $("#fitOne").onclick=()=>runFit([S.editSel||0]);
   scrubTo(R.scrub||0);
@@ -1490,12 +1498,13 @@ function renderMusic(){
 S.chats = S.chats || {};
 const AI_HINTS = {
   script:["Make the hook stronger","Is the script honest and accurate?","Make it fit 30 seconds"],
-  scene:["Is this the right footage for this line?","Shorten the narration","Better on-screen text?"],
+  scene:["Frame the subject better and keep it clear of the title","Make this scene feel more dramatic","Is this the right footage for this line?","Shorten the narration","Find better footage"],
   caption:["Write a better caption","Add hashtags for Odisha travel","Make it shorter"],
   clip:["How should I frame this shot?","Is the pacing right?","Which transition fits here?"],
   look:["Does this look good?","Make it warmer and brighter","Is the title readable?"],
   audio:["Is the voice too fast or slow?","Balance music and voice","Rewrite this line to sound natural"],
-  whole:["Review the whole video","Which caption style suits travel reels?","Pick colours that match our brand"]
+  whole:["Review the whole video","Which caption style suits travel reels?","Pick colours that match our brand"],
+  director:["Make it feel calm and devotional","Put all titles at the bottom and make colours warmer","Make the hook stronger and move the best scene first","Switch to a Hindi voice","Find better footage for weak scenes"]
 };
 function jobBrief(){
   const j=S.job||{}, r=j.research||{};
@@ -1529,7 +1538,7 @@ function chatHtml(key, def){
     const ch=(m.changes||[]).filter(c=>fmap[c.key]);
     return `<div class="aimsg ai">${esc(m.text).replace(/\n/g,"<br>")}${ch.length?`<div class="aich">
       ${ch.map((c,ci)=>{ const f=fmap[c.key]; const v=coerce(f,c.value); const ok=v!==undefined; const was=m.before&&(c.key in m.before)?m.before[c.key]:f.get(); return `<label class="${m.applied?"done":""}"><input type="checkbox" data-aisel="${mi}:${ci}" ${ok&&!m.applied?"checked":""} ${!ok||m.applied?"disabled":""}><span><b>${esc(f.label)}</b>: ${esc(fmtVal(f,was))} → <b>${ok?esc(fmtVal(f,v)):"(not allowed)"}</b>${c.why?`<br><span class="muted">${esc(c.why)}</span>`:""}</span></label>`; }).join("")}
-      ${m.applied?`<div class="small muted">✓ Applied${m.applied==="undone"?" then undone":""}</div>${m.applied===true&&m.undo?`<button class="btn-sm" data-aiundo="${mi}">Undo</button>`:""}`:`<div class="btns"><button class="btn-sm primary" data-aiapply="${mi}">Apply selected</button><button class="btn-sm" data-aiskip="${mi}">Not now</button></div>`}
+      ${m.applied?`<div class="small muted">✓ Applied${m.applied==="undone"?" then undone":""}</div>${m.applied===true&&m.undo&&m.undo.length?`<button class="btn-sm" data-aiundo="${mi}">Undo</button>`:""}`:`<div class="btns"><button class="btn-sm primary" data-aiapply="${mi}">Apply selected</button><button class="btn-sm" data-aiskip="${mi}">Not now</button></div>`}
     </div>`:""}</div>`; }).join("");
   const hints=(AI_HINTS[kind]||[]).map(h=>`<button class="aihint" data-aihint="${esc(h)}">${esc(h)}</button>`).join("");
   return `<div class="aichat open" data-chat="${esc(key)}">
@@ -1566,7 +1575,8 @@ function bindChat(box, key){
     const chosen=[...box.querySelectorAll(`[data-aisel^="${mi}:"]`)].filter(x=>x.checked).map(x=>m.changes.filter(c=>fmap[c.key])[+x.dataset.aisel.split(":")[1]]);
     if(!chosen.length){ toast("Tick at least one change"); return; }
     const undo=[], applied=[];
-    for(const c of chosen){ const fd=fmap[c.key]; const v=coerce(fd,c.value); if(v===undefined) continue; undo.push([c.key,fd.get()]); fd.set(v); applied.push(c.key); }
+    chosen.sort((a,b)=>(fmap[a.key].late||0)-(fmap[b.key].late||0));
+    for(const c of chosen){ const fd=fmap[c.key]; const v=coerce(fd,c.value); if(v===undefined) continue; if(!fd.late) undo.push([c.key,fd.get()]); fd.set(v); applied.push(c.key); }
     m.applied=true; m.undo=undo; m.before=Object.fromEntries(m.changes.filter(c=>fmap[c.key]).map(c=>[c.key,fmap[c.key].get()])); undo.forEach(([k,v])=>{ m.before[k]=v; }); saveLocal();
     S.chatDefs[key].after(applied);
     refreshChat(key);
@@ -1586,7 +1596,7 @@ async function sendChat(key, text, prompt){
   try{
     const fields=def.fields().map(f=>({key:f.key,label:f.label+(f.note?` (${f.note})`:""),type:f.type==="bool"?"true/false":f.type,min:f.min,max:f.max,options:f.options}));
     const current=Object.fromEntries(def.fields().map(f=>[f.key,f.get()]));
-    const body={ scope:def.title, context:Object.assign({current_values:current}, def.context()), fields,
+    const body={ scope:def.title, max_changes:def.maxChanges||8, context:Object.assign({current_values:current}, def.context()), fields,
       messages: st.msgs.slice(-14).map(m=>({role:m.role, text:m.role==="ai"&&m.changes&&m.changes.length? m.text+"\n[suggested: "+m.changes.map(c=>c.key+"="+c.value).join(", ")+(m.applied===true?" — user applied":m.applied?" — user did not apply":"")+"]" : (m.prompt||m.text)})) };
     if(def.image){ const im=snapshot(); if(im) body.image=im; }
     if(def.images){ const ims=await def.images(); if(ims.length){ body.images=ims.map(x=>x.b64); body.image_labels=ims.map(x=>x.label); } }
@@ -1612,11 +1622,26 @@ function sceneFields(sc){
 }
 function sceneDef(i){
   const sc=()=>S.job.scenes[i];
-  return { kind:"scene", title:`scene ${i+1} (${sc().location||""})`, image:false,
-    fields:()=>sceneFields(sc()),
-    context:()=>{ const s=sc(); return { video:jobBrief(), this_scene:{ n:i+1, of:S.job.scenes.length, role:i===0?"hook (first 2 seconds matter most)":i===S.job.scenes.length-1?"final scene with call to action":"middle", stage:s.aida_stage, location:s.location, match:s.match, match_reason:s.match_reason },
-      candidates:(s.candidates||[]).filter(x=>!x._rejected).slice(0,30).map(x=>({cid:x.cid, source:x.source, kind:x.kind, desc:String(x.desc||"").slice(0,140), verified:!!x.verified, ai_checked:x.ai_ok!==false, licence:x.licence})) }; },
-    after:(keys)=>{ if(keys.some(k=>k!=="on_screen_text"&&k!=="duration_sec")) invalidate(); else if(R.prepared){ relayout(); scrubTo(R.scrub||0); } renderScenes(); updateCredits(); if(R.prepared) renderEditor(); } };
+  return { kind:"scene", title:`scene ${i+1} (${sc().location||""})`, image:false, maxChanges:25,
+    images:()=> R.prepared && R.prepared.scenes[i] && !sc().card ? fitImages(i, 3) : Promise.resolve([]),
+    fields:()=>{
+      const s0=sc(); const out=[...sceneFields(s0)];
+      out.push({key:"find_footage", label:"Search all sources for new footage for this scene (search words)", type:"text", max:60, get:()=>"", set:v=>{ if(v){ S.openAlts[i]=true; searchMore(i, v, {disabled:false,textContent:""}); } }, late:1});
+      editDef(0,i).fields().filter(f=>f.key!=="duration_sec").forEach(f=>out.push(f));
+      editDef(1,i).fields().filter(f=>f.key!=="title").forEach(f=>out.push(f));
+      editDef(2,i).fields().filter(f=>f.key==="voiceVol"||f.key==="delivery").forEach(f=>out.push(f));
+      return out; },
+    context:()=>{ const s=sc(); return Object.assign(editDef(0,i).context(), { this_scene_review:{ stage:s.aida_stage, match:s.match, match_reason:s.match_reason, approved:!!s.approved, prepared:!!R.prepared },
+      note:"Labelled FRAME/PREVIEW/CANDIDATE images (when the video is prepared) show this scene's real clip, its current rendered look and other footage choices.",
+      candidates:(s.candidates||[]).filter(x=>!x._rejected).slice(0,30).map(x=>({cid:x.cid, source:x.source, kind:x.kind, desc:String(x.desc||"").slice(0,140), verified:!!x.verified, ai_checked:x.ai_ok!==false, licence:x.licence})) }); },
+    after:(keys)=>{
+      if(keys.length===1&&keys[0]==="delivery"&&R.prepared){ regenVoice(i); return; }
+      const big=keys.some(k=>k==="narration"||k==="footage_cid");
+      if(big) invalidate(); else if(R.prepared){ relayout(); scrubTo(R.scrub||0); }
+      renderScenes(); updateCredits(); if(R.prepared) renderEditor();
+      if(keys.includes("footage_cid")) toast("New footage chosen. Approve it, then Prepare again.");
+      else if(keys.includes("narration")) toast("Line changed. Prepare again to hear it.");
+    } };
 }
 function scriptDef(){
   return { kind:"script", title:"the whole script", image:false,
@@ -1707,7 +1732,7 @@ async function frameB64(src, w, h, maxSide){
   const k=Math.min(1, maxSide/Math.max(w||1,h||1)); const c=document.createElement("canvas"); c.width=Math.max(1,Math.round(w*k)); c.height=Math.max(1,Math.round(h*k));
   c.getContext("2d").drawImage(src,0,0,c.width,c.height); return c.toDataURL("image/jpeg",0.72).split(",")[1]||"";
 }
-async function fitImages(i){
+async function fitImages(i, nCand){
   const sc=S.job.scenes[i], a=ASSETS.get(sc.id)||{}, P=R.prepared, ps=P&&P.scenes[i]; const out=[];
   try{
     if(a.video){
@@ -1719,7 +1744,7 @@ async function fitImages(i){
     }
     if(ps){ await scrubTo(ps.t0+Math.min(ps.dur*0.45,2.2)); const pv=snapshot(); if(pv) out.push({label:"PREVIEW: current rendered 9:16 frame with the title and captions", b64:pv}); }
   }catch(e){}
-  const cands=(sc.candidates||[]).filter(c=>!c._rejected && !(sc.footage&&c.cid===sc.footage.cid) && (c.thumbnail||c.local_thumb)).slice(0,5);
+  const cands=(sc.candidates||[]).filter(c=>!c._rejected && !(sc.footage&&c.cid===sc.footage.cid) && (c.thumbnail||c.local_thumb)).slice(0,nCand==null?5:nCand);
   for(const c of cands){
     try{ const blob = c.local_thumb ? await (await fetch(c.local_thumb)).blob() : await api("media",{url:c.thumbnail},true);
       const bm=await createImageBitmap(blob);
@@ -1778,6 +1803,49 @@ async function runFit(indices){
     }
     S.fitStatus=`Checked ${todo.length} scene${todo.length===1?"":"s"}. Review the suggestions below.`;
   }finally{ S.fitBusy=false; const fs=$("#fitStatus"); if(fs) fs.textContent=S.fitStatus||""; await scrubTo(keep); renderFitReport(); }
+}
+
+// ================================================================ AI DIRECTOR (one chat that can change anything in the video)
+const SCENE_AUDIO_KEYS = new Set(["voiceVol","narration","delivery"]);
+const DIRECTOR_PROMPT_NOTE = "Keys starting with sN. belong to scene N (scene numbers as they are now). Global keys apply to the whole video. Action keys (scene_order, sN.remove, sN.find_footage, music_search, translate_to) do something rather than set a value; only use them when the user asks for that.";
+function directorFields(){
+  if(!S.job) return [];
+  const out=[], n=S.job.scenes.length;
+  const pref=(f,i)=>Object.assign({},f,{key:`s${i+1}.${f.key}`, label:`Scene ${i+1}: ${f.label}`, sceneIdx:i});
+  S.job.scenes.forEach((sc,i)=>{
+    editDef(0,i).fields().forEach(f=>out.push(pref(f,i)));
+    editDef(1,i).fields().forEach(f=>out.push(pref(f,i)));
+    editDef(2,i).fields().filter(f=>SCENE_AUDIO_KEYS.has(f.key)).forEach(f=>out.push(pref(f,i)));
+    out.push({key:`s${i+1}.find_footage`, label:`Scene ${i+1}: search all sources for new footage (search words)`, type:"text", max:60, get:()=>"", set:v=>{ if(v){ S.openAlts[i]=true; searchMore(i, v, {disabled:false,textContent:""}); } }, late:1, sceneIdx:i});
+    out.push({key:`s${i+1}.remove`, label:`Scene ${i+1}: delete this scene (true to delete)`, type:"bool", get:()=>false, set:v=>{ const k=S.job.scenes.indexOf(sc); if(v && S.job.scenes.length>1 && k>=0){ S.job.scenes.splice(k,1); } }, late:3-i/100, sceneIdx:i});
+  });
+  editDef(2,0).fields().filter(f=>!SCENE_AUDIO_KEYS.has(f.key)).forEach(f=>out.push(Object.assign({},f)));
+  editDef(3,0).fields().forEach(f=>out.push(Object.assign({},f)));
+  captionDef().fields().forEach(f=>out.push(Object.assign({},f)));
+  out.push({key:"scene_order", label:`New scene order as comma-separated current scene numbers, e.g. 2,1,3 (all ${n} numbers)`, type:"text", max:60,
+    get:()=>S.job.scenes.map((_,k)=>k+1).join(","),
+    set:v=>{ const nums=String(v).split(/[^0-9]+/).filter(Boolean).map(x=>+x-1); const cur=S.job.scenes.slice(); if(nums.length!==cur.length||new Set(nums).size!==cur.length||nums.some(x=>x<0||x>=cur.length)) return; S.job.scenes=nums.map(x=>cur[x]); }, late:2});
+  out.push({key:"music_search", label:"Search the free music library (1-2 words, e.g. sitar, calm flute); opens the results to choose from", type:"text", max:40, get:()=>"", set:v=>{ if(v){ MUSIC.q=v; MUSIC.results=[]; S._openMusicAfter=true; } }, late:1});
+  out.push({key:"translate_to", label:"Translate the whole script to another language and switch the voice to it", type:"select", options:ALL_LANGS.map(l=>l[0]), get:()=>scriptLang(), set:v=>{ if(v && v!==scriptLang()){ setVC({lang:v}); S._translateAfter=true; } }, late:1});
+  return out;
+}
+function directorDef(){
+  return { kind:"director", title:"the whole video", image:true, maxChanges:40,
+    fields:directorFields,
+    context:()=>({ note:DIRECTOR_PROMPT_NOTE, video:jobBrief(), prepared:!!R.prepared, total_seconds:R.prepared?+R.prepared.total.toFixed(1):null,
+      scenes_detail:S.job.scenes.map((s,i)=>({n:i+1, location:s.location, card:!!s.card, approved:!!s.approved, footage:s.footage&&!s.card?`${s.footage.kind} from ${s.footage.source}: ${String(s.footage.desc||"").slice(0,100)}`:"title card", other_choices:(s.candidates||[]).filter(c=>!c._rejected).length})) }),
+    after:(keys)=>{
+      const big = keys.some(k=>/\.(narration|remove)$|^(narration|voice|stylePreset|pace|voiceAccent|voiceDirection|translate_to|scene_order)$/.test(k) || /\.footage_cid$/.test(k));
+      if(S._translateAfter){ S._translateAfter=false; translateScript({disabled:false,textContent:""}).catch(()=>{}); }
+      if(S._openMusicAfter){ S._openMusicAfter=false; setTimeout(openMusic,50); }
+      const c=$("#caption"); if(c) c.value=captionText();
+      if(big){ invalidate(); renderScenes(); updateCredits(); if(keys.some(k=>/narration|voice|stylePreset|pace|Accent|Direction|translate/.test(k))) toast("Press Prepare again to hear the changes."); }
+      else { renderScenes(); if(R.prepared){ relayout(); renderEditor(); } }
+      mountDirector();
+    } };
+}
+function mountDirector(){
+  document.querySelectorAll('.aihost[data-key="director"]').forEach(h=>mountChat(h,"director",directorDef()));
 }
 
 boot();
