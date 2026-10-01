@@ -173,6 +173,25 @@ img.thumb{display:block;object-fit:cover;width:100%;aspect-ratio:9/16;height:aut
 .rng input{width:100%;accent-color:var(--accent)}
 input[type=color]{width:100%;height:40px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:3px}
 hr.sep{border:0;border-top:1px solid var(--line);margin:12px 0}
+/* AI co-editor */
+.aihost{margin-top:10px}
+.aibtn{border:1px dashed var(--accent);background:transparent;color:var(--accent);border-radius:9px;height:32px;padding:0 12px;font-weight:600;font-size:12.5px;cursor:pointer}
+.aichat.open{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:10px}
+.aihead{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px}
+.linkish{background:none;border:0;color:var(--ink-2);cursor:pointer;font-size:12px;padding:0;text-decoration:underline}
+.aimsgs{max-height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.aimsg{padding:8px 10px;border-radius:10px;font-size:13.5px;line-height:1.45;max-width:92%}
+.aimsg.me{align-self:flex-end;background:var(--ink);color:var(--surface)}
+.aimsg.ai{align-self:flex-start;background:var(--bg)}
+.aimsg.typing{color:var(--ink-2);font-style:italic}
+.aich{margin-top:8px;border-top:1px solid var(--line);padding-top:8px;display:flex;flex-direction:column;gap:6px}
+.aich label{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.aich label.done{opacity:.6}
+.aich .btn-sm,.aich .btns{align-self:flex-start}
+.aihints{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.aihint{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;font-size:12px;padding:5px 10px;cursor:pointer}
+.aiform{display:flex;gap:6px;align-items:flex-end}
+.aiform textarea{flex:1;min-height:40px;font-size:14px;resize:vertical}
 </style>
 </head>
 <body>
@@ -425,6 +444,7 @@ function renderJob(){
   <div class="card">
     <h2>Scenes & footage</h2>
     <p class="small muted" style="margin:-4px 0 12px">Every scene needs footage that a person has <b>approved</b> before the video can be made, whatever its source. Tap a clip to preview it, then <b>Approve</b> or <b>Reject</b>. Approvals and rejections are remembered for that place, so next time the right footage comes first. Your own uploads go into the team library.</p>
+    <div class="aihost" data-key="script"></div>
     <div class="scenes" id="sceneList"></div>
   </div>
 
@@ -433,6 +453,7 @@ function renderJob(){
     <textarea id="caption" style="min-height:110px">${esc(captionText())}</textarea>
     <div class="field" style="margin-top:10px"><label class="small muted" for="credits">Footage credits (added when you copy the caption)</label><textarea id="credits" readonly style="min-height:56px;font-size:13px"></textarea></div>
     <div class="btns" style="margin-top:8px"><button class="btn-sm" id="copyCap">Copy caption + credits</button><button class="btn-sm" id="dlJob">Download job file (for the PC renderer)</button></div>
+    <div class="aihost" data-key="caption"></div>
   </div>
 
   <div class="card" id="make">
@@ -462,6 +483,8 @@ function renderJob(){
   renderScenes();
   bindJob();
   initRenderPanel();
+  mountChat(document.querySelector('.aihost[data-key="script"]'), "script", scriptDef());
+  mountChat(document.querySelector('.aihost[data-key="caption"]'), "caption", captionDef());
 }
 
 function renderScenes(){
@@ -497,6 +520,7 @@ function sceneHtml(sc,i){
         <div class="field"><label class="small muted" for="o${i}">On-screen text</label><input type="text" id="o${i}" data-edit="${i}:on_screen_text" value="${esc(sc.on_screen_text)}" maxlength="40"></div>
         <div class="field"><label class="small muted" for="d${i}">Seconds</label><input type="number" id="d${i}" data-edit="${i}:duration_sec" value="${esc(sc.duration_sec)}" min="2" max="20"></div>
       </div>
+      <div class="aihost" data-key="scene:${esc(sc.id)}" data-i="${i}"></div>
     </div>
   </div>`;
 }
@@ -509,6 +533,7 @@ function bindScenes(){
   w.querySelectorAll("[data-card]").forEach(b=>b.addEventListener("click",()=>{ const sc=S.job.scenes[+b.dataset.card]; sc.card=true; invalidate(); saveLocal(); renderScenes(); updateCredits(); }));
   w.querySelectorAll("[data-preview]").forEach(b=>b.addEventListener("click",()=>{ const [i,cid]=[b.dataset.preview.slice(0,b.dataset.preview.indexOf(":")), b.dataset.preview.slice(b.dataset.preview.indexOf(":")+1)]; const sc=S.job.scenes[+i]; const c = cid==="sel" ? sc.footage : sc.candidates.find(x=>x.cid===cid); if(c) openPreview(+i, c); }));
   w.querySelectorAll("[data-search]").forEach(f=>f.addEventListener("submit",e=>{ e.preventDefault(); searchMore(+f.dataset.search, f.querySelector("input").value, f.querySelector("button")); }));
+  w.querySelectorAll(".aihost[data-i]").forEach(h=>mountChat(h, h.dataset.key, sceneDef(+h.dataset.i)));
   w.querySelectorAll("[data-upload]").forEach(inp=>inp.addEventListener("change",()=>{ const f=inp.files[0]; inp.value=""; if(f) openUpload(+inp.dataset.upload, f); }));
 }
 function updateGate(){
@@ -920,8 +945,10 @@ function renderEditor(){
         <div class="field"><label for="gCta">Call to action</label><input type="text" id="gCta" maxlength="50" value="${esc((S.job.cta&&S.job.cta.on_screen)||"")}"></div>
         <button class="btn-sm" id="gReset">Reset whole-video style</button>
       </div>
+      <div class="aihost" id="editChat" data-key="${(S.editTab||0)===3?"edit:3":`edit:${S.editTab||0}:${esc(sc.id)}`}"></div>
     </div>`;
   bindEditor();
+  const eh=$("#editChat"); if(eh) mountChat(eh, eh.dataset.key, editDef(S.editTab||0));
   scrubTo(R.scrub||0);
 }
 function bindEditor(){
@@ -1165,6 +1192,202 @@ function showResult(blob, mime){
     <p class="small muted">Tick off the checks above before you post.</p></div>`;
   setLog("Done.");
   setBar(1);
+}
+
+// ================================================================ AI CO-EDITOR (chat under every section)
+// Each section defines: title, context(), fields() [{key,label,type,min,max,options,get,set}], after(applied), image (bool)
+S.chats = S.chats || {};
+const AI_HINTS = {
+  script:["Make the hook stronger","Is the script honest and accurate?","Make it fit 30 seconds"],
+  scene:["Is this the right footage for this line?","Shorten the narration","Better on-screen text?"],
+  caption:["Write a better caption","Add hashtags for Odisha travel","Make it shorter"],
+  clip:["How should I frame this shot?","Is the pacing right?","Which transition fits here?"],
+  look:["Does this look good?","Make it warmer and brighter","Is the title readable?"],
+  audio:["Is the voice too fast or slow?","Balance music and voice","Rewrite this line to sound natural"],
+  whole:["Review the whole video","Which caption style suits travel reels?","Pick colours that match our brand"]
+};
+function jobBrief(){
+  const j=S.job||{}, r=j.research||{};
+  return { title:j.title, destination:(j.request||{}).destination, language:(j.request||{}).language, angle:(j.request||{}).angle,
+    hook:j.hook, fomo_type:j.fomo_type, cta:j.cta, research:{ one_line:r.one_line, best_season:r.best_season, facts:(r.facts||r.key_facts||[]).slice?.(0,10), how_to_reach:r.how_to_reach },
+    fact_check_notes:j.fact_check_notes, warnings:j.warnings,
+    scenes:(j.scenes||[]).map((s,i)=>({n:i+1, stage:s.aida_stage, location:s.location, narration:s.narration, on_screen_text:s.on_screen_text, seconds:s.duration_sec, footage: s.card?"title card":(s.footage?`${s.footage.kind} from ${s.footage.source}: ${String(s.footage.desc||"").slice(0,90)}`:"none")})) };
+}
+function snapshot(){
+  try{ const cv=$("#cv"); if(!cv||!R.prepared) return ""; const c=document.createElement("canvas"); c.width=360; c.height=640; c.getContext("2d").drawImage(cv,0,0,360,640); return c.toDataURL("image/jpeg",0.72).split(",")[1]||""; }catch(e){ return ""; }
+}
+function fmtVal(f,v){ if(v==null||v==="") return "—"; if(f.type==="bool") return v?"on":"off"; if(f.type==="number") return String(Math.round(+v*100)/100); const s=String(v); return s.length>70?s.slice(0,70)+"…":s; }
+function coerce(f, raw){
+  const s=String(raw==null?"":raw).trim();
+  if(f.type==="number"){ const n=parseFloat(s); if(!isFinite(n)) return undefined; return Math.max(f.min??-Infinity, Math.min(f.max??Infinity, n)); }
+  if(f.type==="select"){ const o=(f.options||[]).map(String); const hit=o.find(x=>x.toLowerCase()===s.toLowerCase()); return hit===undefined?undefined:(f.numeric?+hit:hit); }
+  if(f.type==="bool") return /^(true|yes|on|1)$/i.test(s);
+  if(f.type==="color") return /^#[0-9a-f]{6}$/i.test(s)?s:undefined;
+  if(f.type==="text"){ return f.max? s.slice(0,f.max) : s; }
+  return s;
+}
+function chatHtml(key, def){
+  const st=S.chats[key]||{open:false,msgs:[],draft:""};
+  const kind=def.kind||"scene";
+  if(!st.open) return `<div class="aichat" data-chat="${esc(key)}"><button class="aibtn" data-aiopen>✦ Ask AI about ${esc(def.title)}</button></div>`;
+  const fields=def.fields(); const fmap=Object.fromEntries(fields.map(f=>[f.key,f]));
+  const msgs=st.msgs.map((m,mi)=>{
+    if(m.role==="user") return `<div class="aimsg me">${esc(m.text)}</div>`;
+    const ch=(m.changes||[]).filter(c=>fmap[c.key]);
+    return `<div class="aimsg ai">${esc(m.text).replace(/\n/g,"<br>")}${ch.length?`<div class="aich">
+      ${ch.map((c,ci)=>{ const f=fmap[c.key]; const v=coerce(f,c.value); const ok=v!==undefined; const was=m.before&&(c.key in m.before)?m.before[c.key]:f.get(); return `<label class="${m.applied?"done":""}"><input type="checkbox" data-aisel="${mi}:${ci}" ${ok&&!m.applied?"checked":""} ${!ok||m.applied?"disabled":""}><span><b>${esc(f.label)}</b>: ${esc(fmtVal(f,was))} → <b>${ok?esc(fmtVal(f,v)):"(not allowed)"}</b>${c.why?`<br><span class="muted">${esc(c.why)}</span>`:""}</span></label>`; }).join("")}
+      ${m.applied?`<div class="small muted">✓ Applied${m.applied==="undone"?" then undone":""}</div>${m.applied===true&&m.undo?`<button class="btn-sm" data-aiundo="${mi}">Undo</button>`:""}`:`<div class="btns"><button class="btn-sm primary" data-aiapply="${mi}">Apply selected</button><button class="btn-sm" data-aiskip="${mi}">Not now</button></div>`}
+    </div>`:""}</div>`; }).join("");
+  const hints=(AI_HINTS[kind]||[]).map(h=>`<button class="aihint" data-aihint="${esc(h)}">${esc(h)}</button>`).join("");
+  return `<div class="aichat open" data-chat="${esc(key)}">
+    <div class="aihead"><span>✦ AI co-editor · ${esc(def.title)}</span><span>${st.msgs.length?`<button class="linkish" data-aiclear>Clear</button> · `:""}<button class="linkish" data-aiclose>Close</button></span></div>
+    <div class="aimsgs">${msgs||`<div class="small muted">Ask anything about ${esc(def.title)}. The AI sees the current settings${def.image?" and the preview frame":""}, suggests changes, and you decide what to apply.</div>`}${st.busy?`<div class="aimsg ai typing">Thinking…</div>`:""}</div>
+    ${st.msgs.length?"":`<div class="aihints">${hints}</div>`}
+    <form class="aiform" data-aiform><textarea rows="2" placeholder="e.g. ${esc((AI_HINTS[kind]||["What should I change?"])[0])}…" aria-label="Message to AI">${esc(st.draft||"")}</textarea><button class="btn-sm primary" ${st.busy?"disabled":""}>Send</button></form>
+  </div>`;
+}
+function mountChat(host, key, def){
+  if(!host) return;
+  S.chatDefs=S.chatDefs||{}; S.chatDefs[key]=def;
+  host.innerHTML=chatHtml(key,def);
+  bindChat(host.querySelector("[data-chat]"), key);
+}
+function refreshChat(key){
+  const def=S.chatDefs&&S.chatDefs[key]; if(!def) return;
+  document.querySelectorAll(".aihost").forEach(h=>{ if(h.dataset.key===key) mountChat(h,key,def); });
+}
+function bindChat(box, key){
+  const st=S.chats[key]=S.chats[key]||{open:false,msgs:[],draft:""};
+  const def=S.chatDefs[key];
+  const q=sel=>box.querySelector(sel);
+  if(q("[data-aiopen]")) q("[data-aiopen]").onclick=()=>{ st.open=true; refreshChat(key); const t=document.querySelector(`.aihost[data-key="${CSS.escape(key)}"] textarea`); if(t) t.focus(); };
+  if(q("[data-aiclose]")) q("[data-aiclose]").onclick=()=>{ st.open=false; refreshChat(key); };
+  if(q("[data-aiclear]")) q("[data-aiclear]").onclick=()=>{ st.msgs=[]; refreshChat(key); };
+  const ta=q("textarea");
+  if(ta){ ta.oninput=()=>{ st.draft=ta.value; }; ta.onkeydown=e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendChat(key, ta.value); } }; }
+  const f=q("[data-aiform]"); if(f) f.onsubmit=e=>{ e.preventDefault(); sendChat(key, ta.value); };
+  box.querySelectorAll("[data-aihint]").forEach(b=>b.onclick=()=>sendChat(key,b.dataset.aihint));
+  box.querySelectorAll("[data-aiskip]").forEach(b=>b.onclick=()=>{ st.msgs[+b.dataset.aiskip].applied="skipped"; refreshChat(key); });
+  box.querySelectorAll("[data-aiapply]").forEach(b=>b.onclick=()=>{
+    const mi=+b.dataset.aiapply, m=st.msgs[mi]; const fields=S.chatDefs[key].fields(); const fmap=Object.fromEntries(fields.map(x=>[x.key,x]));
+    const chosen=[...box.querySelectorAll(`[data-aisel^="${mi}:"]`)].filter(x=>x.checked).map(x=>m.changes.filter(c=>fmap[c.key])[+x.dataset.aisel.split(":")[1]]);
+    if(!chosen.length){ toast("Tick at least one change"); return; }
+    const undo=[], applied=[];
+    for(const c of chosen){ const fd=fmap[c.key]; const v=coerce(fd,c.value); if(v===undefined) continue; undo.push([c.key,fd.get()]); fd.set(v); applied.push(c.key); }
+    m.applied=true; m.undo=undo; m.before=Object.fromEntries(m.changes.filter(c=>fmap[c.key]).map(c=>[c.key,fmap[c.key].get()])); undo.forEach(([k,v])=>{ m.before[k]=v; }); saveLocal();
+    S.chatDefs[key].after(applied);
+    refreshChat(key);
+    toast(`Applied ${applied.length} change${applied.length===1?"":"s"}`);
+  });
+  box.querySelectorAll("[data-aiundo]").forEach(b=>b.onclick=()=>{
+    const m=st.msgs[+b.dataset.aiundo]; const fmap=Object.fromEntries(S.chatDefs[key].fields().map(x=>[x.key,x]));
+    const keys=[]; for(const [k,v] of (m.undo||[]).slice().reverse()){ if(fmap[k]){ fmap[k].set(v); keys.push(k); } }
+    m.applied="undone"; m.undo=null; saveLocal(); S.chatDefs[key].after(keys); refreshChat(key); toast("Undone");
+  });
+  const list=q(".aimsgs"); if(list) list.scrollTop=list.scrollHeight;
+}
+async function sendChat(key, text){
+  text=String(text||"").trim(); const st=S.chats[key]; const def=S.chatDefs[key];
+  if(!text||st.busy) return;
+  st.msgs.push({role:"user",text}); st.draft=""; st.busy=true; refreshChat(key);
+  try{
+    const fields=def.fields().map(f=>({key:f.key,label:f.label+(f.note?` (${f.note})`:""),type:f.type==="bool"?"true/false":f.type,min:f.min,max:f.max,options:f.options}));
+    const current=Object.fromEntries(def.fields().map(f=>[f.key,f.get()]));
+    const body={ scope:def.title, context:Object.assign({current_values:current}, def.context()), fields,
+      messages: st.msgs.slice(-14).map(m=>({role:m.role, text:m.role==="ai"&&m.changes&&m.changes.length? m.text+"\n[suggested: "+m.changes.map(c=>c.key+"="+c.value).join(", ")+(m.applied===true?" — user applied":m.applied?" — user did not apply":"")+"]" : m.text})) };
+    if(def.image){ const im=snapshot(); if(im) body.image=im; }
+    const r=await api("assist", body);
+    st.msgs.push({role:"ai", text:r.reply||"(no answer)", changes:Array.isArray(r.changes)?r.changes:[]});
+  }catch(e){ st.msgs.push({role:"ai", text:"Sorry, I couldn't reach the AI: "+e.message, changes:[]}); }
+  st.busy=false; refreshChat(key);
+}
+
+// ---------------------------------------------------------------- section definitions
+const fld=(key,label,type,get,set,extra)=>Object.assign({key,label,type,get,set},extra||{});
+function sceneFields(sc){
+  const cands=(sc.candidates||[]).filter(x=>!x._rejected);
+  return [
+    fld("narration","Narration (spoken line)","text",()=>sc.narration,v=>{ sc.narration=v; },{max:400}),
+    fld("on_screen_text","On-screen title","text",()=>sc.on_screen_text,v=>{ sc.on_screen_text=v; },{max:40}),
+    fld("duration_sec","Seconds","number",()=>+sc.duration_sec,v=>{ sc.duration_sec=v; },{min:2,max:20}),
+    fld("footage_cid","Footage choice (cid from CONTEXT.candidates, or 'card' for a title card)","text",()=>sc.card?"card":(sc.footage&&sc.footage.cid)||"",v=>{
+      if(v==="card"){ sc.card=true; return; }
+      const c=cands.find(x=>x.cid===v)||(sc.candidates||[]).find(x=>x.cid===v); if(!c) return;
+      sc.card=false; sc.footage=c; sc.approved=!!c.verified; },{note:"a person must still approve new footage"})
+  ];
+}
+function sceneDef(i){
+  const sc=()=>S.job.scenes[i];
+  return { kind:"scene", title:`scene ${i+1} (${sc().location||""})`, image:false,
+    fields:()=>sceneFields(sc()),
+    context:()=>{ const s=sc(); return { video:jobBrief(), this_scene:{ n:i+1, of:S.job.scenes.length, role:i===0?"hook (first 2 seconds matter most)":i===S.job.scenes.length-1?"final scene with call to action":"middle", stage:s.aida_stage, location:s.location, match:s.match, match_reason:s.match_reason },
+      candidates:(s.candidates||[]).filter(x=>!x._rejected).slice(0,30).map(x=>({cid:x.cid, source:x.source, kind:x.kind, desc:String(x.desc||"").slice(0,140), verified:!!x.verified, ai_checked:x.ai_ok!==false, licence:x.licence})) }; },
+    after:(keys)=>{ if(keys.some(k=>k!=="on_screen_text"&&k!=="duration_sec")) invalidate(); else if(R.prepared){ relayout(); scrubTo(R.scrub||0); } renderScenes(); updateCredits(); if(R.prepared) renderEditor(); } };
+}
+function scriptDef(){
+  return { kind:"script", title:"the whole script", image:false,
+    fields:()=>{ const out=[]; S.job.scenes.forEach((s,i)=>{ out.push(fld(`s${i+1}.narration`,`Scene ${i+1} narration`,"text",()=>s.narration,v=>{ s.narration=v; },{max:400}));
+      out.push(fld(`s${i+1}.on_screen_text`,`Scene ${i+1} on-screen title`,"text",()=>s.on_screen_text,v=>{ s.on_screen_text=v; },{max:40}));
+      out.push(fld(`s${i+1}.duration_sec`,`Scene ${i+1} seconds`,"number",()=>+s.duration_sec,v=>{ s.duration_sec=v; },{min:2,max:20})); });
+      out.push(fld("cta","Call-to-action on screen","text",()=>(S.job.cta||{}).on_screen||"",v=>{ S.job.cta=Object.assign({},S.job.cta||{},{on_screen:v}); },{max:50}));
+      return out; },
+    context:()=>({ video:jobBrief(), target_seconds:(S.job.request||{}).duration }),
+    after:(keys)=>{ if(keys.some(k=>/narration/.test(k))) invalidate(); else if(R.prepared){ relayout(); scrubTo(R.scrub||0); renderEditor(); } renderScenes(); } };
+}
+function captionDef(){
+  return { kind:"caption", title:"the posting caption", image:false,
+    fields:()=>[fld("caption","Caption with hashtags","text",()=>captionText(),v=>{ S.job._caption=v; },{max:2200})],
+    context:()=>({ video:jobBrief(), credits:creditsText(), note:"Credits are appended automatically when copying; keep the caption under about 150 words with 5-10 hashtags." }),
+    after:()=>{ const c=$("#caption"); if(c) c.value=captionText(); } };
+}
+function editDef(tab){
+  const i=S.editSel||0, sc=()=>S.job.scenes[i], e=()=>ed(sc()), G=()=>st();
+  const ps=()=>R.prepared&&R.prepared.scenes[i];
+  const titles=["the clip","look & text","audio","the whole video"];
+  const sceneCtx=()=>{ const s=sc(), p=ps(), a=ASSETS.get(s.id)||{}; return { video:jobBrief(), total_seconds:R.prepared?+R.prepared.total.toFixed(1):null,
+    this_scene:{ n:i+1, of:S.job.scenes.length, role:i===0?"hook":i===S.job.scenes.length-1?"call to action":"middle", location:s.location, narration:s.narration, title:s.on_screen_text,
+      media: s.card?"title card":(a.video?"video":a.image?"photo":"none"), footage_desc:s.footage&&String(s.footage.desc||"").slice(0,140), clip_length_sec:a.video?+a.video.duration.toFixed(1):null,
+      voice_length_sec:a.voice?+a.voice.duration.toFixed(1):null, scene_length_sec:p?+p.dur.toFixed(1):null, own_voice_recording:!!a.myVoice }, edit:e(), style:G() }; };
+  const after=(keys)=>{ if(keys.includes("narration")||keys.includes("voice")){ invalidate(); renderScenes(); toast("Press Prepare again to hear the new voice."); return; } relayout(); renderEditor(); };
+  let fields;
+  if(tab===0) fields=()=>{ const a=ASSETS.get(sc().id)||{}; const f=[];
+    if(a.video) f.push(fld("start","Start from (seconds into the clip)","number",()=>ps()?+ps().offset.toFixed(1):0,v=>{ e().start=v; },{min:0,max:Math.max(0.1,(a.video.duration||1)-0.2)}),
+      fld("speed","Speed","select",()=>String(e().speed),v=>{ e().speed=v; },{options:["0.5","0.75","1","1.25","1.5","2"],numeric:true}));
+    f.push(fld("zoom","Zoom","number",()=>e().zoom,v=>{ e().zoom=v; },{min:1,max:2}),
+      fld("panX","Move left(-1)/right(+1)","number",()=>e().panX,v=>{ e().panX=v; },{min:-1,max:1}),
+      fld("panY","Move up(-1)/down(+1)","number",()=>e().panY,v=>{ e().panY=v; },{min:-1,max:1}),
+      fld("motion","Camera motion","select",()=>e().motion,v=>{ e().motion=v; },{options:["auto","in","out","left","right","none"]}),
+      fld("duration_sec","Scene length (seconds; stretches to fit the voice)","number",()=>+sc().duration_sec,v=>{ sc().duration_sec=v; },{min:2,max:20}),
+      fld("transition","Transition into this scene","select",()=>e().transition,v=>{ e().transition=v; },{options:["dip","fade","flash","cut"]}));
+    return f; };
+  if(tab===1) fields=()=>[
+      fld("bright","Brightness","number",()=>e().bright,v=>{ e().bright=v; },{min:0.6,max:1.4}),
+      fld("contrast","Contrast","number",()=>e().contrast,v=>{ e().contrast=v; },{min:0.6,max:1.5}),
+      fld("sat","Colour saturation","number",()=>e().sat,v=>{ e().sat=v; },{min:0,max:1.8}),
+      fld("warmth","Warmth (-1 cool, +1 warm)","number",()=>e().warmth,v=>{ e().warmth=v; },{min:-1,max:1}),
+      fld("title","Title text (short, caps)","text",()=>sc().on_screen_text,v=>{ sc().on_screen_text=v; },{max:40}),
+      fld("titlePos","Title position","select",()=>e().titlePos,v=>{ e().titlePos=v; },{options:["top","middle","bottom"]}),
+      fld("titleSize","Title size","number",()=>e().titleSize,v=>{ e().titleSize=v; },{min:0.6,max:1.5}),
+      fld("hideTitle","Hide title","bool",()=>e().hideTitle,v=>{ e().hideTitle=v; })];
+  if(tab===2) fields=()=>[
+      fld("voiceVol","This scene's voice volume","number",()=>e().voiceVol,v=>{ e().voiceVol=v; },{min:0,max:2}),
+      fld("allVoice","All voices volume","number",()=>G().voiceVol,v=>{ G().voiceVol=v; },{min:0,max:2}),
+      fld("music","Music volume","number",()=>G().musicVol,v=>{ G().musicVol=v; },{min:0,max:1}),
+      fld("fadeIn","Fade music in","bool",()=>G().fadeIn,v=>{ G().fadeIn=v; }),
+      fld("fadeOut","Fade music out","bool",()=>G().fadeOut,v=>{ G().fadeOut=v; }),
+      fld("narration","This scene's narration","text",()=>sc().narration,v=>{ sc().narration=v; },{max:400,note:"needs Prepare again"}),
+      fld("voice","AI voice for the whole video","select",()=>$("#rVoice")?$("#rVoice").value:"Kore",v=>{ const s=$("#rVoice"); if(s){ s.value=v; store.set("voice",v); } },{options:VOICES.map(x=>x[0]),note:"needs Prepare again"})];
+  if(tab===3) fields=()=>[
+      fld("capStyle","Caption style","select",()=>G().capStyle,v=>{ G().capStyle=v; },{options:["bold","box","minimal"]}),
+      fld("capSize","Caption size","number",()=>G().capSize,v=>{ G().capSize=v; },{min:0.6,max:1.4}),
+      fld("capPos","Caption height (0.45 high – 0.85 low)","number",()=>G().capPos,v=>{ G().capPos=v; },{min:0.45,max:0.85}),
+      fld("hideCaps","Hide captions","bool",()=>G().hideCaps,v=>{ G().hideCaps=v; }),
+      fld("accent","Call-to-action box colour (#hex)","color",()=>G().accent,v=>{ G().accent=v; }),
+      fld("highlight","Highlighted word colour (#hex)","color",()=>G().highlight,v=>{ G().highlight=v; }),
+      fld("cta","Call-to-action text","text",()=>(S.job.cta||{}).on_screen||"",v=>{ S.job.cta=Object.assign({},S.job.cta||{},{on_screen:v}); },{max:50})];
+  return { kind:["clip","look","audio","whole"][tab], title: tab===3?titles[3]:`${titles[tab]} of scene ${i+1}`, image:true, fields,
+    context: tab===3 ? ()=>({ video:jobBrief(), total_seconds:R.prepared?+R.prepared.total.toFixed(1):null, style:G(), scenes_edit:S.job.scenes.map((s,k)=>({n:k+1, edit:ed(s)})) }) : sceneCtx,
+    after };
 }
 
 boot();
