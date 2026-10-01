@@ -116,11 +116,25 @@ textarea{min-height:74px;resize:vertical;line-height:1.4}
 .scene textarea{min-height:60px;font-size:14px}
 .scene .row2{grid-template-columns:1fr 90px}
 .scene .field{margin-bottom:8px}
-.alts{display:flex;gap:8px;overflow-x:auto;padding:6px 0 2px}
-.alts button{flex:none;width:66px;border:2px solid transparent;border-radius:9px;padding:0;background:none;cursor:pointer;overflow:hidden}
-.alts button[aria-pressed="true"]{border-color:var(--accent)}
-.alts img{width:100%;aspect-ratio:9/16;object-fit:cover;display:block}
-.alts .own{height:auto;aspect-ratio:9/16;display:grid;place-items:center;font-size:11px;font-weight:600;background:var(--surface-2);border:1px dashed var(--line)}
+.thumbbtn{position:relative;display:block;width:100%;padding:0;border:0;background:none;cursor:pointer;border-radius:10px}
+.thumbbtn:disabled{cursor:default}
+.thumbbtn .play{position:absolute;inset:auto auto 8px 8px;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;display:grid;place-items:center;font-size:12px}
+.ph{display:grid;place-items:center;text-align:center;font-size:11px;color:var(--ink-2);background:var(--surface-2)}
+.picker{border-top:1px dashed var(--line);padding-top:10px;margin-top:4px}
+.alts{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;margin-bottom:10px}
+.alt{position:relative;border:2px solid transparent;border-radius:10px;padding:0;background:var(--surface-2);cursor:pointer;overflow:hidden;text-align:left}
+.alt[aria-pressed="true"]{border-color:var(--accent)}
+.alt img,.alt .ph{width:100%;aspect-ratio:9/16;object-fit:cover;display:block}
+.alt .tag{position:absolute;left:4px;bottom:4px;right:4px;font-size:10px;font-weight:600;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;padding:2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.alt .tag.dim{bottom:auto;top:4px;background:rgba(0,0,0,.45);font-weight:500}
+.searchrow{display:flex;gap:8px;margin-bottom:8px}
+.searchrow input{height:34px;font-size:14px}
+.modal{position:fixed;inset:0;z-index:50;background:var(--scrim);display:grid;place-items:center;padding:16px}
+.modal-card{background:var(--surface);border-radius:16px;max-width:520px;width:100%;max-height:calc(100vh - 32px);overflow:auto;padding:16px;box-shadow:var(--shadow)}
+.mhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.mstage{background:#000;border-radius:12px;overflow:hidden;display:grid;place-items:center;min-height:200px;max-height:60vh}
+.mstage img,.mstage video{max-width:100%;max-height:60vh;display:block}
+.modal select{height:44px;border-radius:11px;width:auto}
 
 .render{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:18px;align-items:start}
 @media (max-width:760px){.render{grid-template-columns:1fr}}
@@ -295,7 +309,8 @@ async function poll(){
     const r = await api("job", {job_id:id});
     if(id !== S.jobId) return;
     if(r.status === "done" && r.job){
-      S.job = r.job; renderWork();
+      const local = store.get("job."+id, null);
+      S.job = normalizeJob(local && local.job ? local.job : r.job); renderWork();
       const j = S.jobs.find(x=>String(x.job_id)===id); if(j){ j.status="done"; j.title=r.job.title; renderJobs(); }
       return;
     }
@@ -330,12 +345,42 @@ function renderProgress(){
   const el = $("#elapsed"); if(el) el.textContent = `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")} elapsed · usually 1–3 minutes. You can leave this page and come back.`;
 }
 
-const MATCH = { exact:["Exact","ok"], generic:["Generic scenery","ok"], representative:["Representative","warn"], none:["No clip","bad"] };
-function sceneClip(sc){
-  if(sc.own) return {kind:"own", name:sc.own.name};
-  if(sc.card) return null;
-  return sc.footage ? {kind:"pexels", ...sc.footage} : null;
+// ---------------------------------------------------------------- job view: scenes, footage review, approvals
+const MATCH = { exact:["Exact place","ok"], verified:["Approved before","ok"], generic:["Generic scenery","ok"], representative:["Representative","warn"], none:["No footage","bad"] };
+const SRC_SHORT = { "Pexels":"Pexels", "Pixabay":"Pixabay", "Wikimedia Commons":"Wikimedia", "Your library":"Our library" };
+
+// Old jobs (before multi-source) only had footage + alternates; give them the new shape.
+function normalizeJob(job){
+  (job.scenes||[]).forEach(sc=>{
+    if(!Array.isArray(sc.candidates)){
+      sc.candidates = [sc.footage, ...(sc.alternates||[])].filter(Boolean).map(c=>Object.assign({cid:"pexels-v:"+c.pexels_id, source:"Pexels", kind:"video", preview_url:c.download_url_sd||c.download_url, ai_ok:true}, c));
+      sc.footage = sc.candidates[0] || null;
+    }
+    sc.candidates.forEach(c=>{ if(!c.kind) c.kind="video"; if(!c.source) c.source="Pexels"; });
+    if(sc.approved==null) sc.approved = !!(sc.footage && sc.footage.verified);
+  });
+  return job;
 }
+function saveLocal(){ if(S.job) store.set("job."+S.jobId, {saved:Date.now(), job:S.job}); }
+function placeOf(sc){ return (sc.location||"").trim() || (S.job.request&&S.job.request.destination) || "scene"; }
+function sceneReady(sc){ return sc.card || (sc.footage && sc.approved); }
+function readyCount(){ return S.job.scenes.filter(sceneReady).length; }
+
+function thumbHtml(c, cls){
+  if(!c) return `<div class="${cls} ph">Title card</div>`;
+  if(c.local_url && c.kind==="photo") return `<img class="${cls}" src="${esc(c.local_url)}" alt="">`;
+  if(c.local_thumb) return `<img class="${cls}" src="${esc(c.local_thumb)}" alt="">`;
+  if(c.thumbnail) return `<img class="${cls}" src="${esc(c.thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+  return `<div class="${cls} ph">${c.kind==="photo"?"Photo":"Video"}<br>${esc(SRC_SHORT[c.source]||c.source||"")}</div>`;
+}
+function licHtml(c){
+  if(!c) return "";
+  const bits=[esc(SRC_SHORT[c.source]||c.source)];
+  if(c.licence) bits.push(esc(c.licence));
+  if(c.credit) bits.push("by "+esc(c.credit));
+  return bits.join(" · ");
+}
+
 function renderJob(){
   const j = S.job, w = $("#work");
   const checks = [...(j.fact_check_notes||[]).map(t=>["fact",t]), ...(j.warnings||[]).map(t=>["warn",t])];
@@ -345,29 +390,31 @@ function renderJob(){
   <div class="card">
     <div class="jobhead">
       <div><div class="eyebrow">${esc(j.request?.destination)} · ${esc(j.request?.angle)} · ${esc(j.request?.language)} · job ${esc(j.job_id)}</div><h2>${esc(j.title)}</h2><div class="muted small">Planned length about ${total}s · ${j.scenes.length} scenes</div></div>
-      <div class="btns"><a class="btn" href="#make" id="toMake">Make the video ↓</a></div>
+      <div class="btns"><span class="pill num" id="readyPill"></span><a class="btn" href="#make" id="toMake">Make the video ↓</a></div>
     </div>
   </div>
 
   <div class="card">
-    <h2>Check before posting <span class="pill ${done===checks.length?"ok":"warn"} num" style="vertical-align:middle">${done}/${checks.length}</span></h2>
+    <h2>Check before posting <span class="pill ${done===checks.length?"ok":"warn"} num" id="checkPill" style="vertical-align:middle">${done}/${checks.length}</span></h2>
     <ul class="checks">${checks.map(([k,t],i)=>`<li><label><input type="checkbox" data-check="${i}" ${S.checks[i]?"checked":""}><span>${k==="warn"?"<b>Warning:</b> ":""}${esc(t)}</span></label></li>`).join("")}</ul>
   </div>
 
   <div class="card">
-    <h2>Scenes</h2>
-    <p class="small muted" style="margin:-4px 0 12px">Edit any line. Tap <b>Change clip</b> to pick another licensed clip or use your own footage, which always looks more authentic.</p>
-    <div class="scenes">${j.scenes.map((sc,i)=>sceneHtml(sc,i)).join("")}</div>
+    <h2>Scenes & footage</h2>
+    <p class="small muted" style="margin:-4px 0 12px">Every scene needs footage that a person has <b>approved</b> before the video can be made, whatever its source. Tap a clip to preview it, then <b>Approve</b> or <b>Reject</b>. Approvals and rejections are remembered for that place, so next time the right footage comes first. Your own uploads go into the team library.</p>
+    <div class="scenes" id="sceneList"></div>
   </div>
 
   <div class="card">
     <h2>Caption for posting</h2>
     <textarea id="caption" style="min-height:110px">${esc(captionText())}</textarea>
-    <div class="btns" style="margin-top:8px"><button class="btn-sm" id="copyCap">Copy caption</button><button class="btn-sm" id="dlJob">Download job file (for the PC renderer)</button></div>
+    <div class="field" style="margin-top:10px"><label class="small muted" for="credits">Footage credits (added when you copy the caption)</label><textarea id="credits" readonly style="min-height:56px;font-size:13px"></textarea></div>
+    <div class="btns" style="margin-top:8px"><button class="btn-sm" id="copyCap">Copy caption + credits</button><button class="btn-sm" id="dlJob">Download job file (for the PC renderer)</button></div>
   </div>
 
   <div class="card" id="make">
     <h2>Make the video</h2>
+    <div class="notice" id="gateNote" hidden></div>
     <div class="render">
       <div>
         <div class="row2">
@@ -381,64 +428,218 @@ function renderJob(){
         </div>
         <div class="btns"><button class="btn" id="prepBtn">1 · Prepare preview</button><button class="btn ghost" id="playBtn" disabled>▶ Play preview</button><button class="btn" id="recBtn" disabled>2 · Record video</button></div>
         <div class="bar"><i id="barFill"></i></div>
-        <div class="log" id="log">Prepare downloads the clips and creates the voiceover (about a minute).</div>
+        <div class="log" id="log">Prepare downloads the approved footage and creates the voiceover (about a minute).</div>
         <div class="notice small">Recording plays the video once in real time. Keep this tab open and visible until it finishes. Works best in Chrome or Edge on a computer.</div>
         <div id="resultBox"></div>
       </div>
       <div><div class="stage"><canvas id="cv" width="1080" height="1920" aria-label="Video preview"></canvas></div></div>
     </div>
   </div>`;
+  renderScenes();
   bindJob();
   initRenderPanel();
 }
+
+function renderScenes(){
+  const box=$("#sceneList"); if(!box) return;
+  box.innerHTML = S.job.scenes.map((sc,i)=>sceneHtml(sc,i)).join("");
+  bindScenes();
+  updateGate();
+}
 function sceneHtml(sc,i){
-  const clip = sceneClip(sc);
-  const m = clip ? (clip.kind==="own" ? ["Your clip","ok"] : (MATCH[sc.match]||["Stock","warn"])) : MATCH.none;
-  const thumb = clip && clip.kind==="pexels" && clip.thumbnail ? `<img class="thumb" src="${esc(clip.thumbnail)}" alt="Clip for scene ${i+1}" loading="lazy">` : `<div class="thumb">${clip&&clip.kind==="own" ? esc(clip.name) : "Title card"}</div>`;
-  const cands = [sc.footage, ...(sc.alternates||[])].filter(Boolean);
-  const alts = S.openAlts[i] ? `<div class="alts">
-      ${cands.map((c,k)=>`<button data-alt="${i}:${k}" aria-pressed="${!sc.own && !sc.card && sc.footage && c.pexels_id===sc.footage.pexels_id}" title="${esc(c.desc||"")}"><img src="${esc(c.thumbnail)}" alt="${esc(c.desc||"clip")}" loading="lazy"></button>`).join("")}
-      <label class="alts"><span class="own" style="width:66px;border-radius:9px;cursor:pointer">+ My clip</span><input type="file" accept="video/*" data-own="${i}" class="sr"></label>
-      <button data-card="${i}" aria-pressed="${!!sc.card}"><span class="own">Title card</span></button>
-    </div>` : "";
-  return `<div class="scene">
-    <div>${thumb}</div>
+  const c = sc.card ? null : sc.footage;
+  const status = sc.card ? `<span class="pill">Title card</span>` : !c ? `<span class="pill bad">No footage</span>` : sc.approved ? `<span class="pill ok">Approved ✓</span>` : `<span class="pill warn">Needs approval</span>`;
+  const m = c ? (c.verified ? MATCH.verified : (MATCH[sc.match]||["Stock","warn"])) : null;
+  const open = !!S.openAlts[i];
+  const cands = (sc.candidates||[]).filter(x=>!x._rejected);
+  const shown = open ? cands : [];
+  return `<div class="scene" data-scene="${i}">
+    <div><button class="thumbbtn" data-preview="${i}:sel" ${c?"":"disabled"} aria-label="Preview selected footage">${thumbHtml(c,"thumb")}${c&&c.kind==="video"?'<span class="play">▶</span>':""}</button></div>
     <div>
-      <div class="meta"><span class="loc">${i+1}. ${esc(sc.location||"")}</span><span class="pill ${sc.type==="anchor"?"acc":""}">${sc.type==="anchor"?"Presenter":"B-roll"}</span><span class="pill ${m[1]}">${m[0]}</span></div>
-      <div class="field"><label class="sr" for="n${i}">Narration</label><textarea id="n${i}" data-edit="${i}:narration">${esc(sc.narration)}</textarea></div>
+      <div class="meta"><span class="loc">${i+1}. ${esc(sc.location||"")}</span><span class="pill ${sc.type==="anchor"?"acc":""}">${sc.type==="anchor"?"Presenter":"B-roll"}</span>${status}${m&&!sc.card?`<span class="pill ${m[1]}">${m[0]}</span>`:""}</div>
+      ${c&&!sc.card?`<div class="small muted" style="margin:-4px 0 8px">${c.kind==="photo"?"Photo":"Video"} · ${licHtml(c)}${c.page_url?` · <a href="${esc(c.page_url)}" target="_blank" rel="noopener">source ↗</a>`:""}</div>`:""}
+      <div class="btns" style="margin-bottom:8px">
+        ${c&&!sc.card&&!sc.approved?`<button class="btn-sm primary" data-approve="${i}">✓ Approve this footage</button>`:""}
+        ${c&&!sc.card?`<button class="btn-sm" data-reject="${i}">✗ Reject</button>`:""}
+        <button class="btn-sm" data-toggle="${i}">${open?"Hide choices":`Choose footage (${cands.length})`}</button>
+      </div>
+      ${open?`<div class="picker">
+        <div class="alts">${shown.map((x,k)=>`<button class="alt" data-preview="${i}:${esc(x.cid)}" aria-pressed="${!!(c&&c.cid===x.cid)}" title="${esc(x.desc||"")}">${thumbHtml(x,"")}<span class="tag">${x.verified?"✓ ":""}${esc(SRC_SHORT[x.source]||x.source)}${x.kind==="photo"?" · photo":""}</span>${x.ai_ok===false?'<span class="tag dim">not checked</span>':""}</button>`).join("")||'<span class="small muted">No choices yet. Search or upload below.</span>'}</div>
+        <form class="searchrow" data-search="${i}"><input type="text" value="${esc(sc._q||sc.location||"")}" aria-label="Search footage" placeholder="Search all sources, e.g. Konark wheel"><button class="btn-sm">Search</button></form>
+        <div class="btns"><label class="btn-sm" style="cursor:pointer">＋ Upload our own clip or photo<input type="file" class="sr" accept="video/*,image/*" data-upload="${i}"></label><button class="btn-sm" data-card="${i}">Use a title card instead</button></div>
+      </div>`:""}
+      <div class="field" style="margin-top:10px"><label class="sr" for="n${i}">Narration</label><textarea id="n${i}" data-edit="${i}:narration">${esc(sc.narration)}</textarea></div>
       <div class="row2">
         <div class="field"><label class="small muted" for="o${i}">On-screen text</label><input type="text" id="o${i}" data-edit="${i}:on_screen_text" value="${esc(sc.on_screen_text)}" maxlength="40"></div>
         <div class="field"><label class="small muted" for="d${i}">Seconds</label><input type="number" id="d${i}" data-edit="${i}:duration_sec" value="${esc(sc.duration_sec)}" min="2" max="20"></div>
       </div>
-      <div class="btns"><button class="btn-sm" data-toggle="${i}">${S.openAlts[i]?"Hide clips":"Change clip"}</button>${clip&&clip.kind==="pexels"&&clip.page_url?`<a class="btn-sm" href="${esc(clip.page_url)}" target="_blank" rel="noopener">View on Pexels ↗</a>`:""}${sc.match_reason?`<span class="small muted">${esc(sc.match_reason)}</span>`:""}</div>
-      ${alts}
     </div>
   </div>`;
 }
+function bindScenes(){
+  const w=$("#sceneList");
+  w.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("input",()=>{ const [i,f]=el.dataset.edit.split(":"); S.job.scenes[i][f] = f==="duration_sec" ? Math.max(2,Math.min(20,+el.value||3)) : el.value; invalidate(); saveLocal(); }));
+  w.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click",()=>{ const i=b.dataset.toggle; S.openAlts[i]=!S.openAlts[i]; renderScenes(); }));
+  w.querySelectorAll("[data-approve]").forEach(b=>b.addEventListener("click",()=>approve(+b.dataset.approve, S.job.scenes[+b.dataset.approve].footage)));
+  w.querySelectorAll("[data-reject]").forEach(b=>b.addEventListener("click",()=>reject(+b.dataset.reject, S.job.scenes[+b.dataset.reject].footage)));
+  w.querySelectorAll("[data-card]").forEach(b=>b.addEventListener("click",()=>{ const sc=S.job.scenes[+b.dataset.card]; sc.card=true; invalidate(); saveLocal(); renderScenes(); updateCredits(); }));
+  w.querySelectorAll("[data-preview]").forEach(b=>b.addEventListener("click",()=>{ const [i,cid]=[b.dataset.preview.slice(0,b.dataset.preview.indexOf(":")), b.dataset.preview.slice(b.dataset.preview.indexOf(":")+1)]; const sc=S.job.scenes[+i]; const c = cid==="sel" ? sc.footage : sc.candidates.find(x=>x.cid===cid); if(c) openPreview(+i, c); }));
+  w.querySelectorAll("[data-search]").forEach(f=>f.addEventListener("submit",e=>{ e.preventDefault(); searchMore(+f.dataset.search, f.querySelector("input").value, f.querySelector("button")); }));
+  w.querySelectorAll("[data-upload]").forEach(inp=>inp.addEventListener("change",()=>{ const f=inp.files[0]; inp.value=""; if(f) openUpload(+inp.dataset.upload, f); }));
+}
+function updateGate(){
+  const n=S.job.scenes.length, r=readyCount();
+  const p=$("#readyPill"); if(p){ p.textContent=`${r}/${n} scenes approved`; p.className="pill num "+(r===n?"ok":"warn"); }
+  const g=$("#gateNote"), pb=$("#prepBtn");
+  if(g){ g.hidden = r===n; g.innerHTML = r===n ? "" : `Approve footage (or choose a title card) for <b>${n-r}</b> more scene${n-r===1?"":"s"} before making the video.`; }
+  if(pb) pb.disabled = r!==n || S.busy;
+}
+
+async function approve(i, c){
+  const sc=S.job.scenes[i]; if(!c) return;
+  sc.footage=c; sc.approved=true; sc.card=false; c.verified=true;
+  if(!sc.candidates.find(x=>x.cid===c.cid)) sc.candidates.unshift(c);
+  invalidate(); saveLocal(); renderScenes(); updateCredits();
+  if(c.source!=="Your library") api("verdict",{verdict:"approved", item:c, place:placeOf(sc), destination:S.job.request?.destination||""}).catch(e=>toast("Saved here, but couldn't save the approval for next time: "+e.message));
+}
+async function reject(i, c, note){
+  const sc=S.job.scenes[i]; if(!c) return;
+  c._rejected=true;
+  if(sc.footage && sc.footage.cid===c.cid){
+    sc.approved=false;
+    sc.footage = sc.candidates.find(x=>!x._rejected && x.ai_ok!==false) || sc.candidates.find(x=>!x._rejected) || null;
+    if(sc.footage && sc.footage.verified) sc.approved=true;
+  }
+  invalidate(); saveLocal(); renderScenes(); updateCredits();
+  api("verdict",{verdict:"rejected", item:c, place:placeOf(sc), destination:S.job.request?.destination||"", note:note||""}).catch(e=>toast("Couldn't save the rejection: "+e.message));
+  toast("Rejected. It won't be suggested for "+placeOf(sc)+" again.");
+}
+async function searchMore(i, q, btn){
+  q=String(q||"").trim(); if(!q) return;
+  const sc=S.job.scenes[i]; sc._q=q;
+  btn.disabled=true; btn.textContent="Searching…";
+  try{
+    const r = await api("search",{query:q, place:placeOf(sc), destination:S.job.request?.destination||"", limit:30});
+    const have=new Set(sc.candidates.map(x=>x.cid)); let added=0;
+    for(const c of (r.candidates||[])){ if(!have.has(c.cid)){ c.ai_ok=false; sc.candidates.push(c); added++; } }
+    saveLocal(); renderScenes();
+    toast(added ? `${added} more choices added` : "No new footage found. Try different words.");
+  }catch(e){ toast(e.message); btn.disabled=false; btn.textContent="Search"; }
+}
+
+// ---------------------------------------------------------------- preview modal
+function modal(html){
+  let m=$("#modal"); if(!m){ m=document.createElement("div"); m.id="modal"; m.className="modal"; m.setAttribute("role","dialog"); m.setAttribute("aria-modal","true"); document.body.appendChild(m); m.addEventListener("click",e=>{ if(e.target===m) closeModal(); }); document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); }); }
+  m.innerHTML=`<div class="modal-card">${html}</div>`; m.hidden=false; return m;
+}
+function closeModal(){ const m=$("#modal"); if(m){ m.querySelectorAll("video").forEach(v=>v.pause()); m.hidden=true; m.innerHTML=""; } }
+async function openPreview(i, c){
+  const sc=S.job.scenes[i];
+  const m=modal(`<div class="mhead"><b>Scene ${i+1}: ${esc(sc.location||"")}</b><button class="btn-sm" data-close>Close</button></div>
+    <div class="mstage" id="mstage"><div class="muted small">Loading…</div></div>
+    <p class="small" style="margin:10px 0 4px">${esc(c.desc||"")}</p>
+    <p class="small muted" style="margin:0 0 12px">${c.kind==="photo"?"Photo":"Video"} · ${licHtml(c)}${c.page_url?` · <a href="${esc(c.page_url)}" target="_blank" rel="noopener">source page ↗</a>`:""}${c.verified?" · approved before":""}${c.share_alike?" · share-alike licence: credit required":""}</p>
+    <p class="small"><b>Does this really show ${esc(sc.location||"this place")}?</b></p>
+    <div class="btns"><button class="btn" data-ok>✓ Yes, approve and use</button><button class="btn ghost" data-no>✗ Reject</button><select id="rejWhy" aria-label="Why reject"><option value="">Reason (optional)</option><option>Wrong place</option><option>Wrong country</option><option>Poor quality</option><option>People's faces / privacy</option><option>Licence unclear</option></select></div>`);
+  m.querySelector("[data-close]").onclick=closeModal;
+  m.querySelector("[data-ok]").onclick=()=>{ closeModal(); approve(i,c); };
+  m.querySelector("[data-no]").onclick=()=>{ const why=m.querySelector("#rejWhy").value; closeModal(); reject(i,c,why); };
+  const st=m.querySelector("#mstage");
+  try{
+    let src = c.local_url || (c.kind==="photo" ? (c.preview_url||c.thumbnail||c.download_url_sd) : c.preview_url);
+    if(c.drive_id && !c.local_url){ src = URL.createObjectURL(await api("media",{drive_id:c.drive_id},true)); c.local_url=src; }
+    if(!src){ st.innerHTML='<div class="small muted">No preview available.</div>'; return; }
+    st.innerHTML = c.kind==="photo" ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer">` : `<video src="${esc(src)}" controls autoplay muted playsinline loop></video>`;
+  }catch(e){ st.innerHTML=`<div class="small muted">Couldn't load preview: ${esc(e.message)}</div>`; }
+}
+
+// ---------------------------------------------------------------- upload own footage (trim + compress in the browser, then save to the team library)
+function openUpload(i, file){
+  const sc=S.job.scenes[i];
+  const isVideo=file.type.startsWith("video/"), isImg=file.type.startsWith("image/");
+  if(!isVideo && !isImg){ toast("Choose a video or photo file."); return; }
+  const url=URL.createObjectURL(file);
+  const m=modal(`<div class="mhead"><b>Add to our library · Scene ${i+1}</b><button class="btn-sm" data-close>Cancel</button></div>
+    <div class="mstage">${isVideo?`<video id="upv" src="${url}" controls muted playsinline></video>`:`<img src="${url}" alt="">`}</div>
+    <div class="field" style="margin-top:10px"><label for="upPlace">Place shown</label><input type="text" id="upPlace" value="${esc(placeOf(sc))}" maxlength="120"><div class="hint">Name the exact place so it's found automatically next time.</div></div>
+    ${isVideo?`<div class="row2"><div class="field"><label for="upStart">Start at (seconds)</label><input type="number" id="upStart" value="0" min="0" step="0.5"></div><div class="field"><label for="upLen">Length (max 15 s)</label><input type="number" id="upLen" value="${Math.min(10,Math.max(3,+sc.duration_sec||6))}" min="2" max="15" step="0.5"></div></div><div class="hint" style="margin:-6px 0 10px">Play the clip and use the current time as the start if you like. <button class="btn-sm" id="useNow" style="height:26px">Use current time</button></div>`:""}
+    <div class="field"><label for="upNote">Note <span class="muted">(optional)</span></label><input type="text" id="upNote" maxlength="200" placeholder="e.g. Sunrise, our Dec 2025 group trip"></div>
+    <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px"><input type="checkbox" id="upRights" style="margin-top:3px"> I confirm NegoTrip owns this footage or has permission to use it in ads, and anyone recognisable has agreed to appear.</label>
+    <div class="btns"><button class="btn" id="upGo" disabled>Save to library & use</button><span class="log" id="upLog"></span></div>`);
+  m.querySelector("[data-close]").onclick=()=>{ URL.revokeObjectURL(url); closeModal(); };
+  const rights=m.querySelector("#upRights"), go=m.querySelector("#upGo");
+  rights.onchange=()=>go.disabled=!rights.checked;
+  const un=m.querySelector("#useNow"); if(un) un.onclick=()=>{ m.querySelector("#upStart").value=(m.querySelector("#upv").currentTime||0).toFixed(1); };
+  go.onclick=async()=>{
+    go.disabled=true; const log=m.querySelector("#upLog");
+    try{
+      const place=m.querySelector("#upPlace").value.trim()||placeOf(sc), note=m.querySelector("#upNote").value.trim();
+      let blob, meta={};
+      if(isVideo){
+        const start=Math.max(0,+m.querySelector("#upStart").value||0), len=Math.min(15,Math.max(2,+m.querySelector("#upLen").value||6));
+        log.textContent="Preparing clip (plays once in the background)…";
+        const r=await compressVideo(url,start,len,p=>log.textContent=`Preparing clip ${Math.round(p*100)}%`);
+        blob=r.blob; meta={duration:len,width:720,height:1280,thumb:r.thumb};
+      }else{
+        log.textContent="Preparing photo…";
+        const r=await compressImage(file); blob=r.blob; meta={width:r.w,height:r.h};
+      }
+      if(blob.size>10.5*1024*1024) throw new Error("File is still too large after compressing. Use a shorter part.");
+      log.textContent="Uploading…";
+      const data=await blobToBase64(blob);
+      const res=await api("upload",{place, note, destination:S.job.request?.destination||"", mime:blob.type.split(";")[0], data, duration:meta.duration||null, width:meta.width, height:meta.height});
+      const item=Object.assign({}, res.item, {local_url:URL.createObjectURL(blob), local_thumb:meta.thumb||null, verified:true, ai_ok:true});
+      closeModal(); URL.revokeObjectURL(url);
+      S.media.set("own:"+item.drive_id, item.local_url);
+      approve(i,item);
+      toast("Saved to the team library and approved.");
+    }catch(e){ log.textContent=""; toast(e.message); go.disabled=false; }
+  };
+}
+function blobToBase64(blob){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(",")[1]); r.onerror=()=>rej(new Error("Couldn't read file")); r.readAsDataURL(blob); }); }
+async function compressImage(file){
+  const img=await loadImage(file); const max=1600; const s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+  const c=document.createElement("canvas"); c.width=Math.round(img.naturalWidth*s); c.height=Math.round(img.naturalHeight*s);
+  c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+  const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.86)); return {blob,w:c.width,h:c.height};
+}
+async function compressVideo(url,start,len,onProgress){
+  const v=await loadVideo(url); v.loop=false; v.muted=true;
+  await seek(v,Math.min(start,Math.max(0,(v.duration||start)-0.5)));
+  const W=720,H=1280,c=document.createElement("canvas"); c.width=W; c.height=H; const g=c.getContext("2d");
+  const mime=["video/mp4;codecs=avc1","video/webm;codecs=vp9","video/webm"].find(m=>MediaRecorder.isTypeSupported(m))||"video/webm";
+  const rec=new MediaRecorder(c.captureStream(30),{mimeType:mime,videoBitsPerSecond:4_000_000}); const chunks=[];
+  rec.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+  const draw=()=>{ const s=Math.max(W/v.videoWidth,H/v.videoHeight), dw=v.videoWidth*s, dh=v.videoHeight*s; g.drawImage(v,(W-dw)/2,(H-dh)/2,dw,dh); };
+  draw(); const thumb=c.toDataURL("image/jpeg",0.7);
+  rec.start(250); await v.play();
+  const t0=v.currentTime;
+  await new Promise(res=>{ (function tick(){ draw(); const p=(v.currentTime-t0)/len; onProgress(Math.min(1,p)); if(p>=1||v.ended) return res(); requestAnimationFrame(tick); })(); });
+  v.pause(); await new Promise(r=>{ rec.onstop=r; rec.stop(); });
+  return {blob:new Blob(chunks,{type:mime.split(";")[0]}), thumb};
+}
+
+// ---------------------------------------------------------------- caption + credits
 function captionText(){ const j=S.job; if(j._caption!=null) return j._caption; const tags=(j.hashtags||[]).map(h=>String(h).startsWith("#")?h:"#"+h).join(" "); return `${j.caption||""}\n\n${tags}`.trim(); }
+function creditsText(){
+  const lines=[]; const seen=new Set();
+  for(const sc of S.job.scenes){ const c=sc.card?null:sc.footage; if(!c||!sc.approved||seen.has(c.cid)) continue; seen.add(c.cid);
+    if(c.source==="Your library") continue;
+    if(c.attribution_required || c.source==="Wikimedia Commons") lines.push(`${c.credit||"Unknown"} / Wikimedia Commons, ${c.licence}${c.licence_url?" ("+c.licence_url+")":""}`);
+    else if(c.credit) lines.push(`${c.credit} / ${c.source}`);
+  }
+  return lines.length ? "Footage: "+lines.join("; ") : "";
+}
+function updateCredits(){ const el=$("#credits"); if(el) el.value=creditsText(); }
 function bindJob(){
   const w = $("#work");
-  w.querySelectorAll("[data-check]").forEach(c=>c.addEventListener("change",()=>{ S.checks[c.dataset.check]=c.checked; store.set("checks."+S.jobId,S.checks); renderJobHeaderCount(); }));
-  w.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("input",()=>{ const [i,f]=el.dataset.edit.split(":"); S.job.scenes[i][f] = f==="duration_sec" ? Math.max(2,Math.min(20,+el.value||3)) : el.value; invalidate(); }));
-  w.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click",()=>{ const i=b.dataset.toggle; S.openAlts[i]=!S.openAlts[i]; rerenderScenes(); }));
-  w.querySelectorAll("[data-alt]").forEach(b=>b.addEventListener("click",()=>{ const [i,k]=b.dataset.alt.split(":").map(Number); const sc=S.job.scenes[i]; const cands=[sc.footage,...(sc.alternates||[])].filter(Boolean); const pick=cands[k]; sc.alternates=cands.filter((c,x)=>x!==k); sc.footage=pick; sc.own=null; sc.card=false; if(sc.match==="none") sc.match="representative"; invalidate(); rerenderScenes(); }));
-  w.querySelectorAll("[data-own]").forEach(inp=>inp.addEventListener("change",()=>{ const f=inp.files[0]; if(!f) return; const sc=S.job.scenes[+inp.dataset.own]; if(sc.own) URL.revokeObjectURL(sc.own.url); sc.own={name:f.name,url:URL.createObjectURL(f)}; sc.card=false; invalidate(); rerenderScenes(); }));
-  w.querySelectorAll("[data-card]").forEach(b=>b.addEventListener("click",()=>{ const sc=S.job.scenes[+b.dataset.card]; sc.card=true; sc.own=null; invalidate(); rerenderScenes(); }));
-  $("#caption").addEventListener("input",e=>{ S.job._caption=e.target.value; });
-  $("#copyCap").addEventListener("click",async()=>{ try{ await navigator.clipboard.writeText($("#caption").value); toast("Caption copied"); }catch(e){ toast("Couldn't copy. Select the text and copy it."); } });
-  $("#dlJob").addEventListener("click",()=>{ const clean=JSON.parse(JSON.stringify(S.job,(k,v)=>k==="own"?undefined:v)); saveBlob(new Blob([JSON.stringify(clean,null,2)],{type:"application/json"}), "job.json"); });
+  w.querySelectorAll("[data-check]").forEach(c=>c.addEventListener("change",()=>{ S.checks[c.dataset.check]=c.checked; store.set("checks."+S.jobId,S.checks); const n=w.querySelectorAll("[data-check]").length, d=Object.values(S.checks).filter(Boolean).length; const p=$("#checkPill"); if(p){ p.textContent=`${d}/${n}`; p.className="pill num "+(d>=n?"ok":"warn"); } }));
+  $("#caption").addEventListener("input",e=>{ S.job._caption=e.target.value; saveLocal(); });
+  $("#copyCap").addEventListener("click",async()=>{ const t=$("#caption").value+(creditsText()?"\n\n"+creditsText():""); try{ await navigator.clipboard.writeText(t); toast("Caption and credits copied"); }catch(e){ toast("Couldn't copy. Select the text and copy it."); } });
+  $("#dlJob").addEventListener("click",()=>{ const clean=JSON.parse(JSON.stringify(S.job,(k,v)=>(k==="local_url"||k==="local_thumb")?undefined:v)); saveBlob(new Blob([JSON.stringify(clean,null,2)],{type:"application/json"}), "job.json"); });
   $("#toMake").addEventListener("click",e=>{ e.preventDefault(); $("#make").scrollIntoView({behavior:"smooth"}); });
+  updateCredits();
 }
-function renderJobHeaderCount(){ const j=S.job; const n=(j.fact_check_notes||[]).length+(j.warnings||[]).length; const done=Object.values(S.checks).filter(Boolean).length; const p=$("#work .card:nth-child(2) h2 .pill"); if(p){ p.textContent=`${done}/${n}`; p.className="pill num "+(done>=n?"ok":"warn"); } }
-function rerenderScenes(){ const box=$("#work .scenes"); if(!box) return; box.innerHTML=S.job.scenes.map((sc,i)=>sceneHtml(sc,i)).join(""); bindJob.sceneOnly(); }
-bindJob.sceneOnly = function(){
-  const w=$("#work .scenes");
-  w.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("input",()=>{ const [i,f]=el.dataset.edit.split(":"); S.job.scenes[i][f] = f==="duration_sec" ? Math.max(2,Math.min(20,+el.value||3)) : el.value; invalidate(); }));
-  w.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click",()=>{ const i=b.dataset.toggle; S.openAlts[i]=!S.openAlts[i]; rerenderScenes(); }));
-  w.querySelectorAll("[data-alt]").forEach(b=>b.addEventListener("click",()=>{ const [i,k]=b.dataset.alt.split(":").map(Number); const sc=S.job.scenes[i]; const cands=[sc.footage,...(sc.alternates||[])].filter(Boolean); const pick=cands[k]; sc.alternates=cands.filter((c,x)=>x!==k); sc.footage=pick; sc.own=null; sc.card=false; if(sc.match==="none") sc.match="representative"; invalidate(); rerenderScenes(); }));
-  w.querySelectorAll("[data-own]").forEach(inp=>inp.addEventListener("change",()=>{ const f=inp.files[0]; if(!f) return; const sc=S.job.scenes[+inp.dataset.own]; if(sc.own) URL.revokeObjectURL(sc.own.url); sc.own={name:f.name,url:URL.createObjectURL(f)}; sc.card=false; invalidate(); rerenderScenes(); }));
-  w.querySelectorAll("[data-card]").forEach(b=>b.addEventListener("click",()=>{ const sc=S.job.scenes[+b.dataset.card]; sc.card=true; sc.own=null; invalidate(); rerenderScenes(); }));
-};
 function saveBlob(blob, name){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
 
 // ================================================================ RENDERER
@@ -500,15 +701,22 @@ async function hearVoice(){
   b.disabled=false; b.textContent="▶ Hear this voice";
 }
 async function getClipUrl(sc, quality){
-  if(sc.own) return sc.own.url;
   if(sc.card || !sc.footage) return null;
-  const url = (quality==="720" && sc.footage.download_url_sd) || sc.footage.download_url;
+  const c = sc.footage;
+  if(c.local_url) return c.local_url;
+  if(c.drive_id){
+    const key="own:"+c.drive_id;
+    if(S.media.has(key)) return S.media.get(key);
+    const obj=URL.createObjectURL(await api("media",{drive_id:c.drive_id},true)); S.media.set(key,obj); c.local_url=obj; return obj;
+  }
+  const url = (quality==="720" && c.download_url_sd) || c.download_url;
+  if(!url) return null;
   if(S.media.has(url)) return S.media.get(url);
-  const blob = await api("media", {url}, true);
-  const obj = URL.createObjectURL(blob);
+  const obj = URL.createObjectURL(await api("media", {url}, true));
   S.media.set(url, obj);
   return obj;
 }
+function loadImg(src){ return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error("photo could not be opened")); im.src=src; }); }
 function loadVideo(src){
   return new Promise((res,rej)=>{
     const v=document.createElement("video"); v.muted=true; v.playsInline=true; v.preload="auto"; v.loop=true; v.crossOrigin="anonymous";
@@ -534,7 +742,9 @@ function wordTimes(text, start, end){
 }
 
 async function prepare(){
-  if(S.busy) return; S.busy=true;
+  if(S.busy) return;
+  if(readyCount()!==S.job.scenes.length){ toast("Approve footage for every scene first."); updateGate(); return; }
+  S.busy=true;
   const btn=$("#prepBtn"); btn.disabled=true; $("#playBtn").disabled=true; $("#recBtn").disabled=true; $("#resultBox").innerHTML="";
   const job=S.job, voice=$("#rVoice").value, quality=$("#rQual").value, n=job.scenes.length;
   try{
@@ -555,10 +765,10 @@ async function prepare(){
     await Promise.all([clipWorker(),clipWorker(),clipWorker()]);
     await waitVisible();
     for(let i=0;i<n;i++){
-      let video=null;
-      if(urls[i]) try{ video=await loadVideo(urls[i]); }catch(e){ toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
-      setLog(`Opening clip ${i+1}/${n}`);
-      scenes.push({sc:job.scenes[i], video});
+      let video=null, image=null; const sc=job.scenes[i];
+      if(urls[i]) try{ if(sc.footage && sc.footage.kind==="photo") image=await loadImg(urls[i]); else video=await loadVideo(urls[i]); }catch(e){ toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
+      setLog(`Opening footage ${i+1}/${n}`);
+      scenes.push({sc, video, image});
     }
     // timeline
     let t=0;
@@ -570,7 +780,7 @@ async function prepare(){
       s.t0=t; s.t1=t+s.dur; t+=s.dur;
       s.words = vb ? wordTimes(s.sc.narration, s.aStart+b.start, s.aStart+b.end) : [];
       s.speechEnd = s.aStart + b.end;
-      s.representative = !s.sc.own && !s.sc.card && s.video && s.sc.match==="representative";
+      s.representative = !s.sc.card && (s.video||s.image) && s.sc.match==="representative" && s.sc.footage && s.sc.footage.source!=="Your library";
       s.offset=0;
       if(s.video){ const len=s.video.duration||0; s.offset = len > s.dur+1.5 ? Math.min(1, len-s.dur) : 0; }
     });
@@ -605,7 +815,11 @@ function drawFrame(t){
   const scenes=P.scenes; let idx=scenes.findIndex(s=>t>=s.t0 && t<s.t1); if(idx<0) idx = t<0?0:scenes.length-1;
   const s=scenes[idx], p=Math.max(0,Math.min(1,(t-s.t0)/s.dur)), last=idx===scenes.length-1;
   g.fillStyle="#000"; g.fillRect(0,0,W,H);
-  if(s.video && s.video.readyState>=2 && s.video.videoWidth){
+  if(s.image){
+    const im=s.image, z = 1.0+0.12*p, px = (idx%2===0?-1:1)*0.03*p;
+    const sc=Math.max(W/im.naturalWidth,H/im.naturalHeight)*z, dw=im.naturalWidth*sc, dh=im.naturalHeight*sc;
+    g.drawImage(im,(W-dw)/2+px*W,(H-dh)/2,dw,dh);
+  }else if(s.video && s.video.readyState>=2 && s.video.videoWidth){
     const v=s.video, z = idx%2===0 ? 1+0.05*p : 1.05-0.05*p;
     const sc=Math.max(W/v.videoWidth,H/v.videoHeight)*z, dw=v.videoWidth*sc, dh=v.videoHeight*sc;
     g.drawImage(v,(W-dw)/2,(H-dh)/2,dw,dh);
