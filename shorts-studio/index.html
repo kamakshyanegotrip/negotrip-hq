@@ -200,6 +200,14 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:12px 0}
 .minfo{min-width:0}.minfo .mt{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .minfo .small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:560px){.mrow{grid-template-columns:36px minmax(0,1fr) auto}.mrow .pill{display:none}}
+/* voice & language */
+.vsum{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 11px;font-size:13px;line-height:1.4}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:12px}
+.vlist{display:flex;flex-direction:column;gap:6px;max-height:min(46vh,440px);overflow:auto}
+.vrow{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.vrow.on{border-color:var(--ok)}
+.vdesc{white-space:normal!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.aihint.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 </style>
 </head>
 <body>
@@ -228,7 +236,8 @@ const VOICES = [
   ["Orus","Orus · male, firm"],["Iapetus","Iapetus · male, clear"],["Fenrir","Fenrir · male, excitable"],["Algieba","Algieba · male, smooth"]
 ];
 const ANGLES = ["Discovery","Spiritual","Beach","Heritage","Weekend getaway","Hidden places","Budget","Food & culture","Family","Honeymoon"];
-const LANGS = ["English","Hindi","Bengali","Odia"];
+const LANGS = ["English","Hindi","Odia","Bengali","Tamil","Telugu","Marathi","Gujarati","Kannada","Malayalam","Punjabi","Assamese","Urdu","Spanish","French","German","Italian","Portuguese","Russian","Arabic","Japanese","Korean","Chinese","Thai","Indonesian"];
+const NAME2CODE = {English:"en-IN",Hindi:"hi-IN",Odia:"or-IN",Bengali:"bn-IN",Tamil:"ta-IN",Telugu:"te-IN",Marathi:"mr-IN",Gujarati:"gu-IN",Kannada:"kn-IN",Malayalam:"ml-IN",Punjabi:"pa-IN",Assamese:"as-IN",Urdu:"ur-IN",Spanish:"es-ES",French:"fr-FR",German:"de-DE",Italian:"it-IT",Portuguese:"pt-BR",Russian:"ru-RU",Arabic:"ar-XA",Japanese:"ja-JP",Korean:"ko-KR",Chinese:"cmn-CN",Thai:"th-TH",Indonesian:"id-ID"};
 
 const sb = window.supabase && window.supabase.createClient
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:false}})
@@ -470,10 +479,10 @@ function renderJob(){
     <div class="render">
       <div>
         <div class="row2">
-          <div class="field"><label for="rVoice">Voice</label><select id="rVoice">${VOICES.map(([v,l])=>`<option value="${v}" ${store.get("voice","Kore")===v?"selected":""}>${esc(l)}</option>`).join("")}</select></div>
+          <div class="field"><label for="vOpen">Voice & language</label><input type="hidden" id="rVoice" value="${esc(VC().voice||"Kore")}"><div class="vsum" id="voiceSummary">${voiceSummary()}</div></div>
           <div class="field"><label for="rQual">Quality</label><select id="rQual"><option value="1080" ${store.get("quality","1080")==="1080"?"selected":""}>1080 × 1920 (best)</option><option value="720" ${store.get("quality","1080")==="720"?"selected":""}>720 × 1280 (faster)</option></select></div>
         </div>
-        <div class="btns" style="margin:-4px 0 12px"><button class="btn-sm" id="hearVoice">▶ Hear this voice</button></div>
+        <div class="btns" style="margin:-4px 0 12px"><button class="btn-sm primary" id="vOpen">🎙 Voice, style & language</button><button class="btn-sm" id="hearVoice">▶ Hear this voice</button></div>
         <div>
           <div class="field"><label for="rLogo">Logo <span class="muted">(PNG)</span></label><input type="file" id="rLogo" accept="image/png,image/svg+xml,image/webp"><div class="hint" id="logoHint"></div></div>
           <div class="field"><label for="rMusic">Music <span class="muted">(free library or your own file)</span></label><div class="btns" style="margin-bottom:6px"><button class="btn-sm primary" id="findMusic" type="button">🎵 Find free music</button></div><input type="file" id="rMusic" accept="audio/*"><div class="hint" id="musicHint"></div></div>
@@ -713,6 +722,7 @@ async function initRenderPanel(){
   $("#rVoice").addEventListener("change",e=>{ store.set("voice",e.target.value); invalidate(); });
   $("#rQual").addEventListener("change",e=>{ store.set("quality",e.target.value); invalidate(); });
   $("#hearVoice").addEventListener("click",hearVoice);
+  $("#vOpen").addEventListener("click",openVoice);
   $("#rLogo").addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return; await idb.set("logo",f); R.logo=await loadImage(f); showAssetHints(); invalidate(); });
   $("#rMusic").addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return; await idb.set("music",f); R.music=f; R.musicMeta={source:"own", title:f.name}; await idb.set("musicMeta",R.musicMeta); if(S.job){ S.job.music=R.musicMeta; saveLocal(); } showAssetHints(); updateCredits(); invalidate(); });
   $("#findMusic").addEventListener("click",openMusic);
@@ -736,10 +746,13 @@ function showAssetHints(){
 function loadImage(file){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=URL.createObjectURL(file); }); }
 function audioCtx(){ if(!R.ctx || R.ctx.state==="closed") R.ctx=new (window.AudioContext||window.webkitAudioContext)(); return R.ctx; }
 
-async function getVoice(text, voice){
-  const key = voice+"|"+text;
+async function getVoice(text, sc, voiceOverride){
+  const voice = voiceOverride || VC().voice || "Kore", style = voiceStyle(sc);
+  const key = voice+"|"+style+"|"+text;
   if(S.voices.has(key)) return S.voices.get(key);
-  const r = await api("voice", {text, voice});
+  const r = await api("voice", {text, voice, style});
+  if(r.error) throw new Error(r.error);
+  if(!r.data) throw new Error("No audio came back. Try again.");
   const bin = Uint8Array.from(atob(r.data), c=>c.charCodeAt(0));
   let bytes = bin.buffer;
   if(!/wav/i.test(r.mime||"")) bytes = pcmToWav(bin, 24000); // raw PCM fallback
@@ -757,7 +770,7 @@ async function hearVoice(){
   const b=$("#hearVoice"); b.disabled=true; b.textContent="Loading…";
   try{
     const text = (S.job.scenes[0] && S.job.scenes[0].narration) || "Welcome to NegoTrip.";
-    const buf = await getVoice(text, $("#rVoice").value);
+    const buf = await getVoice(text, S.job.scenes[0]);
     const ctx=audioCtx(); await Promise.race([ctx.resume(), sleep(1500)]); const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); s.start();
   }catch(e){ toast(e.message); }
   b.disabled=false; b.textContent="▶ Hear this voice";
@@ -797,7 +810,7 @@ function speechBounds(buf){
   return {start:first/sr, end:Math.min(buf.duration,last/sr)};
 }
 function wordTimes(text, start, end){
-  const words = String(text).split(/\s+/).filter(Boolean);
+  const words = String(text).split(/\s+/).filter(Boolean).flatMap(w=> /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u.test(w) && w.length>6 ? (w.match(/.{1,5}/gu)||[w]) : [w]);
   const wts = words.map(w=>w.replace(/[^\p{L}\p{N}]/gu,"").length + 2 + (/[,.;:!?—]$/.test(w)?3:0));
   const tot = wts.reduce((a,b)=>a+b,0) || 1; let acc=0;
   return words.map((w,i)=>{ const s=start+(acc/tot)*(end-start); acc+=wts[i]; return {text:w.replace(/["“”]/g,""), start:s, end:start+(acc/tot)*(end-start)}; });
@@ -806,7 +819,7 @@ function wordTimes(text, start, end){
 // ---------------------------------------------------------------- edit settings (saved with the job)
 const ASSETS = new Map();   // scene id -> {voice, bounds, video, image, defOffset, myVoice}
 function ed(sc){
-  const d = {start:null, speed:1, zoom:1, panX:0, panY:0, motion:"auto", bright:1, contrast:1, sat:1, warmth:0, transition:"dip", titlePos:"top", titleSize:1, hideTitle:false, voiceVol:1};
+  const d = {start:null, speed:1, zoom:1, panX:0, panY:0, motion:"auto", bright:1, contrast:1, sat:1, warmth:0, transition:"dip", titlePos:"top", titleSize:1, hideTitle:false, voiceVol:1, delivery:""};
   if(!sc.edit) sc.edit={};
   for(const k in d) if(!(k in sc.edit)) sc.edit[k]=d[k];
   return sc.edit;
@@ -833,7 +846,7 @@ async function prepare(){
     let next=0, got=0;
     async function worker(){ while(next<n){ const i=next++; const sc=job.scenes[i]; const a=ASSETS.get(sc.id)||{};
       if(a.myVoice && a.voiceText!==sc.narration) a.myVoice=false;
-      if(!a.myVoice){ const txt=(sc.narration||"").trim(); a.voice = txt ? await getVoice(txt, voice) : null; a.bounds = a.voice ? speechBounds(a.voice) : null; }
+      if(!a.myVoice){ const txt=(sc.narration||"").trim(); a.voice = txt ? await getVoice(txt, sc) : null; a.bounds = a.voice ? speechBounds(a.voice) : null; }
       ASSETS.set(sc.id,a); got++; tick(`Voiceover ${got}/${n}`); } }
     await Promise.all([worker(),worker()]);
     // footage, three at a time
@@ -940,6 +953,7 @@ function renderEditor(){
       <div data-pane="2" ${(S.editTab||0)===2?"":"hidden"}>
         <p class="small muted" style="margin:0 0 8px">Voice for scene ${i+1}: ${a.myVoice?"<b>your recording</b>":"AI voice"}</p>
         ${rng("eVol","This scene's voice volume",0,2,0.05,e.voiceVol,v=>Math.round(v*100)+"%")}
+        <div class="field"><label for="eDelivery">How to say this line <span class="muted">(optional)</span></label><div class="searchrow"><input type="text" id="eDelivery" maxlength="120" value="${esc(e.delivery||"")}" placeholder="e.g. whispered with awe, excited, slower" ${a.myVoice?"disabled":""}><button class="btn-sm" id="eDeliveryGo" ${a.myVoice?"disabled":""}>Apply</button></div></div>
         <div class="btns" style="margin-bottom:10px"><button class="btn-sm" id="eRegen" ${a.myVoice?"disabled":""}>↻ New AI take of this line</button><button class="btn-sm" id="eMic">${S.micRec?"■ Stop recording":"🎙 Record my own voice"}</button>${a.myVoice?`<button class="btn-sm" id="eUseAI">Use AI voice again</button>`:""}<button class="btn-sm" id="eHearLine">▶ Hear line</button></div>
         <p class="small muted">Recording uses your microphone. Read the narration shown in the scene card; the scene will stretch to fit your take.</p>
         <hr class="sep">
@@ -996,6 +1010,8 @@ function bindEditor(){
   const efm=$("#eFindMusic"); if(efm) efm.onclick=openMusic;
   $("#gFadeIn").onchange=live(()=>{ G.fadeIn=$("#gFadeIn").checked; }); $("#gFadeOut").onchange=live(()=>{ G.fadeOut=$("#gFadeOut").checked; });
   $("#eRegen").onclick=()=>regenVoice(i);
+  $("#eDeliveryGo").onclick=()=>{ e.delivery=$("#eDelivery").value.trim(); saveLocal(); regenVoice(i); };
+  $("#eDelivery").onkeydown=ev=>{ if(ev.key==="Enter"){ ev.preventDefault(); $("#eDeliveryGo").click(); } };
   $("#eMic").onclick=()=>S.micRec ? S.micRec.stop() : recordVoice(i);
   const ua=$("#eUseAI"); if(ua) ua.onclick=async()=>{ const a=ASSETS.get(sc.id)||{}; a.myVoice=false; ASSETS.set(sc.id,a); await regenVoice(i,true); };
   $("#eHearLine").onclick=async()=>{ const a=ASSETS.get(sc.id); if(!a||!a.voice) return; const ctx=audioCtx(); await Promise.race([ctx.resume(),sleep(1500)]); const s=ctx.createBufferSource(); s.buffer=a.voice; const gn=ctx.createGain(); gn.gain.value=e.voiceVol*G.voiceVol; s.connect(gn); gn.connect(ctx.destination); s.start(); };
@@ -1012,8 +1028,8 @@ async function regenVoice(i, keepMsg){
   const sc=S.job.scenes[i], voice=$("#rVoice").value, txt=(sc.narration||"").trim(); if(!txt) return;
   const b=$("#eRegen"); if(b){ b.disabled=true; b.textContent="Making a new take…"; }
   try{
-    S.voices.delete(voice+"|"+txt);
-    const buf=await getVoice(txt, voice); const a=ASSETS.get(sc.id)||{}; a.voice=buf; a.bounds=speechBounds(buf); a.myVoice=false; ASSETS.set(sc.id,a);
+    S.voices.delete(voiceKey(txt, sc));
+    const buf=await getVoice(txt, sc); const a=ASSETS.get(sc.id)||{}; a.voice=buf; a.bounds=speechBounds(buf); a.myVoice=false; ASSETS.set(sc.id,a);
     relayout(); renderEditor(); if(!keepMsg) toast("New take ready. Press ▶ Hear line.");
   }catch(e){ toast(e.message); if(b){ b.disabled=false; b.textContent="↻ New AI take of this line"; } }
 }
@@ -1210,6 +1226,166 @@ function showResult(blob, mime){
   setBar(1);
 }
 
+// ================================================================ VOICE & LANGUAGE (styles, accents, languages, voice library)
+const STUDIO_VOICES = [
+  ["Kore","female","Firm"],["Aoede","female","Breezy"],["Sulafat","female","Warm"],["Leda","female","Youthful"],["Zephyr","female","Bright"],
+  ["Despina","female","Smooth"],["Autonoe","female","Bright"],["Callirrhoe","female","Easy-going"],["Erinome","female","Clear"],["Laomedeia","female","Upbeat"],
+  ["Achernar","female","Soft"],["Gacrux","female","Mature"],["Pulcherrima","female","Forward"],["Vindemiatrix","female","Gentle"],
+  ["Puck","male","Upbeat"],["Charon","male","Informative"],["Orus","male","Firm"],["Iapetus","male","Clear"],["Fenrir","male","Excitable"],
+  ["Algieba","male","Smooth"],["Enceladus","male","Breathy"],["Umbriel","male","Easy-going"],["Algenib","male","Gravelly"],["Rasalgethi","male","Informative"],
+  ["Alnilam","male","Firm"],["Schedar","male","Even"],["Achird","male","Friendly"],["Zubenelgenubi","male","Casual"],["Sadachbia","male","Lively"],["Sadaltager","male","Knowledgeable"]
+];
+const VLANGS = [
+  {g:"Indian languages", items:[
+    ["en-IN","English (India)",["Neutral Indian English","Odia-flavoured English","Bengali-flavoured English","South Indian English","Hinglish (Hindi-English mix)"]],
+    ["hi-IN","Hindi",["Standard Hindi","Mumbai Hindi","Bhojpuri Hindi","Haryanvi Hindi","Awadhi Hindi"]],
+    ["or-IN","Odia",["Standard Odia (Cuttack/Bhubaneswar)","Sambalpuri-flavoured Odia","Southern Odia (Berhampur)"]],
+    ["bn-IN","Bengali",["Kolkata Bengali","Bangladeshi Bengali"]],["ta-IN","Tamil",["Chennai Tamil","Madurai Tamil"]],["te-IN","Telugu",["Hyderabad Telugu","Coastal Andhra Telugu"]],
+    ["mr-IN","Marathi",["Pune Marathi","Mumbai Marathi"]],["gu-IN","Gujarati",["Ahmedabad Gujarati"]],["kn-IN","Kannada",["Bengaluru Kannada"]],["ml-IN","Malayalam",["Kochi Malayalam"]],
+    ["pa-IN","Punjabi",["Amritsar Punjabi"]],["as-IN","Assamese",["Guwahati Assamese"]],["ur-IN","Urdu",["Lucknowi Urdu","Hyderabadi Urdu"]]]},
+  {g:"Foreign languages", items:[
+    ["en-US","English (US)",["General American","Southern US"]],["en-GB","English (UK)",["British RP","London","Scottish"]],["en-AU","English (Australia)",["Australian"]],
+    ["es-ES","Spanish (Spain)",["Castilian Spanish"]],["es-US","Spanish (Latin America)",["Mexican Spanish","Neutral Latin American"]],["fr-FR","French",["Parisian French","Canadian French"]],
+    ["de-DE","German",["Standard German"]],["it-IT","Italian",["Standard Italian"]],["pt-BR","Portuguese (Brazil)",["Brazilian Portuguese"]],["ru-RU","Russian",["Standard Russian"]],
+    ["ar-XA","Arabic",["Modern Standard Arabic","Gulf Arabic","Egyptian Arabic"]],["ja-JP","Japanese",["Standard Japanese"]],["ko-KR","Korean",["Seoul Korean"]],
+    ["cmn-CN","Chinese (Mandarin)",["Standard Mandarin"]],["th-TH","Thai",["Bangkok Thai"]],["id-ID","Indonesian",["Standard Indonesian"]],["vi-VN","Vietnamese",["Northern Vietnamese","Southern Vietnamese"]],
+    ["ms-MY","Malay",["Malaysian Malay"]],["tr-TR","Turkish",["Istanbul Turkish"]],["nl-NL","Dutch",["Netherlands Dutch"]],["ne-NP","Nepali",["Kathmandu Nepali"]],["si-LK","Sinhala",["Colombo Sinhala"]]]}
+];
+const ALL_LANGS = VLANGS.flatMap(g=>g.items);
+const langName = code => (ALL_LANGS.find(l=>l[0]===code)||[code,code])[1];
+const STYLE_PRESETS = [
+  ["storyteller","Warm storyteller","warm, inviting storyteller who makes the listener picture the place"],
+  ["vlogger","Energetic travel vlogger","energetic, excited travel vlogger, smiling, punchy"],
+  ["devotional","Calm & devotional","calm, reverent and soothing, gentle and unhurried, with quiet awe"],
+  ["documentary","Documentary narrator","rich, measured documentary narrator, confident and curious"],
+  ["luxury","Premium & luxurious","refined, smooth and premium, relaxed confidence"],
+  ["friend","Friendly local guide","friendly local guide talking to a friend, casual and warm"],
+  ["announcer","Excited announcement","bright, excited announcer building anticipation, but natural"],
+  ["none","Plain (no style)",""]
+];
+const PACES = [["slow","Slow & calm","slow, relaxed pace with small pauses"],["natural","Natural",""],["brisk","Brisk","slightly brisk pace"],["fast","Fast & punchy","fast, punchy pace for short-form video"]];
+function VC(){
+  if(!S.job) return store.get("voiceCfg",{});
+  if(!S.job.voiceCfg){ const d=store.get("voiceCfg",null); const lang=NAME2CODE[(S.job.request||{}).language]||"en-IN";
+    S.job.voiceCfg = Object.assign({lang, accent:"", preset:"storyteller", pace:"natural", custom:"", voice:store.get("voice","Kore"), voiceName:"", voiceDesc:""}, d||{}, {lang:(d&&d.lang)||lang}); }
+  return S.job.voiceCfg;
+}
+function scriptLang(){ return (S.job&&S.job.scriptLang) || NAME2CODE[(S.job&&S.job.request||{}).language] || "en-IN"; }
+function voiceStyle(sc){
+  const c=VC(); const p=STYLE_PRESETS.find(x=>x[0]===c.preset); const pace=PACES.find(x=>x[0]===c.pace);
+  const parts=[];
+  if(p&&p[2]) parts.push(p[2]);
+  if(pace&&pace[2]) parts.push(pace[2]);
+  if(c.accent) parts.push(`speaking ${langName(c.lang)} with a ${c.accent} accent`);
+  else if(c.lang && c.lang!=="en-US") parts.push(`natural ${langName(c.lang)} pronunciation`);
+  if(c.custom) parts.push(c.custom);
+  if(sc && sc.edit && sc.edit.delivery) parts.push("this line: "+sc.edit.delivery);
+  return parts.join("; ").slice(0,400);
+}
+function voiceKey(text, sc){ return VC().voice+"|"+voiceStyle(sc)+"|"+text; }
+function voiceSummary(){
+  const c=VC(); const p=STYLE_PRESETS.find(x=>x[0]===c.preset); const pace=PACES.find(x=>x[0]===c.pace);
+  const v = c.voiceName ? `${c.voiceName}` : `${c.voice} (studio voice)`;
+  return `<b>${esc(v)}</b> · ${esc(langName(c.lang))}${c.accent?` · ${esc(c.accent)} accent`:""} · ${esc(p?p[1]:"")}${pace&&pace[0]!=="natural"?` · ${esc(pace[1])}`:""}${c.custom?` · “${esc(c.custom.slice(0,40))}”`:""}`;
+}
+function setVC(patch){
+  Object.assign(VC(), patch); store.set("voiceCfg", VC()); store.set("voice", VC().voice);
+  const h=$("#rVoice"); if(h) h.value=VC().voice;
+  const s=$("#voiceSummary"); if(s) s.innerHTML=voiceSummary();
+  saveLocal(); invalidate();
+}
+const VL = { list:[], token:"", busy:false, tab:"studio", gender:"", search:"", lang:"", audio:null };
+function openVoice(){
+  const c=VC();
+  const sl=scriptLang(), needTr = sl!==c.lang && !(sl.startsWith("en")&&c.lang.startsWith("en"));
+  const langItem=ALL_LANGS.find(l=>l[0]===c.lang)||ALL_LANGS[0];
+  modal(`<div class="mhead"><div><b>Voice & language</b><div class="small muted">Pick the language, accent and delivery style, then a voice. Changes apply when you Prepare.</div></div><button class="btn-sm" data-close aria-label="Close">✕</button></div>
+  <div class="vgrid">
+    <div class="field"><label for="vLang">Language</label><select id="vLang">${VLANGS.map(g=>`<optgroup label="${esc(g.g)}">${g.items.map(l=>`<option value="${l[0]}" ${l[0]===c.lang?"selected":""}>${esc(l[1])}</option>`).join("")}</optgroup>`).join("")}</select></div>
+    <div class="field"><label for="vAccent">Accent</label><input type="text" id="vAccent" list="vAccList" value="${esc(c.accent)}" placeholder="e.g. ${esc(langItem[2][0])}"><datalist id="vAccList">${langItem[2].map(a=>`<option value="${esc(a)}">`).join("")}</datalist></div>
+  </div>
+  <div class="notice small" id="vTrNote" ${needTr?"":"hidden"}>The script is in <b>${esc(langName(sl))}</b>. To speak ${esc(langName(c.lang))}, translate the script first. <button class="btn-sm primary" id="vTranslate">Translate script to ${esc(langName(c.lang))}</button></div>
+  ${S.job&&S.job._origScript?`<div class="small muted" style="margin:6px 0">Translated from the original script. <button class="linkish" id="vRestore">Restore original</button></div>`:""}
+  <div class="field" style="margin-top:10px"><label>Delivery style</label><div class="aihints">${STYLE_PRESETS.map(p=>`<button class="aihint ${c.preset===p[0]?"on":""}" data-preset="${p[0]}" aria-pressed="${c.preset===p[0]}">${esc(p[1])}</button>`).join("")}</div></div>
+  <div class="vgrid">
+    <div class="field"><label for="vPace">Pace</label><select id="vPace">${PACES.map(p=>`<option value="${p[0]}" ${c.pace===p[0]?"selected":""}>${esc(p[1])}</option>`).join("")}</select></div>
+    <div class="field"><label for="vCustom">Extra direction <span class="muted">(optional)</span></label><input type="text" id="vCustom" maxlength="160" value="${esc(c.custom)}" placeholder="e.g. smile while speaking, deeper voice"></div>
+  </div>
+  <div class="small muted" style="margin:-2px 0 10px">Sent to the voice as: <i id="vStylePrev">${esc(voiceStyle(null)||"(no style)")}</i></div>
+  <div class="tabs2" role="tablist"><button role="tab" data-vtab="studio" aria-selected="${VL.tab==="studio"}">Studio voices (30, any language)</button><button role="tab" data-vtab="lib" aria-selected="${VL.tab==="lib"}">Voice library · ${esc(langName(c.lang))}</button></div>
+  <div id="vBody"></div>`);
+  const m=$("#modal");
+  m.querySelector("[data-close]").onclick=()=>closeModal();
+  const refreshPrev=()=>{ $("#vStylePrev").textContent=voiceStyle(null)||"(no style)"; };
+  $("#vLang").onchange=()=>{ setVC({lang:$("#vLang").value, accent:""}); VL.list=[]; VL.token=""; openVoice(); };
+  $("#vAccent").oninput=()=>{ setVC({accent:$("#vAccent").value.trim().slice(0,60)}); refreshPrev(); };
+  $("#vPace").onchange=()=>{ setVC({pace:$("#vPace").value}); refreshPrev(); };
+  $("#vCustom").oninput=()=>{ setVC({custom:$("#vCustom").value.trim()}); refreshPrev(); };
+  m.querySelectorAll("[data-preset]").forEach(b=>b.onclick=()=>{ setVC({preset:b.dataset.preset}); m.querySelectorAll("[data-preset]").forEach(x=>{ const on=x.dataset.preset===b.dataset.preset; x.classList.toggle("on",on); x.setAttribute("aria-pressed",on); }); refreshPrev(); });
+  m.querySelectorAll("[data-vtab]").forEach(b=>b.onclick=()=>{ VL.tab=b.dataset.vtab; m.querySelectorAll("[data-vtab]").forEach(x=>x.setAttribute("aria-selected",x===b)); renderVoiceBody(); });
+  const tr=$("#vTranslate"); if(tr) tr.onclick=()=>translateScript(tr);
+  const rs=$("#vRestore"); if(rs) rs.onclick=restoreScript;
+  renderVoiceBody();
+}
+function sampleText(){ const s=S.job&&S.job.scenes&&S.job.scenes.find(x=>(x.narration||"").trim()); return s? s.narration : "Welcome to Odisha with NegoTrip."; }
+async function playSample(btn, voice){
+  const txt=sampleText(); const old=btn.textContent; btn.disabled=true; btn.textContent="…";
+  try{ const prev=VC().voice; const buf=await getVoice(txt, null, voice); const ctx=audioCtx(); await Promise.race([ctx.resume(),sleep(1500)]); if(VL.audio) try{ VL.audio.stop(); }catch(e){} const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); s.start(); VL.audio=s; }
+  catch(e){ toast(e.message); }
+  btn.disabled=false; btn.textContent=old;
+}
+function renderVoiceBody(){
+  const box=$("#vBody"); if(!box) return; const c=VC();
+  if(VL.tab==="studio"){
+    box.innerHTML=`<p class="small muted" style="margin:0 0 6px">These 30 voices speak every language. Accent and style come from the settings above.</p><div class="vlist">${STUDIO_VOICES.map(([n,g,t])=>`<div class="vrow ${c.voice===n?"on":""}"><button class="mplay" data-vs="${n}" aria-label="Hear ${n}">▶</button><div class="minfo"><div class="mt">${n}</div><div class="small muted">${g} · ${t}</div></div><button class="btn-sm ${c.voice===n?"":"primary"}" data-vuse="${n}" ${c.voice===n?"disabled":""}>${c.voice===n?"In use ✓":"Use"}</button></div>`).join("")}</div>`;
+  } else {
+    box.innerHTML=`<div class="searchrow" style="margin-bottom:8px"><select id="vGender" aria-label="Gender" style="width:auto"><option value="">Any gender</option><option value="female" ${VL.gender==="female"?"selected":""}>Female</option><option value="male" ${VL.gender==="male"?"selected":""}>Male</option></select><input type="text" id="vSearch" value="${esc(VL.search)}" placeholder="e.g. tour guide, narrator, Bhojpuri" aria-label="Search voices"><button class="btn-sm" id="vGo">Search</button></div><div class="vlist" id="vLib"><p class="small muted">Loading voices…</p></div><div id="vLibMore"></div>`;
+    $("#vGo").onclick=()=>{ VL.gender=$("#vGender").value; VL.search=$("#vSearch").value.trim(); VL.list=[]; VL.token=""; loadLibrary(); };
+    $("#vSearch").onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#vGo").click(); } };
+    if(VL.list.length && VL.lang===c.lang) drawLibrary(); else { VL.list=[]; VL.token=""; loadLibrary(); }
+  }
+  box.querySelectorAll("[data-vs]").forEach(b=>b.onclick=()=>playSample(b,b.dataset.vs));
+  box.querySelectorAll("[data-vuse]").forEach(b=>b.onclick=()=>{ setVC({voice:b.dataset.vuse, voiceName:"", voiceDesc:""}); renderVoiceBody(); toast(`Voice set to ${b.dataset.vuse}`); });
+}
+async function loadLibrary(){
+  if(VL.busy) return; VL.busy=true; const c=VC(); VL.lang=c.lang;
+  try{
+    const r=await api("voices",{language_code:c.lang, gender:VL.gender, search:VL.search, page_size:60, page_token:VL.token||undefined});
+    if(r.error) throw new Error(r.error);
+    VL.list=VL.list.concat(r.voices||[]); VL.token=r.next_page_token||"";
+  }catch(e){ const l=$("#vLib"); if(l) l.innerHTML=`<p class="small muted">Couldn't load the voice library: ${esc(e.message)}</p>`; VL.busy=false; return; }
+  VL.busy=false; drawLibrary();
+}
+function drawLibrary(){
+  const l=$("#vLib"); if(!l) return; const c=VC();
+  const persona=p=>String(p||"").split("/").pop().replace(/[()]/g,"").trim();
+  l.innerHTML = VL.list.length ? VL.list.map((v,k)=>`<div class="vrow ${c.voice===v.id?"on":""}"><button class="mplay" data-vls="${k}" aria-label="Hear ${esc(v.name)}">▶</button><div class="minfo"><div class="mt">${esc(v.name)} <span class="small muted">· ${esc(v.gender)}${v.pitch?", "+esc(v.pitch)+" pitch":""}</span></div><div class="small muted">${esc(v.accent||langName(v.language_code))}${v.persona?" · "+esc(persona(v.persona)):""}</div><div class="small muted vdesc">${esc(v.description)}</div></div><button class="btn-sm ${c.voice===v.id?"":"primary"}" data-vlu="${k}" ${c.voice===v.id?"disabled":""}>${c.voice===v.id?"In use ✓":"Use"}</button></div>`).join("")
+    : `<p class="small muted">No library voices for ${esc(langName(c.lang))} yet. Use a studio voice: they speak ${esc(langName(c.lang))} too, with the accent you set above.</p>`;
+  const more=$("#vLibMore"); if(more) more.innerHTML = VL.token ? `<button class="btn-sm" id="vMore" style="margin-top:8px">Show more voices</button>` : "";
+  const mb=$("#vMore"); if(mb) mb.onclick=()=>{ mb.disabled=true; mb.textContent="Loading…"; loadLibrary(); };
+  l.querySelectorAll("[data-vls]").forEach(b=>b.onclick=()=>playSample(b, VL.list[+b.dataset.vls].id));
+  l.querySelectorAll("[data-vlu]").forEach(b=>b.onclick=()=>{ const v=VL.list[+b.dataset.vlu]; setVC({voice:v.id, voiceName:`${v.name} (${v.accent||langName(v.language_code)})`, voiceDesc:v.description, accent: VC().accent || ""}); drawLibrary(); toast(`Voice set to ${v.name}`); });
+}
+async function translateScript(btn){
+  const c=VC(); const job=S.job; if(!job) return;
+  btn.disabled=true; btn.textContent="Translating…";
+  try{
+    const r=await api("translate",{ language:langName(c.lang), accent:c.accent, keyword:(job.request||{}).cta_keyword||(job.cta||{}).keyword||"", brief:`${job.title||""}. ${(job.research||{}).one_line||""}`,
+      scenes:job.scenes.map((s,i)=>({n:i+1, seconds:s.duration_sec, narration:s.narration, on_screen_text:s.on_screen_text})) });
+    if(r.error) throw new Error(r.error);
+    if(!job._origScript) job._origScript={ lang:scriptLang(), scenes:job.scenes.map(s=>({id:s.id, narration:s.narration, on_screen_text:s.on_screen_text})), cta:Object.assign({},job.cta||{}) };
+    (r.scenes||[]).forEach(t=>{ const s=job.scenes[t.n-1]; if(s){ if(t.narration) s.narration=t.narration; if(t.on_screen_text) s.on_screen_text=t.on_screen_text; } });
+    if(r.cta_on_screen) job.cta=Object.assign({},job.cta||{},{on_screen:r.cta_on_screen});
+    job.scriptLang=c.lang; saveLocal(); invalidate(); renderScenes();
+    toast(`Script translated to ${langName(c.lang)}. Check it, then Prepare.`); openVoice();
+  }catch(e){ toast(e.message); btn.disabled=false; btn.textContent=`Translate script to ${langName(c.lang)}`; }
+}
+function restoreScript(){
+  const job=S.job, o=job&&job._origScript; if(!o) return;
+  o.scenes.forEach(x=>{ const s=job.scenes.find(y=>y.id===x.id); if(s){ s.narration=x.narration; s.on_screen_text=x.on_screen_text; } });
+  job.cta=o.cta; job.scriptLang=o.lang; delete job._origScript; saveLocal(); invalidate(); renderScenes(); toast("Original script restored"); openVoice();
+}
+
 // ================================================================ FREE MUSIC (Openverse: Jamendo, Freesound, Wikimedia, ccMixter)
 // Only CC0, public-domain and CC BY tracks are offered: all allow commercial use and editing. CC BY needs a credit (added automatically).
 const MOODS = {
@@ -1312,6 +1488,7 @@ function jobBrief(){
   return { title:j.title, destination:(j.request||{}).destination, language:(j.request||{}).language, angle:(j.request||{}).angle,
     hook:j.hook, fomo_type:j.fomo_type, cta:j.cta, research:{ one_line:r.one_line, best_season:r.best_season, facts:(r.facts||r.key_facts||[]).slice?.(0,10), how_to_reach:r.how_to_reach },
     fact_check_notes:j.fact_check_notes, warnings:j.warnings,
+    voice: { settings: VC(), style_sent_to_tts: voiceStyle(null), script_language: langName(scriptLang()) },
     music: R.music ? Object.assign({}, R.musicMeta||{}, {track_length_sec: R.prepared&&R.prepared.musicBuf?+R.prepared.musicBuf.duration.toFixed(1):undefined}) : "none chosen yet",
     scenes:(j.scenes||[]).map((s,i)=>({n:i+1, stage:s.aida_stage, location:s.location, narration:s.narration, on_screen_text:s.on_screen_text, seconds:s.duration_sec, footage: s.card?"title card":(s.footage?`${s.footage.kind} from ${s.footage.source}: ${String(s.footage.desc||"").slice(0,90)}`:"none")})) };
 }
@@ -1450,7 +1627,7 @@ function editDef(tab){
     this_scene:{ n:i+1, of:S.job.scenes.length, role:i===0?"hook":i===S.job.scenes.length-1?"call to action":"middle", location:s.location, narration:s.narration, title:s.on_screen_text,
       media: s.card?"title card":(a.video?"video":a.image?"photo":"none"), footage_desc:s.footage&&String(s.footage.desc||"").slice(0,140), clip_length_sec:a.video?+a.video.duration.toFixed(1):null,
       voice_length_sec:a.voice?+a.voice.duration.toFixed(1):null, scene_length_sec:p?+p.dur.toFixed(1):null, own_voice_recording:!!a.myVoice }, edit:e(), style:G() }; };
-  const after=(keys)=>{ if(keys.includes("narration")||keys.includes("voice")){ invalidate(); renderScenes(); toast("Press Prepare again to hear the new voice."); return; } relayout(); renderEditor(); };
+  const after=(keys)=>{ if(keys.includes("delivery")&&keys.length===1){ regenVoice(i); return; } if(keys.some(k=>["narration","voice","stylePreset","pace","voiceAccent","voiceDirection"].includes(k))){ invalidate(); renderScenes(); toast("Press Prepare again to hear the new voice."); return; } relayout(); renderEditor(); };
   let fields;
   if(tab===0) fields=()=>{ const a=ASSETS.get(sc().id)||{}; const f=[];
     if(a.video) f.push(fld("start","Start from (seconds into the clip)","number",()=>ps()?+ps().offset.toFixed(1):0,v=>{ e().start=v; },{min:0,max:Math.max(0.1,(a.video.duration||1)-0.2)}),
@@ -1479,7 +1656,12 @@ function editDef(tab){
       fld("musicStart","Music starts from (seconds into the track)","number",()=>+G().musicStart||0,v=>{ G().musicStart=v; },{min:0,max:R.prepared&&R.prepared.musicBuf?Math.max(0,Math.floor(R.prepared.musicBuf.duration-5)):0}),
       fld("fadeOut","Fade music out","bool",()=>G().fadeOut,v=>{ G().fadeOut=v; }),
       fld("narration","This scene's narration","text",()=>sc().narration,v=>{ sc().narration=v; },{max:400,note:"needs Prepare again"}),
-      fld("voice","AI voice for the whole video","select",()=>$("#rVoice")?$("#rVoice").value:"Kore",v=>{ const s=$("#rVoice"); if(s){ s.value=v; store.set("voice",v); } },{options:VOICES.map(x=>x[0]),note:"needs Prepare again"})];
+      fld("voice","Studio voice for the whole video","select",()=>VC().voice,v=>{ setVC({voice:v, voiceName:"", voiceDesc:""}); },{options:STUDIO_VOICES.map(x=>x[0]),note:"needs Prepare again"}),
+      fld("stylePreset","Delivery style","select",()=>VC().preset,v=>{ setVC({preset:v}); },{options:STYLE_PRESETS.map(x=>x[0]),note:"needs Prepare again"}),
+      fld("pace","Pace","select",()=>VC().pace,v=>{ setVC({pace:v}); },{options:PACES.map(x=>x[0]),note:"needs Prepare again"}),
+      fld("voiceAccent","Voice accent (free text, e.g. Odia-flavoured English)","text",()=>VC().accent,v=>{ setVC({accent:v}); },{max:60,note:"needs Prepare again"}),
+      fld("voiceDirection","Extra voice direction for the whole video","text",()=>VC().custom,v=>{ setVC({custom:v}); },{max:160,note:"needs Prepare again"}),
+      fld("delivery","How to say this scene's line","text",()=>e().delivery||"",v=>{ e().delivery=v; },{max:120,note:"makes a new take of this line"})];
   if(tab===3) fields=()=>[
       fld("capStyle","Caption style","select",()=>G().capStyle,v=>{ G().capStyle=v; },{options:["bold","box","minimal"]}),
       fld("capSize","Caption size","number",()=>G().capSize,v=>{ G().capSize=v; },{min:0.6,max:1.4}),
