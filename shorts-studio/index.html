@@ -151,6 +151,28 @@ img.thumb{display:block;object-fit:cover;width:100%;aspect-ratio:9/16;height:aut
 .gate .card{max-width:440px;text-align:center;padding:28px 22px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:40;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;max-width:calc(100% - 32px)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+/* editor */
+.editor{border-top:1px solid var(--line);margin-top:16px;padding-top:6px}
+.editor h3{font-family:var(--display);font-size:17px;margin:0 0 10px}
+.scrubrow{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.scrubrow input{flex:1;accent-color:var(--accent)}
+.strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
+.chip2{flex:0 0 78px;display:flex;flex-direction:column;gap:4px}
+.chip2 .pick{border:2px solid transparent;border-radius:10px;padding:0;background:var(--bg);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;color:var(--ink)}
+.chip2 .pick img,.chip2 .pick .ph{display:block;width:100%;aspect-ratio:9/16;object-fit:cover}
+.chip2 .pick span{font-size:11px;font-family:var(--mono);padding:3px 0}
+.chip2.on .pick{border-color:var(--accent)}
+.chip2 .mv{display:flex;gap:4px}.chip2 .mv button{flex:1;height:26px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);cursor:pointer;font-size:11px}
+.chip2 .mv button:disabled{opacity:.35;cursor:default}
+.tabs2{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.tabs2 button{height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:600;font-size:13px;cursor:pointer}
+.tabs2 button[aria-selected="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.insp{background:var(--bg);border-radius:12px;padding:14px}
+.rng{margin-bottom:10px}.rng label{display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:2px}
+.rng output{font-family:var(--mono);font-weight:400;color:var(--ink-2);font-size:12px}
+.rng input{width:100%;accent-color:var(--accent)}
+input[type=color]{width:100%;height:40px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:3px}
+hr.sep{border:0;border-top:1px solid var(--line);margin:12px 0}
 </style>
 </head>
 <body>
@@ -432,8 +454,9 @@ function renderJob(){
         <div class="log" id="log">Prepare downloads the approved footage and creates the voiceover (about a minute).</div>
         <div class="notice small">Recording plays the video once in real time. Keep this tab open and visible until it finishes. Works best in Chrome or Edge on a computer.</div>
         <div id="resultBox"></div>
+        <div id="editor" class="editor" hidden></div>
       </div>
-      <div><div class="stage"><canvas id="cv" width="1080" height="1920" aria-label="Video preview"></canvas></div></div>
+      <div><div class="stage" style="position:sticky;top:12px"><canvas id="cv" width="1080" height="1920" aria-label="Video preview"></canvas></div></div>
     </div>
   </div>`;
   renderScenes();
@@ -479,7 +502,7 @@ function sceneHtml(sc,i){
 }
 function bindScenes(){
   const w=$("#sceneList");
-  w.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("input",()=>{ const [i,f]=el.dataset.edit.split(":"); S.job.scenes[i][f] = f==="duration_sec" ? Math.max(2,Math.min(20,+el.value||3)) : el.value; invalidate(); saveLocal(); }));
+  w.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("input",()=>{ const [i,f]=el.dataset.edit.split(":"); S.job.scenes[i][f] = f==="duration_sec" ? Math.max(2,Math.min(20,+el.value||3)) : el.value; if(R.prepared && f!=="narration"){ relayout(); scrubTo(R.scrub||0); } else invalidate(); saveLocal(); }));
   w.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click",()=>{ const i=b.dataset.toggle; S.openAlts[i]=!S.openAlts[i]; renderScenes(); }));
   w.querySelectorAll("[data-approve]").forEach(b=>b.addEventListener("click",()=>approve(+b.dataset.approve, S.job.scenes[+b.dataset.approve].footage)));
   w.querySelectorAll("[data-reject]").forEach(b=>b.addEventListener("click",()=>reject(+b.dataset.reject, S.job.scenes[+b.dataset.reject].footage)));
@@ -647,7 +670,7 @@ function saveBlob(blob, name){ const a=document.createElement("a"); a.href=URL.c
 // Everything below runs in the browser: voice from Gemini (via n8n), clips via the n8n proxy,
 // drawn on a canvas and recorded with MediaRecorder.
 const R = { prepared:null, ctx:null, playing:false, stopFn:null, logo:null, music:null };
-function invalidate(){ if(R.prepared){ R.prepared=null; const pb=$("#playBtn"), rb=$("#recBtn"); if(pb) pb.disabled=true; if(rb) rb.disabled=true; setLog("Changes made. Prepare the preview again."); } }
+function invalidate(){ if(R.prepared){ R.prepared=null; const ed=$("#editor"); if(ed){ ed.hidden=true; ed.innerHTML=""; } const pb=$("#playBtn"), rb=$("#recBtn"); if(pb) pb.disabled=true; if(rb) rb.disabled=true; setLog("Changes made. Prepare the preview again."); } }
 function setLog(t){ const l=$("#log"); if(l) l.textContent=t; }
 function setBar(f){ const b=$("#barFill"); if(b) b.style.width=Math.round(Math.max(0,Math.min(1,f))*100)+"%"; }
 
@@ -742,6 +765,21 @@ function wordTimes(text, start, end){
   return words.map((w,i)=>{ const s=start+(acc/tot)*(end-start); acc+=wts[i]; return {text:w.replace(/["“”]/g,""), start:s, end:start+(acc/tot)*(end-start)}; });
 }
 
+// ---------------------------------------------------------------- edit settings (saved with the job)
+const ASSETS = new Map();   // scene id -> {voice, bounds, video, image, defOffset, myVoice}
+function ed(sc){
+  const d = {start:null, speed:1, zoom:1, panX:0, panY:0, motion:"auto", bright:1, contrast:1, sat:1, warmth:0, transition:"dip", titlePos:"top", titleSize:1, hideTitle:false, voiceVol:1};
+  if(!sc.edit) sc.edit={};
+  for(const k in d) if(!(k in sc.edit)) sc.edit[k]=d[k];
+  return sc.edit;
+}
+function st(){
+  const d = {capStyle:"bold", capPos:0.64, capSize:1, hideCaps:false, accent:"#A8321E", highlight:"#FFD23F", musicVol:0.3, voiceVol:1, fadeIn:true, fadeOut:true};
+  if(!S.job.style) S.job.style={};
+  for(const k in d) if(!(k in S.job.style)) S.job.style[k]=d[k];
+  return S.job.style;
+}
+
 async function prepare(){
   if(S.busy) return;
   if(readyCount()!==S.job.scenes.length){ toast("Approve footage for every scene first."); updateGate(); return; }
@@ -751,14 +789,16 @@ async function prepare(){
   try{
     await document.fonts.load('800 80px "Bricolage Grotesque"').catch(()=>{});
     const ctx=audioCtx(); ctx.resume().catch(()=>{});
-    const scenes=[]; let steps=0; const totalSteps=n*2+1;
+    let steps=0; const totalSteps=n*2+1;
     const tick=(msg)=>{ steps++; setBar(steps/totalSteps); setLog(msg); };
-    // voices, two at a time
-    const voices=new Array(n);
-    let next=0;
-    async function worker(){ while(next<n){ const i=next++; const txt=(job.scenes[i].narration||"").trim(); voices[i] = txt ? await getVoice(txt, voice) : null; tick(`Voiceover ${voices.filter(Boolean).length}/${n}`); } }
+    // voices, two at a time (own recordings are kept)
+    let next=0, got=0;
+    async function worker(){ while(next<n){ const i=next++; const sc=job.scenes[i]; const a=ASSETS.get(sc.id)||{};
+      if(a.myVoice && a.voiceText!==sc.narration) a.myVoice=false;
+      if(!a.myVoice){ const txt=(sc.narration||"").trim(); a.voice = txt ? await getVoice(txt, voice) : null; a.bounds = a.voice ? speechBounds(a.voice) : null; }
+      ASSETS.set(sc.id,a); got++; tick(`Voiceover ${got}/${n}`); } }
     await Promise.all([worker(),worker()]);
-    // clips, three at a time
+    // footage, three at a time
     const urls=new Array(n); let nextClip=0, gotClips=0;
     async function clipWorker(){ while(nextClip<n){ const i=nextClip++;
       try{ urls[i]=await getClipUrl(job.scenes[i], quality); }catch(e){ urls[i]=null; toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
@@ -766,38 +806,183 @@ async function prepare(){
     await Promise.all([clipWorker(),clipWorker(),clipWorker()]);
     await waitVisible();
     for(let i=0;i<n;i++){
-      let video=null, image=null; const sc=job.scenes[i];
-      if(urls[i]) try{ if(sc.footage && sc.footage.kind==="photo") image=await loadImg(urls[i]); else video=await loadVideo(urls[i]); }catch(e){ toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
+      const sc=job.scenes[i], a=ASSETS.get(sc.id)||{};
+      a.video=null; a.image=null;
+      if(urls[i]) try{ if(sc.footage && sc.footage.kind==="photo") a.image=await loadImg(urls[i]); else a.video=await loadVideo(urls[i]); }catch(e){ toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
+      ASSETS.set(sc.id,a);
       setLog(`Opening footage ${i+1}/${n}`);
-      scenes.push({sc, video, image});
     }
-    // timeline
-    let t=0;
-    scenes.forEach((s,i)=>{
-      const vb=voices[i]; const b=vb?speechBounds(vb):{start:0,end:0};
-      const lead=0.12;
-      s.voice=vb; s.aStart=t+lead;
-      s.dur=Math.max(+s.sc.duration_sec||3, vb ? lead+b.end+0.35 : 2.5);
-      s.t0=t; s.t1=t+s.dur; t+=s.dur;
-      s.words = vb ? wordTimes(s.sc.narration, s.aStart+b.start, s.aStart+b.end) : [];
-      s.speechEnd = s.aStart + b.end;
-      s.representative = !s.sc.card && (s.video||s.image) && s.sc.match==="representative" && s.sc.footage && s.sc.footage.source!=="Your library";
-      s.offset=0;
-      if(s.video){ const len=s.video.duration||0; s.offset = len > s.dur+1.5 ? Math.min(1, len-s.dur) : 0; }
-    });
-    for(const s of scenes) if(s.video) await seek(s.video, s.offset);
     let musicBuf=null;
     if(R.music){ try{ musicBuf=await ctx.decodeAudioData(await R.music.arrayBuffer()); }catch(e){ toast("Couldn't read the music file."); } }
     tick("Ready");
     const [W,H] = quality==="720" ? [720,1280] : [1080,1920];
     const cv=$("#cv"); cv.width=W; cv.height=H;
-    R.prepared={scenes,total:t,W,H,musicBuf,cta:job.cta||{},website:(job.branding&&job.branding.website)||"negotrip.com",keyword:(job.request&&job.request.cta_keyword)||""};
-    drawFrame(0.2);
-    setLog(`Ready · ${t.toFixed(1)} seconds. Play the preview, then record.`);
+    R.prepared={scenes:[],total:0,W,H,musicBuf,cta:job.cta||{},website:(job.branding&&job.branding.website)||"negotrip.com",keyword:(job.request&&job.request.cta_keyword)||""};
+    relayout();
+    R.scrub=0.2; await scrubTo(0.2);
+    setLog(`Ready · ${R.prepared.total.toFixed(1)} seconds. Edit below, play the preview, then record.`);
     $("#playBtn").disabled=false; $("#recBtn").disabled=false;
+    renderEditor();
   }catch(e){
     setLog("Couldn't prepare: "+e.message); toast(e.message);
   }finally{ btn.disabled=false; S.busy=false; }
+}
+
+// Rebuild the timeline from loaded assets + current edits (fast; no downloads)
+function relayout(){
+  const P=R.prepared; if(!P) return;
+  let t=0;
+  P.scenes = S.job.scenes.map((sc)=>{
+    const a=ASSETS.get(sc.id)||{}, e=ed(sc);
+    const vb=a.voice||null, b=a.bounds||{start:0,end:0};
+    const lead=0.12;
+    const s={sc, e, video:a.video||null, image:a.image||null, voice:vb};
+    s.t0=t; s.aStart=t+lead;
+    s.dur=Math.max(+sc.duration_sec||3, vb ? lead+b.end+0.35 : 2.5);
+    s.t1=t+s.dur; t+=s.dur;
+    s.words = vb ? wordTimes(sc.narration, s.aStart+b.start, s.aStart+b.end) : [];
+    s.speechEnd = s.aStart + b.end;
+    s.representative = !sc.card && (s.video||s.image) && sc.match==="representative" && sc.footage && sc.footage.source!=="Your library";
+    if(s.video){ const len=s.video.duration||0; const def = len > s.dur*e.speed+1.5 ? Math.min(1, len-s.dur*e.speed) : 0; s.offset = e.start!=null ? Math.max(0,Math.min(e.start, Math.max(0,len-0.2))) : def; s.clipLen=len; }
+    else s.offset=0;
+    return s;
+  });
+  P.total=t;
+  const sl=$("#scrub"); if(sl){ sl.max=t.toFixed(2); }
+}
+function clipTimeAt(s,t){ const len=s.clipLen||s.video.duration||1; let ct=s.offset+(t-s.t0)*s.e.speed; if(ct>=len-0.05) ct = len>0.2 ? (ct % (len-0.05)) : 0; return ct; }
+async function scrubTo(t){
+  const P=R.prepared; if(!P) return;
+  t=Math.max(0,Math.min(P.total-0.01,t)); R.scrub=t;
+  const s=P.scenes.find(x=>t>=x.t0&&t<x.t1)||P.scenes[P.scenes.length-1];
+  if(s && s.video){ await seek(s.video, clipTimeAt(s,t)); }
+  const prev=P.scenes[P.scenes.indexOf(s)-1];
+  if(prev && prev.video && s.e.transition==="fade" && t-s.t0<0.5){ await seek(prev.video, clipTimeAt(prev, prev.t1-0.01)); }
+  drawFrame(t);
+  const lab=$("#scrubLab"); if(lab) lab.textContent=`${t.toFixed(1)}s / ${P.total.toFixed(1)}s · scene ${P.scenes.indexOf(s)+1}`;
+  const sl=$("#scrub"); if(sl && document.activeElement!==sl) sl.value=t;
+}
+
+// ---------------------------------------------------------------- editor UI (step 2)
+function renderEditor(){
+  const box=$("#editor"); if(!box || !R.prepared) return;
+  box.hidden=false;
+  const P=R.prepared, G=st();
+  if(S.editSel==null || S.editSel>=S.job.scenes.length) S.editSel=0;
+  const i=S.editSel, sc=S.job.scenes[i], e=ed(sc), a=ASSETS.get(sc.id)||{}, ps=P.scenes[i];
+  const rng=(id,label,min,max,step,val,fmt)=>`<div class="rng"><label for="${id}">${label} <output id="${id}o">${fmt?fmt(val):val}</output></label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
+  box.innerHTML = `
+    <h3 style="margin-top:6px">2 · Edit</h3>
+    <div class="scrubrow"><input type="range" id="scrub" min="0" max="${P.total.toFixed(2)}" step="0.05" value="${(R.scrub||0).toFixed(2)}" aria-label="Preview position"><span class="log" id="scrubLab"></span></div>
+    <div class="strip" role="list">${S.job.scenes.map((x,k)=>{ const c=x.card?null:x.footage; return `<div class="chip2 ${k===i?"on":""}" role="listitem"><button class="pick" data-sel="${k}" aria-pressed="${k===i}">${thumbHtml(c,"")}<span>${k+1} · ${(P.scenes[k]?P.scenes[k].dur:0).toFixed(1)}s</span></button><div class="mv"><button data-mv="${k}:-1" ${k===0?"disabled":""} aria-label="Move scene ${k+1} earlier">◀</button><button data-mv="${k}:1" ${k===S.job.scenes.length-1?"disabled":""} aria-label="Move scene ${k+1} later">▶</button></div></div>`; }).join("")}</div>
+    <div class="tabs2" role="tablist">${["Clip","Look & text","Audio","Whole video"].map((t,k)=>`<button role="tab" data-tab="${k}" aria-selected="${(S.editTab||0)===k}">${t}</button>`).join("")}</div>
+    <div class="insp">
+      <div data-pane="0" ${(S.editTab||0)===0?"":"hidden"}>
+        <p class="small muted" style="margin:0 0 8px">Scene ${i+1}: <b>${esc(sc.location||"")}</b> · ${sc.card?"title card":(sc.footage&&sc.footage.kind==="photo"?"photo":"video")}</p>
+        ${a.video?rng("eStart","Start from (s)",0,Math.max(0.1,(a.video.duration||1)-0.2).toFixed(1),0.1,(ps&&ps.offset||0).toFixed(1)):""}
+        ${a.video?`<div class="field"><label for="eSpeed">Speed</label><select id="eSpeed">${[0.5,0.75,1,1.25,1.5,2].map(v=>`<option value="${v}" ${e.speed==v?"selected":""}>${v}×${v<1?" (slow-mo)":""}</option>`).join("")}</select></div>`:""}
+        ${rng("eZoom","Zoom",1,2,0.05,e.zoom,v=>(+v).toFixed(2)+"×")}
+        ${rng("ePanX","Move left / right",-1,1,0.05,e.panX)}
+        ${rng("ePanY","Move up / down",-1,1,0.05,e.panY)}
+        <div class="field"><label for="eMotion">Camera motion</label><select id="eMotion">${[["auto","Auto (gentle push)"],["in","Slow zoom in"],["out","Slow zoom out"],["left","Pan left"],["right","Pan right"],["none","Still"]].map(([v,l])=>`<option value="${v}" ${e.motion===v?"selected":""}>${l}</option>`).join("")}</select></div>
+        <div class="row2"><div class="field"><label for="eDur">Length (s)</label><input type="number" id="eDur" min="2" max="20" step="0.5" value="${esc(sc.duration_sec)}"></div>
+        <div class="field"><label for="eTrans">Transition in</label><select id="eTrans">${[["dip","Dip to black"],["fade","Cross-fade"],["flash","White flash"],["cut","Hard cut"]].map(([v,l])=>`<option value="${v}" ${e.transition===v?"selected":""}>${l}</option>`).join("")}</select></div></div>
+        <div class="btns"><button class="btn-sm" id="eReset">Reset this scene</button><button class="btn-sm" id="ePlayScene">▶ Play this scene</button></div>
+      </div>
+      <div data-pane="1" ${(S.editTab||0)===1?"":"hidden"}>
+        ${rng("eBright","Brightness",0.6,1.4,0.02,e.bright)}
+        ${rng("eContrast","Contrast",0.6,1.5,0.02,e.contrast)}
+        ${rng("eSat","Colour",0,1.8,0.05,e.sat)}
+        ${rng("eWarm","Warmth (cool ↔ warm)",-1,1,0.05,e.warmth)}
+        <div class="field"><label for="eTitle">Title text</label><input type="text" id="eTitle" maxlength="40" value="${esc(sc.on_screen_text||"")}"></div>
+        <div class="row2"><div class="field"><label for="eTitlePos">Title position</label><select id="eTitlePos">${[["top","Top"],["middle","Middle"],["bottom","Lower third"]].map(([v,l])=>`<option value="${v}" ${e.titlePos===v?"selected":""}>${l}</option>`).join("")}</select></div>
+        ${rng("eTitleSize","Title size",0.6,1.5,0.05,e.titleSize,v=>Math.round(v*100)+"%")}</div>
+        <label class="small"><input type="checkbox" id="eHideTitle" ${e.hideTitle?"checked":""}> Hide title in this scene</label>
+      </div>
+      <div data-pane="2" ${(S.editTab||0)===2?"":"hidden"}>
+        <p class="small muted" style="margin:0 0 8px">Voice for scene ${i+1}: ${a.myVoice?"<b>your recording</b>":"AI voice"}</p>
+        ${rng("eVol","This scene's voice volume",0,2,0.05,e.voiceVol,v=>Math.round(v*100)+"%")}
+        <div class="btns" style="margin-bottom:10px"><button class="btn-sm" id="eRegen" ${a.myVoice?"disabled":""}>↻ New AI take of this line</button><button class="btn-sm" id="eMic">${S.micRec?"■ Stop recording":"🎙 Record my own voice"}</button>${a.myVoice?`<button class="btn-sm" id="eUseAI">Use AI voice again</button>`:""}<button class="btn-sm" id="eHearLine">▶ Hear line</button></div>
+        <p class="small muted">Recording uses your microphone. Read the narration shown in the scene card; the scene will stretch to fit your take.</p>
+        <hr class="sep">
+        ${rng("gVoice","All voices",0,2,0.05,G.voiceVol,v=>Math.round(v*100)+"%")}
+        ${rng("gMusic","Music",0,1,0.02,G.musicVol,v=>Math.round(v*100)+"%")}
+        <label class="small" style="margin-right:14px"><input type="checkbox" id="gFadeIn" ${G.fadeIn?"checked":""}> Fade music in</label>
+        <label class="small"><input type="checkbox" id="gFadeOut" ${G.fadeOut?"checked":""}> Fade music out</label>
+      </div>
+      <div data-pane="3" ${(S.editTab||0)===3?"":"hidden"}>
+        <div class="row2"><div class="field"><label for="gCap">Caption style</label><select id="gCap">${[["bold","Bold outline"],["box","Text on dark box"],["minimal","Minimal"]].map(([v,l])=>`<option value="${v}" ${G.capStyle===v?"selected":""}>${l}</option>`).join("")}</select></div>
+        ${rng("gCapSize","Caption size",0.6,1.4,0.05,G.capSize,v=>Math.round(v*100)+"%")}</div>
+        ${rng("gCapPos","Caption height",0.45,0.85,0.01,G.capPos,v=>Math.round(v*100)+"% down")}
+        <label class="small"><input type="checkbox" id="gHideCaps" ${G.hideCaps?"checked":""}> Hide captions</label>
+        <div class="row2" style="margin-top:10px"><div class="field"><label for="gAccent">Call-to-action colour</label><input type="color" id="gAccent" value="${esc(G.accent)}"></div>
+        <div class="field"><label for="gHi">Highlight word colour</label><input type="color" id="gHi" value="${esc(G.highlight)}"></div></div>
+        <div class="field"><label for="gCta">Call to action</label><input type="text" id="gCta" maxlength="50" value="${esc((S.job.cta&&S.job.cta.on_screen)||"")}"></div>
+        <button class="btn-sm" id="gReset">Reset whole-video style</button>
+      </div>
+    </div>`;
+  bindEditor();
+  scrubTo(R.scrub||0);
+}
+function bindEditor(){
+  const box=$("#editor"), i=S.editSel, sc=S.job.scenes[i], e=ed(sc), G=st();
+  const live=(fn,layout)=>()=>{ fn(); saveLocal(); if(layout) relayout(); scrubTo(R.scrub||0); };
+  const bindR=(id,set,fmt)=>{ const el=$("#"+id); if(!el) return; el.addEventListener("input",()=>{ set(+el.value); const o=$("#"+id+"o"); if(o) o.textContent=fmt?fmt(+el.value):el.value; live(()=>{},true)(); }); };
+  $("#scrub").addEventListener("input",ev=>{ R.scrub=+ev.target.value; scrubTo(R.scrub); });
+  box.querySelectorAll("[data-sel]").forEach(b=>b.addEventListener("click",()=>{ S.editSel=+b.dataset.sel; const P=R.prepared; R.scrub=P.scenes[S.editSel].t0+0.3; renderEditor(); }));
+  box.querySelectorAll("[data-mv]").forEach(b=>b.addEventListener("click",()=>{ const [k,d]=b.dataset.mv.split(":").map(Number); const arr=S.job.scenes; const j=k+d; if(j<0||j>=arr.length) return; [arr[k],arr[j]]=[arr[j],arr[k]]; S.editSel=j; saveLocal(); relayout(); renderScenes(); renderEditor(); }));
+  box.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>{ S.editTab=+b.dataset.tab; renderEditor(); }));
+  // clip
+  bindR("eStart",v=>{ e.start=v; });
+  const sp=$("#eSpeed"); if(sp) sp.onchange=live(()=>{ e.speed=+sp.value; },true);
+  bindR("eZoom",v=>{ e.zoom=v; },v=>v.toFixed(2)+"×"); bindR("ePanX",v=>{ e.panX=v; }); bindR("ePanY",v=>{ e.panY=v; });
+  $("#eMotion").onchange=live(()=>{ e.motion=$("#eMotion").value; });
+  $("#eDur").oninput=live(()=>{ sc.duration_sec=Math.max(2,Math.min(20,+$("#eDur").value||3)); const d=document.querySelector(`#d${i}`); if(d) d.value=sc.duration_sec; },true);
+  $("#eTrans").onchange=live(()=>{ e.transition=$("#eTrans").value; });
+  $("#eReset").onclick=()=>{ sc.edit=null; ed(sc); R.scrub=R.prepared.scenes[i].t0+0.3; saveLocal(); relayout(); renderEditor(); };
+  $("#ePlayScene").onclick=()=>{ const s=R.prepared.scenes[i]; play(false, s.t0, s.t1); };
+  // look & text
+  bindR("eBright",v=>{ e.bright=v; }); bindR("eContrast",v=>{ e.contrast=v; }); bindR("eSat",v=>{ e.sat=v; }); bindR("eWarm",v=>{ e.warmth=v; });
+  $("#eTitle").oninput=live(()=>{ sc.on_screen_text=$("#eTitle").value; const o=document.querySelector(`#o${i}`); if(o) o.value=sc.on_screen_text; });
+  $("#eTitlePos").onchange=live(()=>{ e.titlePos=$("#eTitlePos").value; });
+  bindR("eTitleSize",v=>{ e.titleSize=v; },v=>Math.round(v*100)+"%");
+  $("#eHideTitle").onchange=live(()=>{ e.hideTitle=$("#eHideTitle").checked; });
+  // audio
+  bindR("eVol",v=>{ e.voiceVol=v; },v=>Math.round(v*100)+"%");
+  bindR("gVoice",v=>{ G.voiceVol=v; },v=>Math.round(v*100)+"%");
+  bindR("gMusic",v=>{ G.musicVol=v; },v=>Math.round(v*100)+"%");
+  $("#gFadeIn").onchange=live(()=>{ G.fadeIn=$("#gFadeIn").checked; }); $("#gFadeOut").onchange=live(()=>{ G.fadeOut=$("#gFadeOut").checked; });
+  $("#eRegen").onclick=()=>regenVoice(i);
+  $("#eMic").onclick=()=>S.micRec ? S.micRec.stop() : recordVoice(i);
+  const ua=$("#eUseAI"); if(ua) ua.onclick=async()=>{ const a=ASSETS.get(sc.id)||{}; a.myVoice=false; ASSETS.set(sc.id,a); await regenVoice(i,true); };
+  $("#eHearLine").onclick=async()=>{ const a=ASSETS.get(sc.id); if(!a||!a.voice) return; const ctx=audioCtx(); await Promise.race([ctx.resume(),sleep(1500)]); const s=ctx.createBufferSource(); s.buffer=a.voice; const gn=ctx.createGain(); gn.gain.value=e.voiceVol*G.voiceVol; s.connect(gn); gn.connect(ctx.destination); s.start(); };
+  // whole video
+  $("#gCap").onchange=live(()=>{ G.capStyle=$("#gCap").value; });
+  bindR("gCapSize",v=>{ G.capSize=v; },v=>Math.round(v*100)+"%");
+  bindR("gCapPos",v=>{ G.capPos=v; },v=>Math.round(v*100)+"% down");
+  $("#gHideCaps").onchange=live(()=>{ G.hideCaps=$("#gHideCaps").checked; });
+  $("#gAccent").oninput=live(()=>{ G.accent=$("#gAccent").value; }); $("#gHi").oninput=live(()=>{ G.highlight=$("#gHi").value; });
+  $("#gCta").oninput=live(()=>{ S.job.cta=Object.assign({},S.job.cta||{}, {on_screen:$("#gCta").value}); });
+  $("#gReset").onclick=()=>{ const cta=S.job.cta; S.job.style=null; st(); S.job.cta=cta; saveLocal(); renderEditor(); };
+}
+async function regenVoice(i, keepMsg){
+  const sc=S.job.scenes[i], voice=$("#rVoice").value, txt=(sc.narration||"").trim(); if(!txt) return;
+  const b=$("#eRegen"); if(b){ b.disabled=true; b.textContent="Making a new take…"; }
+  try{
+    S.voices.delete(voice+"|"+txt);
+    const buf=await getVoice(txt, voice); const a=ASSETS.get(sc.id)||{}; a.voice=buf; a.bounds=speechBounds(buf); a.myVoice=false; ASSETS.set(sc.id,a);
+    relayout(); renderEditor(); if(!keepMsg) toast("New take ready. Press ▶ Hear line.");
+  }catch(e){ toast(e.message); if(b){ b.disabled=false; b.textContent="↻ New AI take of this line"; } }
+}
+async function recordVoice(i){
+  const sc=S.job.scenes[i];
+  let stream; try{ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}); }catch(e){ toast("Microphone not available or not allowed."); return; }
+  const rec=new MediaRecorder(stream); const chunks=[]; rec.ondataavailable=ev=>{ if(ev.data.size) chunks.push(ev.data); };
+  rec.onstop=async()=>{ stream.getTracks().forEach(t=>t.stop()); S.micRec=null;
+    try{ const buf=await audioCtx().decodeAudioData(await new Blob(chunks).arrayBuffer()); const a=ASSETS.get(sc.id)||{}; a.voice=buf; a.bounds=speechBounds(buf); a.myVoice=true; a.voiceText=sc.narration; ASSETS.set(sc.id,a); relayout(); toast("Your recording is in. Press ▶ Hear line."); }
+    catch(e){ toast("Couldn't use that recording."); }
+    renderEditor(); };
+  S.micRec=rec; rec.start(); renderEditor(); toast("Recording… read the line, then press Stop.");
 }
 
 // ---------------------------------------------------------------- drawing
@@ -810,88 +995,119 @@ function roundRect(g,x,y,w,h,r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x
 function wrap(g, text, maxW){ const words=String(text).split(/\s+/); const lines=[]; let cur=""; for(const w of words){ const t=cur?cur+" "+w:w; if(g.measureText(t).width>maxW && cur){ lines.push(cur); cur=w; } else cur=t; } if(cur) lines.push(cur); return lines; }
 function strokeText(g, text, x, y, lw){ g.lineJoin="round"; g.lineWidth=lw; g.strokeStyle="rgba(0,0,0,.85)"; g.strokeText(text,x,y); g.fillText(text,x,y); }
 
-function drawFrame(t){
-  const P=R.prepared; if(!P) return;
-  const cv=$("#cv"), g=cv.getContext("2d"), W=P.W, H=P.H, k=W/1080;
-  const scenes=P.scenes; let idx=scenes.findIndex(s=>t>=s.t0 && t<s.t1); if(idx<0) idx = t<0?0:scenes.length-1;
-  const s=scenes[idx], p=Math.max(0,Math.min(1,(t-s.t0)/s.dur)), last=idx===scenes.length-1;
-  g.fillStyle="#000"; g.fillRect(0,0,W,H);
-  if(s.image){
-    const im=s.image, z = 1.0+0.12*p, px = (idx%2===0?-1:1)*0.03*p;
-    const sc=Math.max(W/im.naturalWidth,H/im.naturalHeight)*z, dw=im.naturalWidth*sc, dh=im.naturalHeight*sc;
-    g.drawImage(im,(W-dw)/2+px*W,(H-dh)/2,dw,dh);
-  }else if(s.video && s.video.readyState>=2 && s.video.videoWidth){
-    const v=s.video, z = idx%2===0 ? 1+0.05*p : 1.05-0.05*p;
-    const sc=Math.max(W/v.videoWidth,H/v.videoHeight)*z, dw=v.videoWidth*sc, dh=v.videoHeight*sc;
-    g.drawImage(v,(W-dw)/2,(H-dh)/2,dw,dh);
-  }else{
-    const gr=g.createLinearGradient(0,0,W,H); gr.addColorStop(0,"#1B1F3A"); gr.addColorStop(1,"#A8321E"); g.fillStyle=gr; g.fillRect(0,0,W,H);
+// Draw one scene's picture (footage with its reframe, motion and colour edits)
+function drawMedia(g,s,idx,p,W,H,k){
+  const e=s.e;
+  const src = s.image || ((s.video && s.video.readyState>=2 && s.video.videoWidth) ? s.video : null);
+  if(!src){
+    const gr=g.createLinearGradient(0,0,W,H); gr.addColorStop(0,"#1B1F3A"); gr.addColorStop(1,st().accent||"#A8321E"); g.fillStyle=gr; g.fillRect(0,0,W,H);
     g.fillStyle="#fff"; g.textAlign="center"; g.textBaseline="middle"; g.font=`800 ${88*k}px "Bricolage Grotesque", sans-serif`;
     wrap(g,(s.sc.location||"").toUpperCase(),W-160*k).forEach((ln,i,a)=>g.fillText(ln,W/2,H*0.42+(i-(a.length-1)/2)*100*k));
+    g.textBaseline="alphabetic"; return;
   }
+  const sw=src.naturalWidth||src.videoWidth, sh=src.naturalHeight||src.videoHeight;
+  let m=e.motion; if(m==="auto") m = s.image ? (idx%2===0?"in":"out") : (idx%2===0?"in":"out");
+  const amt = s.image ? 0.12 : 0.05;
+  let z=e.zoom, px=e.panX, py=e.panY;
+  if(m==="in") z*=1+amt*p; else if(m==="out") z*=1+amt*(1-p); else if(m==="left") { z*=1.08; px+=0.6-1.2*p; } else if(m==="right"){ z*=1.08; px+=-0.6+1.2*p; }
+  const sc=Math.max(W/sw,H/sh)*z, dw=sw*sc, dh=sh*sc;
+  const x=(W-dw)/2 + Math.max(-1,Math.min(1,px))*(dw-W)/2, y=(H-dh)/2 + Math.max(-1,Math.min(1,py))*(dh-H)/2;
+  g.save();
+  g.filter=`brightness(${e.bright}) contrast(${e.contrast}) saturate(${e.sat})`;
+  g.drawImage(src,x,y,dw,dh);
+  g.restore();
+  if(e.warmth){ g.save(); g.globalCompositeOperation="soft-light"; g.fillStyle = e.warmth>0 ? `rgba(255,150,40,${0.45*e.warmth})` : `rgba(40,120,255,${-0.45*e.warmth})`; g.fillRect(0,0,W,H); g.restore(); }
+}
+function drawFrame(t){
+  const P=R.prepared; if(!P||!P.scenes.length) return;
+  const cv=$("#cv"), g=cv.getContext("2d"), W=P.W, H=P.H, k=W/1080, G=st();
+  const scenes=P.scenes; let idx=scenes.findIndex(s=>t>=s.t0 && t<s.t1); if(idx<0) idx = t<0?0:scenes.length-1;
+  const s=scenes[idx], p=Math.max(0,Math.min(1,(t-s.t0)/s.dur)), last=idx===scenes.length-1, e=s.e, into=t-s.t0;
+  g.fillStyle="#000"; g.fillRect(0,0,W,H);
+  if(e.transition==="fade" && idx>0 && into<0.5){
+    const pv=scenes[idx-1]; drawMedia(g,pv,idx-1,1,W,H,k);
+    g.save(); g.globalAlpha=Math.max(0,into/0.5); drawMedia(g,s,idx,p,W,H,k); g.restore();
+  } else drawMedia(g,s,idx,p,W,H,k);
   // legibility gradients
   let gr=g.createLinearGradient(0,0,0,H*0.28); gr.addColorStop(0,"rgba(0,0,0,.55)"); gr.addColorStop(1,"rgba(0,0,0,0)"); g.fillStyle=gr; g.fillRect(0,0,W,H*0.28);
   gr=g.createLinearGradient(0,H*0.5,0,H); gr.addColorStop(0,"rgba(0,0,0,0)"); gr.addColorStop(1,"rgba(0,0,0,.6)"); g.fillStyle=gr; g.fillRect(0,H*0.5,W,H*0.5);
   g.textAlign="center"; g.textBaseline="alphabetic";
   // scene title
   const title=(s.sc.on_screen_text||"").toUpperCase();
-  if(title && !last){
-    const a=Math.min(1,(t-s.t0)/0.25, (s.t1-t)/0.2); g.globalAlpha=Math.max(0,a);
-    g.fillStyle="#fff"; g.font=`800 ${86*k}px "Bricolage Grotesque", sans-serif`;
-    wrap(g,title,W-150*k).forEach((ln,i)=>strokeText(g,ln,W/2,300*k+i*96*k,12*k));
+  if(title && !last && !e.hideTitle){
+    const a=Math.min(1,into/0.25, (s.t1-t)/0.2); g.globalAlpha=Math.max(0,a);
+    const fs=86*k*e.titleSize; g.fillStyle="#fff"; g.font=`800 ${fs}px "Bricolage Grotesque", sans-serif`;
+    const lines=wrap(g,title,W-150*k); const y0 = e.titlePos==="middle" ? H*0.42-(lines.length-1)*fs*0.56 : e.titlePos==="bottom" ? H*0.80-(lines.length-1)*fs*1.12 : 300*k;
+    lines.forEach((ln,i)=>strokeText(g,ln,W/2,y0+i*fs*1.12,12*k*e.titleSize));
     g.globalAlpha=1;
   }
   if(s.representative){ g.textAlign="left"; g.font=`italic 500 ${30*k}px Figtree, sans-serif`; g.fillStyle="rgba(255,255,255,.85)"; g.fillText("Representative visuals", 44*k, H-60*k); g.textAlign="center"; }
-  // word-by-word captions (groups of three, current word highlighted)
+  // word-by-word captions
   const ws=s.words; let wi=-1; for(let i=0;i<ws.length;i++){ if(t>=ws[i].start) wi=i; }
-  if(wi>=0 && t < (ws[ws.length-1].end+0.3)){
+  if(!G.hideCaps && wi>=0 && t < (ws[ws.length-1].end+0.3)){
     const gs=Math.floor(wi/3)*3, grp=ws.slice(gs,gs+3);
-    g.font=`800 ${76*k}px "Bricolage Grotesque", sans-serif`;
-    const parts=grp.map(w=>w.text.toUpperCase()), sp=g.measureText(" ").width, widths=parts.map(x=>g.measureText(x).width);
+    const fs=(G.capStyle==="minimal"?60:76)*k*G.capSize;
+    g.font=`${G.capStyle==="minimal"?700:800} ${fs}px "Bricolage Grotesque", sans-serif`;
+    const parts=grp.map(w=>G.capStyle==="minimal"?w.text:w.text.toUpperCase()), sp=g.measureText(" ").width, widths=parts.map(x=>g.measureText(x).width);
     let tw=widths.reduce((a,b)=>a+b,0)+sp*(parts.length-1), scale=1; if(tw>W-100*k){ scale=(W-100*k)/tw; }
-    g.save(); g.translate(W/2,H*0.64); g.scale(scale,scale);
+    g.save(); g.translate(W/2,H*G.capPos); g.scale(scale,scale);
+    if(G.capStyle==="box"){ g.fillStyle="rgba(0,0,0,.72)"; roundRect(g,-tw/2-24*k,-fs*0.95,tw+48*k,fs*1.3,18*k); g.fill(); }
     let x=-tw/2; g.textAlign="left";
-    parts.forEach((w,i)=>{ g.fillStyle = (gs+i)===wi ? "#FFD23F" : "#fff"; strokeText(g,w,x,0,11*k); x+=widths[i]+sp; });
+    parts.forEach((w,i)=>{ g.fillStyle = (gs+i)===wi ? G.highlight : "#fff";
+      if(G.capStyle==="bold") strokeText(g,w,x,0,11*k); else { g.shadowColor="rgba(0,0,0,.7)"; g.shadowBlur=G.capStyle==="minimal"?12*k:0; g.fillText(w,x,0); g.shadowBlur=0; }
+      x+=widths[i]+sp; });
     g.restore(); g.textAlign="center";
   }
   // CTA on the last scene
   if(last){
-    const a=Math.max(0,Math.min(1,(t-s.t0-0.2)/0.3)); g.globalAlpha=a;
-    const cta=(P.cta.on_screen || `DM ${P.keyword} TO PLAN YOUR TRIP`).toUpperCase();
+    const a=Math.max(0,Math.min(1,(into-0.2)/0.3)); g.globalAlpha=a;
+    const cta=((S.job.cta&&S.job.cta.on_screen) || P.cta.on_screen || `DM ${P.keyword} TO PLAN YOUR TRIP`).toUpperCase();
     g.font=`800 ${60*k}px "Bricolage Grotesque", sans-serif`;
     const lines=wrap(g,cta,W-220*k), bh=(lines.length*72+56)*k, bw=Math.min(W-100*k, Math.max(...lines.map(l=>g.measureText(l).width))+100*k), by=H*0.74;
-    g.fillStyle="#A8321E"; roundRect(g,(W-bw)/2,by,bw,bh,28*k); g.fill();
+    g.fillStyle=G.accent; roundRect(g,(W-bw)/2,by,bw,bh,28*k); g.fill();
     g.fillStyle="#fff"; lines.forEach((ln,i)=>g.fillText(ln,W/2,by+(78+i*72)*k));
     g.font=`600 ${40*k}px Figtree, sans-serif`; strokeText(g,P.website,W/2,by+bh+64*k,6*k);
     g.globalAlpha=1;
   }
   if(R.logo){ const lw=190*k, lh=lw*(R.logo.naturalHeight/R.logo.naturalWidth||1); g.drawImage(R.logo,W-lw-44*k,56*k,lw,lh); }
-  // dip between scenes
-  const edge=Math.min(t-s.t0, s.t1-t); if(edge<0.12 && idx>0 && t-s.t0<0.12){ g.fillStyle=`rgba(0,0,0,${(1-edge/0.12)*0.6})`; g.fillRect(0,0,W,H); }
+  // transitions
+  if(idx>0 && into<0.15){
+    if(e.transition==="dip"){ g.fillStyle=`rgba(0,0,0,${(1-into/0.15)*0.65})`; g.fillRect(0,0,W,H); }
+    else if(e.transition==="flash"){ g.fillStyle=`rgba(255,255,255,${(1-into/0.15)*0.85})`; g.fillRect(0,0,W,H); }
+  }
 }
 
 // ---------------------------------------------------------------- playback / recording
 function stopPlayback(){ if(R.stopFn) R.stopFn(true); }
-async function play(record){
+async function play(record, from, until){
   const P=R.prepared; if(!P || R.playing) return;
   const ctx=audioCtx(); await Promise.race([ctx.resume(), sleep(1500)]);
   if(ctx.state!=="running"){ toast("Click the button again to allow sound."); return; }
+  const G=st();
+  const start = record ? 0 : Math.max(0, from!=null ? from : (R.scrub && R.scrub < P.total-0.5 ? R.scrub : 0));
+  const end = record ? P.total : (until!=null ? until : P.total);
   R.playing=true;
   const playBtn=$("#playBtn"), recBtn=$("#recBtn"), prepBtn=$("#prepBtn");
   playBtn.textContent = "■ Stop"; recBtn.disabled=true; prepBtn.disabled=true; if(record) playBtn.disabled=false;
+  // line every clip up at its in-point before starting
+  for(const s of P.scenes){ if(s.video){ s.video.pause(); s.video.playbackRate=s.e.speed; await seek(s.video, clipTimeAt(s, Math.max(s.t0, Math.min(start, s.t1-0.01)))); } }
   const master=ctx.createGain(); master.gain.value=1;
   const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-16; comp.ratio.value=3; master.connect(comp);
   comp.connect(ctx.destination);
   let dest=null, rec=null, chunks=[], mime="";
-  const T0=ctx.currentTime+0.35;
+  const T0=ctx.currentTime+0.35 - start;   // T0 = when timeline time 0 would have been
+  const now=ctx.currentTime+0.35;
   const sources=[];
-  for(const s of P.scenes){ if(!s.voice) continue; const src=ctx.createBufferSource(); src.buffer=s.voice; src.connect(master); src.start(T0+s.aStart); sources.push(src); }
-  if(P.musicBuf){
+  for(const s of P.scenes){ if(!s.voice) continue; const off=start-s.aStart; if(off>=s.voice.duration) continue;
+    const src=ctx.createBufferSource(); src.buffer=s.voice; const gn=ctx.createGain(); gn.gain.value=s.e.voiceVol*G.voiceVol; src.connect(gn); gn.connect(master);
+    if(off>0) src.start(now, off); else src.start(T0+s.aStart); sources.push(src); }
+  if(P.musicBuf && G.musicVol>0){
     const m=ctx.createBufferSource(); m.buffer=P.musicBuf; m.loop=true; const mg=ctx.createGain(); m.connect(mg); mg.connect(master);
-    const hi=0.3, lo=0.09; mg.gain.setValueAtTime(hi,T0);
-    for(const s of P.scenes){ if(!s.voice) continue; mg.gain.setTargetAtTime(lo,T0+s.aStart-0.1,0.08); mg.gain.setTargetAtTime(hi,T0+s.speechEnd+0.15,0.25); }
-    mg.gain.setTargetAtTime(0,T0+P.total-1.4,0.4);
-    m.start(T0); m.stop(T0+P.total+0.3); sources.push(m);
+    const hi=G.musicVol, lo=G.musicVol*0.3;
+    mg.gain.setValueAtTime(G.fadeIn&&start<0.1?0:hi,now); if(G.fadeIn&&start<0.1) mg.gain.linearRampToValueAtTime(hi,now+1.2);
+    for(const s of P.scenes){ if(!s.voice||s.speechEnd<start) continue; mg.gain.setTargetAtTime(lo,Math.max(now,T0+s.aStart-0.1),0.08); mg.gain.setTargetAtTime(hi,Math.max(now,T0+s.speechEnd+0.15),0.25); }
+    if(G.fadeOut) mg.gain.setTargetAtTime(0,T0+P.total-1.4,0.4);
+    m.start(now, start % P.musicBuf.duration); m.stop(T0+end+0.3); sources.push(m);
   }
   if(record){
     dest=ctx.createMediaStreamDestination(); comp.connect(dest);
@@ -904,28 +1120,35 @@ async function play(record){
     rec.start(500);
     setLog("Recording… keep this tab visible.");
   }
-  let cur=-1, aborted=false, raf=0;
+  let cur=-1, aborted=false, raf=0, prevStop=null;
   const onHide=()=>{ if(record && document.visibilityState==="hidden"){ aborted=true; finish(true); toast("Recording stopped because the tab was hidden. Record again and keep this tab visible."); } };
   document.addEventListener("visibilitychange",onHide);
   function finish(stoppedEarly){
     if(!R.playing) return; R.playing=false; cancelAnimationFrame(raf);
     document.removeEventListener("visibilitychange",onHide);
     sources.forEach(s=>{ try{ s.stop(); }catch(e){} });
-    P.scenes.forEach(s=>{ if(s.video){ s.video.pause(); seek(s.video,s.offset); } });
+    P.scenes.forEach(s=>{ if(s.video){ s.video.pause(); } });
     try{ master.disconnect(); comp.disconnect(); }catch(e){}
     playBtn.textContent="▶ Play preview"; recBtn.disabled=false; prepBtn.disabled=false;
     if(rec){
       rec.onstop=()=>{ if(aborted||stoppedEarly){ setLog("Recording cancelled."); return; } const blob=new Blob(chunks,{type:(mime||"video/webm").split(";")[0]}); showResult(blob, mime); };
       try{ rec.stop(); }catch(e){}
-    }else setLog("Preview finished.");
+    }else { setLog("Preview finished."); scrubTo(R.scrub||0); }
   }
   R.stopFn=finish;
   function loop(){
     const t=ctx.currentTime-T0;
-    if(t>=P.total+0.25){ finish(false); return; }
+    if(t>=end+(record?0.25:0)){ finish(false); return; }
     const idx=P.scenes.findIndex(s=>t>=s.t0&&t<s.t1);
-    if(idx!==cur && idx>=0){ const prev=P.scenes[cur]; if(prev&&prev.video) prev.video.pause(); const s=P.scenes[idx]; if(s.video){ s.video.play().catch(()=>{}); } cur=idx; }
-    drawFrame(Math.max(0,t)); setBar(Math.max(0,t)/P.total);
+    if(idx!==cur && idx>=0){
+      const prev=P.scenes[cur], s=P.scenes[idx];
+      if(prev&&prev.video){ if(s.e.transition==="fade"){ prevStop={v:prev.video, at:t+0.55}; } else prev.video.pause(); }
+      if(s.video){ s.video.playbackRate=s.e.speed; s.video.play().catch(()=>{}); }
+      cur=idx;
+    }
+    if(prevStop && t>=prevStop.at){ prevStop.v.pause(); prevStop=null; }
+    drawFrame(Math.max(start,t)); setBar(Math.max(0,t)/P.total);
+    if(!record){ R.scrub=t; const sl=$("#scrub"); if(sl) sl.value=t; }
     raf=requestAnimationFrame(loop);
   }
   raf=requestAnimationFrame(loop);
