@@ -208,6 +208,15 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:12px 0}
 .vrow.on{border-color:var(--ok)}
 .vdesc{white-space:normal!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .aihint.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+/* AI visual fit */
+.fitbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.fitbar .small{flex:1 1 220px;min-width:0}
+#fitReport{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+#fitReport:empty{display:none}
+.fithead{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.fitrow{border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--surface)}
+.fitlab{display:flex;gap:8px;align-items:center;font-weight:600;font-size:13.5px}
+.fitrow .aihost{margin-top:6px}
 </style>
 </head>
 <body>
@@ -926,6 +935,8 @@ function renderEditor(){
     <h3 style="margin-top:6px">2 · Edit</h3>
     <div class="scrubrow"><input type="range" id="scrub" min="0" max="${P.total.toFixed(2)}" step="0.05" value="${(R.scrub||0).toFixed(2)}" aria-label="Preview position"><span class="log" id="scrubLab"></span></div>
     <div class="strip" role="list">${S.job.scenes.map((x,k)=>{ const c=x.card?null:x.footage; return `<div class="chip2 ${k===i?"on":""}" role="listitem"><button class="pick" data-sel="${k}" aria-pressed="${k===i}">${thumbHtml(c,"")}<span>${k+1} · ${(P.scenes[k]?P.scenes[k].dur:0).toFixed(1)}s</span></button><div class="mv"><button data-mv="${k}:-1" ${k===0?"disabled":""} aria-label="Move scene ${k+1} earlier">◀</button><button data-mv="${k}:1" ${k===S.job.scenes.length-1?"disabled":""} aria-label="Move scene ${k+1} later">▶</button></div></div>`; }).join("")}</div>
+    <div class="fitbar"><button class="btn-sm primary" id="fitAll" ${S.fitBusy?"disabled":""}>✦ AI: fit visuals to the text (all scenes)</button><button class="btn-sm" id="fitOne" ${S.fitBusy?"disabled":""}>Check scene ${i+1} only</button><span class="small muted" id="fitStatus">${esc(S.fitStatus||"Looks at the real frames of each clip and fixes framing, timing and looks to match the narration and title.")}</span></div>
+    <div id="fitReport"></div>
     <div class="tabs2" role="tablist">${["Clip","Look & text","Audio","Whole video"].map((t,k)=>`<button role="tab" data-tab="${k}" aria-selected="${(S.editTab||0)===k}">${t}</button>`).join("")}</div>
     <div class="insp">
       <div data-pane="0" ${(S.editTab||0)===0?"":"hidden"}>
@@ -977,6 +988,9 @@ function renderEditor(){
     </div>`;
   bindEditor();
   const eh=$("#editChat"); if(eh) mountChat(eh, eh.dataset.key, editDef(S.editTab||0));
+  renderFitReport();
+  $("#fitAll").onclick=()=>runFit(S.job.scenes.map((_,k)=>k));
+  $("#fitOne").onclick=()=>runFit([S.editSel||0]);
   scrubTo(R.scrub||0);
 }
 function bindEditor(){
@@ -1565,16 +1579,17 @@ function bindChat(box, key){
   });
   const list=q(".aimsgs"); if(list) list.scrollTop=list.scrollHeight;
 }
-async function sendChat(key, text){
+async function sendChat(key, text, prompt){
   text=String(text||"").trim(); const st=S.chats[key]; const def=S.chatDefs[key];
   if(!text||st.busy) return;
-  st.msgs.push({role:"user",text}); st.draft=""; st.busy=true; refreshChat(key);
+  st.msgs.push(prompt?{role:"user",text,prompt}:{role:"user",text}); st.draft=""; st.busy=true; refreshChat(key);
   try{
     const fields=def.fields().map(f=>({key:f.key,label:f.label+(f.note?` (${f.note})`:""),type:f.type==="bool"?"true/false":f.type,min:f.min,max:f.max,options:f.options}));
     const current=Object.fromEntries(def.fields().map(f=>[f.key,f.get()]));
     const body={ scope:def.title, context:Object.assign({current_values:current}, def.context()), fields,
-      messages: st.msgs.slice(-14).map(m=>({role:m.role, text:m.role==="ai"&&m.changes&&m.changes.length? m.text+"\n[suggested: "+m.changes.map(c=>c.key+"="+c.value).join(", ")+(m.applied===true?" — user applied":m.applied?" — user did not apply":"")+"]" : m.text})) };
+      messages: st.msgs.slice(-14).map(m=>({role:m.role, text:m.role==="ai"&&m.changes&&m.changes.length? m.text+"\n[suggested: "+m.changes.map(c=>c.key+"="+c.value).join(", ")+(m.applied===true?" — user applied":m.applied?" — user did not apply":"")+"]" : (m.prompt||m.text)})) };
     if(def.image){ const im=snapshot(); if(im) body.image=im; }
+    if(def.images){ const ims=await def.images(); if(ims.length){ body.images=ims.map(x=>x.b64); body.image_labels=ims.map(x=>x.label); } }
     const r=await api("assist", body);
     st.msgs.push({role:"ai", text:r.reply||"(no answer)", changes:Array.isArray(r.changes)?r.changes:[]});
   }catch(e){ st.msgs.push({role:"ai", text:"Sorry, I couldn't reach the AI: "+e.message, changes:[]}); }
@@ -1619,8 +1634,8 @@ function captionDef(){
     context:()=>({ video:jobBrief(), credits:creditsText(), note:"Credits are appended automatically when copying; keep the caption under about 150 words with 5-10 hashtags." }),
     after:()=>{ const c=$("#caption"); if(c) c.value=captionText(); } };
 }
-function editDef(tab){
-  const i=S.editSel||0, sc=()=>S.job.scenes[i], e=()=>ed(sc()), G=()=>st();
+function editDef(tab, idx){
+  const i=idx!=null?idx:(S.editSel||0), sc=()=>S.job.scenes[i], e=()=>ed(sc()), G=()=>st();
   const ps=()=>R.prepared&&R.prepared.scenes[i];
   const titles=["the clip","look & text","audio","the whole video"];
   const sceneCtx=()=>{ const s=sc(), p=ps(), a=ASSETS.get(s.id)||{}; return { video:jobBrief(), total_seconds:R.prepared?+R.prepared.total.toFixed(1):null,
@@ -1673,6 +1688,96 @@ function editDef(tab){
   return { kind:["clip","look","audio","whole"][tab], title: tab===3?titles[3]:`${titles[tab]} of scene ${i+1}`, image:true, fields,
     context: tab===3 ? ()=>({ video:jobBrief(), total_seconds:R.prepared?+R.prepared.total.toFixed(1):null, style:G(), scenes_edit:S.job.scenes.map((s,k)=>({n:k+1, edit:ed(s)})) }) : sceneCtx,
     after };
+}
+
+// ================================================================ AI VISUAL FIT (match each scene's footage to its narration and title)
+const FIT_PROMPT = `Check whether this scene's visuals actually show what its narration and on-screen title say.
+FRAME images are from the current clip (full source frames; the video shows a 9:16 crop of them). PREVIEW is the rendered 9:16 frame with the title and captions as they look now. CANDIDATE images are other footage choices for this scene.
+Reply format: start with "VERDICT: good" or "VERDICT: weak" or "VERDICT: wrong", then " · SCORE: n/10", then 1-3 short sentences: what is visible, and whether it fits the text.
+Then propose changes only where they clearly help:
+- start: the clip time (from a FRAME label) that best shows what the narration talks about;
+- zoom / panX / panY so the subject named in the text sits inside the 9:16 crop and is not covered by the title (top area) or the captions (lower middle);
+- motion that suits the line; transition only if the current one jars;
+- titlePos away from the subject; titleSize if the title is cramped;
+- bright / contrast / sat / warmth only for clear problems (too dark, washed out, colour cast);
+- title: only if the visible subject clearly differs from the title, and keep it truthful (1-4 words);
+- footage_cid: a CANDIDATE that clearly shows the place in the text better (say why). Never pick footage of a different place.
+If the scene already fits well, say so and return few or no changes.`;
+async function frameB64(src, w, h, maxSide){
+  const k=Math.min(1, maxSide/Math.max(w||1,h||1)); const c=document.createElement("canvas"); c.width=Math.max(1,Math.round(w*k)); c.height=Math.max(1,Math.round(h*k));
+  c.getContext("2d").drawImage(src,0,0,c.width,c.height); return c.toDataURL("image/jpeg",0.72).split(",")[1]||"";
+}
+async function fitImages(i){
+  const sc=S.job.scenes[i], a=ASSETS.get(sc.id)||{}, P=R.prepared, ps=P&&P.scenes[i]; const out=[];
+  try{
+    if(a.video){
+      const v=a.video, len=v.duration||0, n=len>8?6:len>3?4:2;
+      for(let k=0;k<n;k++){ const t=Math.max(0,Math.min(len-0.1,(len*(k+0.5))/n)); await seek(v,t);
+        out.push({label:`FRAME ${k+1}: current clip at ${t.toFixed(1)}s of ${len.toFixed(1)}s (full source frame ${v.videoWidth}x${v.videoHeight})`, b64:await frameB64(v,v.videoWidth,v.videoHeight,384)}); }
+    } else if(a.image){
+      out.push({label:`PHOTO: the current scene photo (full source ${a.image.naturalWidth}x${a.image.naturalHeight}; shown as a 9:16 crop with slow motion)`, b64:await frameB64(a.image,a.image.naturalWidth,a.image.naturalHeight,448)});
+    }
+    if(ps){ await scrubTo(ps.t0+Math.min(ps.dur*0.45,2.2)); const pv=snapshot(); if(pv) out.push({label:"PREVIEW: current rendered 9:16 frame with the title and captions", b64:pv}); }
+  }catch(e){}
+  const cands=(sc.candidates||[]).filter(c=>!c._rejected && !(sc.footage&&c.cid===sc.footage.cid) && (c.thumbnail||c.local_thumb)).slice(0,5);
+  for(const c of cands){
+    try{ const blob = c.local_thumb ? await (await fetch(c.local_thumb)).blob() : await api("media",{url:c.thumbnail},true);
+      const bm=await createImageBitmap(blob);
+      out.push({label:`CANDIDATE footage_cid=${c.cid} (${c.kind} from ${c.source}${c.verified?", approved before for this place":""}): ${String(c.desc||"").slice(0,120)}`, b64:await frameB64(bm,bm.width,bm.height,256)});
+    }catch(e){}
+  }
+  return out;
+}
+function fitDef(i){
+  const sc=()=>S.job.scenes[i], clipD=editDef(0,i), lookD=editDef(1,i);
+  return { kind:"clip", title:`scene ${i+1} visuals vs text`, image:false, images:()=>fitImages(i),
+    fields:()=>{ const f=[...clipD.fields(), ...lookD.fields()]; const fc=sceneFields(sc()).find(x=>x.key==="footage_cid"); if(fc) f.push(Object.assign({},fc,{label:"Swap to CANDIDATE footage (footage_cid from a CANDIDATE label)"})); return f; },
+    context:()=>clipD.context(),
+    after:(keys)=>{ if(keys.includes("footage_cid")){ invalidate(); renderScenes(); updateCredits(); toast("Footage swapped. Approve it in Scenes & footage, then Prepare again."); return; } relayout(); renderEditor(); } };
+}
+function fitVerdict(key){
+  const st=S.chats[key]; if(!st) return null; const m=[...st.msgs].reverse().find(x=>x.role==="ai"); if(!m) return st.busy?{v:"checking"}:null;
+  const v=(m.text.match(/VERDICT:\s*(good|weak|wrong)/i)||[])[1]; const s=(m.text.match(/SCORE:\s*(\d+)/i)||[])[1];
+  return {v:v?v.toLowerCase():"?", s:s?+s:null};
+}
+function renderFitReport(){
+  const box=$("#fitReport"); if(!box||!S.job) return;
+  const rows=S.job.scenes.map((sc,i)=>({sc,i,key:"fit:"+sc.id})).filter(r=>S.chats[r.key]);
+  if(!rows.length){ box.innerHTML=""; return; }
+  const pending=rows.filter(r=>{ const st=S.chats[r.key]; const m=[...st.msgs].reverse().find(x=>x.role==="ai"); return m&&!m.applied&&(m.changes||[]).length; }).length;
+  box.innerHTML=`<div class="fithead"><b>AI fit report</b><span class="small muted">${rows.length} scene${rows.length===1?"":"s"} checked</span>${pending?`<button class="btn-sm primary" id="fitApplyAll">Apply all suggested fixes (${pending} scene${pending===1?"":"s"})</button>`:""}<button class="linkish" id="fitClear">Clear report</button></div>`+
+    rows.map(r=>{ const fv=fitVerdict(r.key)||{}; const cls=fv.v==="good"?"ok":fv.v==="wrong"?"bad":fv.v==="weak"?"warn":"";
+      return `<div class="fitrow"><div class="fitlab"><button class="linkish" data-fitgo="${r.i}">Scene ${r.i+1} · ${esc(r.sc.location||"")}</button> <span class="pill ${cls}">${fv.v==="checking"?"checking…":fv.v?esc(fv.v)+(fv.s!=null?" · "+fv.s+"/10":""):""}</span></div><div class="aihost" data-key="${esc(r.key)}"></div></div>`; }).join("");
+  box.querySelectorAll(".aihost").forEach(h=>{ const i=S.job.scenes.findIndex(s=>"fit:"+s.id===h.dataset.key); if(i>=0) mountChat(h,h.dataset.key,S.chatDefs[h.dataset.key]||fitDef(i)); });
+  box.querySelectorAll("[data-fitgo]").forEach(b=>b.onclick=()=>{ S.editSel=+b.dataset.fitgo; R.scrub=R.prepared.scenes[S.editSel].t0+0.3; renderEditor(); });
+  const ap=$("#fitApplyAll"); if(ap) ap.onclick=applyAllFit;
+  const cl=$("#fitClear"); if(cl) cl.onclick=()=>{ S.job.scenes.forEach(sc=>{ delete S.chats["fit:"+sc.id]; }); renderFitReport(); };
+}
+function applyAllFit(){
+  let n=0, swaps=0;
+  S.job.scenes.forEach((sc,i)=>{
+    const key="fit:"+sc.id, st=S.chats[key]; if(!st) return; const m=[...st.msgs].reverse().find(x=>x.role==="ai"); if(!m||m.applied||!(m.changes||[]).length) return;
+    const def=S.chatDefs[key]||fitDef(i); const fmap=Object.fromEntries(def.fields().map(f=>[f.key,f])); const undo=[], before={};
+    for(const c of m.changes){ const f=fmap[c.key]; if(!f) continue; if(c.key==="footage_cid"){ swaps++; continue; } const v=coerce(f,c.value); if(v===undefined) continue; before[c.key]=f.get(); undo.push([c.key,f.get()]); f.set(v); n++; }
+    m.applied=true; m.undo=undo; m.before=before;
+  });
+  saveLocal(); relayout(); renderEditor();
+  toast(`Applied ${n} fix${n===1?"":"es"}${swaps?`. ${swaps} footage swap${swaps===1?"":"s"} left for you to decide`:""}.`);
+}
+async function runFit(indices){
+  if(S.fitBusy||!R.prepared) return; if(R.playing) stopPlayback();
+  S.fitBusy=true; const keep=R.scrub||0; const todo=indices.filter(i=>!S.job.scenes[i].card);
+  try{
+    for(let k=0;k<todo.length;k++){
+      const i=todo[k], key="fit:"+S.job.scenes[i].id;
+      S.chats[key]={open:true,msgs:[],draft:""}; S.chatDefs=S.chatDefs||{}; S.chatDefs[key]=fitDef(i);
+      S.fitStatus=`Checking scene ${i+1} (${k+1} of ${todo.length})…`; const fs=$("#fitStatus"); if(fs) fs.textContent=S.fitStatus;
+      renderFitReport();
+      await sendChat(key, "Check how this scene's visuals fit its narration and title.", FIT_PROMPT);
+      renderFitReport();
+    }
+    S.fitStatus=`Checked ${todo.length} scene${todo.length===1?"":"s"}. Review the suggestions below.`;
+  }finally{ S.fitBusy=false; const fs=$("#fitStatus"); if(fs) fs.textContent=S.fitStatus||""; await scrubTo(keep); renderFitReport(); }
 }
 
 boot();
