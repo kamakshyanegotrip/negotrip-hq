@@ -192,6 +192,14 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:12px 0}
 .aihint{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;font-size:12px;padding:5px 10px;cursor:pointer}
 .aiform{display:flex;gap:6px;align-items:flex-end}
 .aiform textarea{flex:1;min-height:40px;font-size:14px;resize:vertical}
+/* free music */
+.mlist{display:flex;flex-direction:column;gap:6px;max-height:min(56vh,520px);overflow:auto;margin-top:8px}
+.mrow{display:grid;grid-template-columns:36px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.mrow.on{border-color:var(--ok)}
+.mplay{width:36px;height:36px;border-radius:50%;border:0;background:var(--ink);color:var(--surface);cursor:pointer;font-size:13px}
+.minfo{min-width:0}.minfo .mt{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.minfo .small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:560px){.mrow{grid-template-columns:36px minmax(0,1fr) auto}.mrow .pill{display:none}}
 </style>
 </head>
 <body>
@@ -451,7 +459,7 @@ function renderJob(){
   <div class="card">
     <h2>Caption for posting</h2>
     <textarea id="caption" style="min-height:110px">${esc(captionText())}</textarea>
-    <div class="field" style="margin-top:10px"><label class="small muted" for="credits">Footage credits (added when you copy the caption)</label><textarea id="credits" readonly style="min-height:56px;font-size:13px"></textarea></div>
+    <div class="field" style="margin-top:10px"><label class="small muted" for="credits">Footage and music credits (added when you copy the caption)</label><textarea id="credits" readonly style="min-height:56px;font-size:13px"></textarea></div>
     <div class="btns" style="margin-top:8px"><button class="btn-sm" id="copyCap">Copy caption + credits</button><button class="btn-sm" id="dlJob">Download job file (for the PC renderer)</button></div>
     <div class="aihost" data-key="caption"></div>
   </div>
@@ -468,7 +476,7 @@ function renderJob(){
         <div class="btns" style="margin:-4px 0 12px"><button class="btn-sm" id="hearVoice">▶ Hear this voice</button></div>
         <div>
           <div class="field"><label for="rLogo">Logo <span class="muted">(PNG)</span></label><input type="file" id="rLogo" accept="image/png,image/svg+xml,image/webp"><div class="hint" id="logoHint"></div></div>
-          <div class="field"><label for="rMusic">Music <span class="muted">(licensed MP3)</span></label><input type="file" id="rMusic" accept="audio/*"><div class="hint" id="musicHint"></div></div>
+          <div class="field"><label for="rMusic">Music <span class="muted">(free library or your own file)</span></label><div class="btns" style="margin-bottom:6px"><button class="btn-sm primary" id="findMusic" type="button">🎵 Find free music</button></div><input type="file" id="rMusic" accept="audio/*"><div class="hint" id="musicHint"></div></div>
         </div>
         <div class="btns"><button class="btn" id="prepBtn">1 · Prepare preview</button><button class="btn ghost" id="playBtn" disabled>▶ Play preview</button><button class="btn" id="recBtn" disabled>2 · Record video</button></div>
         <div class="bar"><i id="barFill"></i></div>
@@ -581,7 +589,7 @@ function modal(html){
   let m=$("#modal"); if(!m){ m=document.createElement("div"); m.id="modal"; m.className="modal"; m.setAttribute("role","dialog"); m.setAttribute("aria-modal","true"); document.body.appendChild(m); m.addEventListener("click",e=>{ if(e.target===m) closeModal(); }); document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); }); }
   m.innerHTML=`<div class="modal-card">${html}</div>`; m.hidden=false; return m;
 }
-function closeModal(){ const m=$("#modal"); if(m){ m.querySelectorAll("video").forEach(v=>v.pause()); m.hidden=true; m.innerHTML=""; } }
+function closeModal(){ if(typeof stopMusicPreview==="function") stopMusicPreview(); const m=$("#modal"); if(m){ m.querySelectorAll("video").forEach(v=>v.pause()); m.hidden=true; m.innerHTML=""; } }
 async function openPreview(i, c){
   const sc=S.job.scenes[i];
   const m=modal(`<div class="mhead"><b>Scene ${i+1}: ${esc(sc.location||"")}</b><button class="btn-sm" data-close>Close</button></div>
@@ -677,7 +685,9 @@ function creditsText(){
     if(c.attribution_required || c.source==="Wikimedia Commons") lines.push(`${c.credit||"Unknown"} / Wikimedia Commons, ${c.licence}${c.licence_url?" ("+c.licence_url+")":""}`);
     else if(c.credit) lines.push(`${c.credit} / ${c.source}`);
   }
-  return lines.length ? "Footage: "+lines.join("; ") : "";
+  const out=[]; if(lines.length) out.push("Footage: "+lines.join("; "));
+  const mc=(typeof musicCredit==="function")?musicCredit():""; if(mc) out.push(mc);
+  return out.join("\n");
 }
 function updateCredits(){ const el=$("#credits"); if(el) el.value=creditsText(); }
 function bindJob(){
@@ -704,21 +714,24 @@ async function initRenderPanel(){
   $("#rQual").addEventListener("change",e=>{ store.set("quality",e.target.value); invalidate(); });
   $("#hearVoice").addEventListener("click",hearVoice);
   $("#rLogo").addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return; await idb.set("logo",f); R.logo=await loadImage(f); showAssetHints(); invalidate(); });
-  $("#rMusic").addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return; await idb.set("music",f); R.music=f; showAssetHints(); invalidate(); });
+  $("#rMusic").addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return; await idb.set("music",f); R.music=f; R.musicMeta={source:"own", title:f.name}; await idb.set("musicMeta",R.musicMeta); if(S.job){ S.job.music=R.musicMeta; saveLocal(); } showAssetHints(); updateCredits(); invalidate(); });
+  $("#findMusic").addEventListener("click",openMusic);
   $("#prepBtn").addEventListener("click",prepare);
   $("#playBtn").addEventListener("click",()=>R.playing?stopPlayback():play(false));
   $("#recBtn").addEventListener("click",()=>play(true));
   if(!R.logo){ const f=await idb.get("logo"); if(f) try{ R.logo=await loadImage(f); R.logoName=f.name; }catch(e){} }
-  if(!R.music){ const f=await idb.get("music"); if(f) R.music=f; }
+  if(!R.music){ const f=await idb.get("music"); if(f){ R.music=f; R.musicMeta=(await idb.get("musicMeta"))||{source:"own",title:f.name||"saved track"}; } }
+  updateCredits();
   showAssetHints();
   drawPoster();
 }
 function showAssetHints(){
   const lh=$("#logoHint"), mh=$("#musicHint");
   if(lh) lh.innerHTML = R.logo ? `Using saved logo · <button class="linkbtn btn-sm" id="clrLogo" style="height:24px">Remove</button>` : "Optional. Remembered on this device.";
-  if(mh) mh.innerHTML = R.music ? `Using ${esc(R.music.name||"saved track")} · <button class="btn-sm" id="clrMusic" style="height:24px">Remove</button>` : "Optional. Use tracks you have the rights to.";
+  const mm=R.musicMeta||{};
+  if(mh) mh.innerHTML = R.music ? (mm.source==="free" ? `Using “${esc(mm.title)}”${mm.creator?" by "+esc(mm.creator):""} · ${esc(mm.licence||"")}${mm.attribution_required?" (credit added to caption)":""} · <button class="btn-sm" id="clrMusic" style="height:24px">Remove</button>` : `Using ${esc(mm.title||R.music.name||"saved track")} · <button class="btn-sm" id="clrMusic" style="height:24px">Remove</button>`) : "Optional. Pick a free track, or upload one you have the rights to.";
   const cl=$("#clrLogo"); if(cl) cl.onclick=async()=>{ R.logo=null; await idb.set("logo",null); showAssetHints(); invalidate(); };
-  const cm=$("#clrMusic"); if(cm) cm.onclick=async()=>{ R.music=null; await idb.set("music",null); showAssetHints(); invalidate(); };
+  const cm=$("#clrMusic"); if(cm) cm.onclick=async()=>{ R.music=null; R.musicMeta=null; await idb.set("music",null); await idb.set("musicMeta",null); if(S.job){ S.job.music=null; saveLocal(); } showAssetHints(); updateCredits(); invalidate(); };
 }
 function loadImage(file){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=URL.createObjectURL(file); }); }
 function audioCtx(){ if(!R.ctx || R.ctx.state==="closed") R.ctx=new (window.AudioContext||window.webkitAudioContext)(); return R.ctx; }
@@ -799,7 +812,7 @@ function ed(sc){
   return sc.edit;
 }
 function st(){
-  const d = {capStyle:"bold", capPos:0.64, capSize:1, hideCaps:false, accent:"#A8321E", highlight:"#FFD23F", musicVol:0.3, voiceVol:1, fadeIn:true, fadeOut:true};
+  const d = {capStyle:"bold", capPos:0.64, capSize:1, hideCaps:false, accent:"#A8321E", highlight:"#FFD23F", musicVol:0.3, voiceVol:1, fadeIn:true, fadeOut:true, musicStart:0};
   if(!S.job.style) S.job.style={};
   for(const k in d) if(!(k in S.job.style)) S.job.style[k]=d[k];
   return S.job.style;
@@ -932,6 +945,7 @@ function renderEditor(){
         <hr class="sep">
         ${rng("gVoice","All voices",0,2,0.05,G.voiceVol,v=>Math.round(v*100)+"%")}
         ${rng("gMusic","Music",0,1,0.02,G.musicVol,v=>Math.round(v*100)+"%")}
+        ${P.musicBuf?rng("gMusicStart","Music starts from (s into the track)",0,Math.max(0,Math.floor(P.musicBuf.duration-5)),1,G.musicStart||0,v=>fmtDur(+v)):`<p class="small muted" style="margin:0 0 10px">No music yet. <button class="linkish" id="eFindMusic">Find free music</button></p>`}
         <label class="small" style="margin-right:14px"><input type="checkbox" id="gFadeIn" ${G.fadeIn?"checked":""}> Fade music in</label>
         <label class="small"><input type="checkbox" id="gFadeOut" ${G.fadeOut?"checked":""}> Fade music out</label>
       </div>
@@ -978,6 +992,8 @@ function bindEditor(){
   bindR("eVol",v=>{ e.voiceVol=v; },v=>Math.round(v*100)+"%");
   bindR("gVoice",v=>{ G.voiceVol=v; },v=>Math.round(v*100)+"%");
   bindR("gMusic",v=>{ G.musicVol=v; },v=>Math.round(v*100)+"%");
+  bindR("gMusicStart",v=>{ G.musicStart=v; },v=>fmtDur(+v));
+  const efm=$("#eFindMusic"); if(efm) efm.onclick=openMusic;
   $("#gFadeIn").onchange=live(()=>{ G.fadeIn=$("#gFadeIn").checked; }); $("#gFadeOut").onchange=live(()=>{ G.fadeOut=$("#gFadeOut").checked; });
   $("#eRegen").onclick=()=>regenVoice(i);
   $("#eMic").onclick=()=>S.micRec ? S.micRec.stop() : recordVoice(i);
@@ -1134,7 +1150,7 @@ async function play(record, from, until){
     mg.gain.setValueAtTime(G.fadeIn&&start<0.1?0:hi,now); if(G.fadeIn&&start<0.1) mg.gain.linearRampToValueAtTime(hi,now+1.2);
     for(const s of P.scenes){ if(!s.voice||s.speechEnd<start) continue; mg.gain.setTargetAtTime(lo,Math.max(now,T0+s.aStart-0.1),0.08); mg.gain.setTargetAtTime(hi,Math.max(now,T0+s.speechEnd+0.15),0.25); }
     if(G.fadeOut) mg.gain.setTargetAtTime(0,T0+P.total-1.4,0.4);
-    m.start(now, start % P.musicBuf.duration); m.stop(T0+end+0.3); sources.push(m);
+    m.start(now, ((+G.musicStart||0) + start) % P.musicBuf.duration); m.stop(T0+end+0.3); sources.push(m);
   }
   if(record){
     dest=ctx.createMediaStreamDestination(); comp.connect(dest);
@@ -1194,6 +1210,91 @@ function showResult(blob, mime){
   setBar(1);
 }
 
+// ================================================================ FREE MUSIC (Openverse: Jamendo, Freesound, Wikimedia, ccMixter)
+// Only CC0, public-domain and CC BY tracks are offered: all allow commercial use and editing. CC BY needs a credit (added automatically).
+const MOODS = {
+  Spiritual:["devotional","meditation","flute","sitar","temple","ambient"],
+  Heritage:["sitar","cinematic","epic","tabla","classical","orchestral"],
+  Beach:["chill","ocean","tropical","acoustic","summer","lounge"],
+  Discovery:["travel","adventure","upbeat","cinematic","acoustic","world"],
+  "Weekend getaway":["upbeat","happy","acoustic","pop","fun","road trip"],
+  _:["travel","indian","sitar","flute","tabla","cinematic","upbeat","calm","ambient","devotional"]
+};
+const MUSIC = { q:"", length:"", page:1, results:[], total:0, pages:1, busy:false, audio:null, playing:null };
+function musicCredit(){
+  const m=R.musicMeta; if(!R.music||!m||m.source!=="free") return "";
+  const by = m.creator?` by ${m.creator}`:"";
+  return `Music: "${m.title}"${by} (${m.provider_label||m.provider||"Openverse"}), ${m.licence}${m.licence_url?" ("+m.licence_url+")":""}`;
+}
+const PROV = { jamendo:"Jamendo", freesound:"Freesound", wikimedia_audio:"Wikimedia Commons", ccmixter:"ccMixter" };
+function fmtDur(s){ if(!s&&s!==0) return ""; s=Math.round(s); return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; }
+function stopMusicPreview(){ if(MUSIC.audio){ try{ MUSIC.audio.pause(); }catch(e){} } MUSIC.playing=null; document.querySelectorAll("[data-mplay]").forEach(b=>{ b.textContent="▶"; b.setAttribute("aria-label","Play preview"); }); }
+async function musicBlob(url){
+  if(S.media.has("blob:"+url)) return S.media.get("blob:"+url);
+  const b = await api("media",{url},true);
+  S.media.set("blob:"+url,b); return b;
+}
+function openMusic(){
+  const angle=(S.job&&S.job.request&&S.job.request.angle)||"";
+  const moods=MOODS[angle]||MOODS._;
+  if(!MUSIC.q){ MUSIC.q=moods[0]; }
+  modal(`<div class="mhead"><div><b>Free music</b><div class="small muted">CC0, public domain and CC BY tracks from Jamendo, Freesound, Wikimedia and ccMixter. All allow use in ads; CC BY needs the credit we add for you.</div></div><button class="btn-sm" data-close aria-label="Close">✕</button></div>
+    <form class="searchrow" id="mSearch" style="margin-top:12px"><input type="text" id="mQ" value="${esc(MUSIC.q)}" placeholder="One or two words work best, e.g. sitar, calm flute" aria-label="Search free music">
+      <select id="mLen" aria-label="Length" style="width:auto"><option value="">Any length</option><option value="short" ${MUSIC.length==="short"?"selected":""}>Short</option><option value="medium" ${MUSIC.length==="medium"?"selected":""}>Medium</option><option value="long" ${MUSIC.length==="long"?"selected":""}>Long</option></select>
+      <button class="btn-sm primary">Search</button></form>
+    <div class="aihints" style="margin:8px 0 4px">${[...new Set([...moods,...MOODS._])].slice(0,12).map(m=>`<button class="aihint" data-mood="${esc(m)}">${esc(m)}</button>`).join("")}</div>
+    <div id="mList" class="mlist" aria-live="polite"></div>
+    <div id="mMore"></div>`);
+  const m=$("#modal");
+  m.querySelector("[data-close]").onclick=()=>{ stopMusicPreview(); closeModal(); };
+  $("#mSearch").onsubmit=e=>{ e.preventDefault(); MUSIC.q=$("#mQ").value.trim(); MUSIC.length=$("#mLen").value; musicSearch(1); };
+  m.querySelectorAll("[data-mood]").forEach(b=>b.onclick=()=>{ $("#mQ").value=b.dataset.mood; MUSIC.q=b.dataset.mood; musicSearch(1); });
+  if(MUSIC.results.length) renderMusic(); else musicSearch(1);
+}
+async function musicSearch(page){
+  if(MUSIC.busy) return; MUSIC.busy=true; stopMusicPreview();
+  const list=$("#mList"); if(list && page===1) list.innerHTML=`<p class="small muted">Searching…</p>`;
+  try{
+    const r=await api("music",{query:MUSIC.q||"instrumental", length:MUSIC.length, page});
+    if(r.error) throw new Error(r.error);
+    MUSIC.results = page===1 ? (r.tracks||[]) : MUSIC.results.concat(r.tracks||[]);
+    MUSIC.page=page; MUSIC.total=r.total||0; MUSIC.pages=r.page_count||1;
+  }catch(e){ if(list) list.innerHTML=`<p class="small muted">Couldn't search music: ${esc(e.message)}. Try again.</p>`; MUSIC.busy=false; return; }
+  MUSIC.busy=false; renderMusic();
+}
+function renderMusic(){
+  const list=$("#mList"); if(!list) return;
+  const cur=R.musicMeta&&R.musicMeta.id;
+  list.innerHTML = MUSIC.results.length ? MUSIC.results.map((t,k)=>`<div class="mrow ${cur===t.id?"on":""}">
+      <button class="mplay" data-mplay="${k}" aria-label="Play preview">▶</button>
+      <div class="minfo"><div class="mt">${esc(t.title)}</div><div class="small muted">${esc(t.creator||"Unknown artist")} · ${esc(PROV[t.provider]||t.provider)} · ${fmtDur(t.duration_sec)}${(t.tags||t.genres||[]).length?` · ${esc([...(t.genres||[]),...(t.tags||[])].slice(0,4).join(", "))}`:""}</div></div>
+      <span class="pill ${t.attribution_required?"warn":"ok"}">${esc(t.licence)}</span>
+      <button class="btn-sm ${cur===t.id?"":"primary"}" data-muse="${k}" ${cur===t.id?"disabled":""}>${cur===t.id?"In use ✓":"Use"}</button>
+    </div>`).join("") : `<p class="small muted">No tracks found. Try a single word like "sitar", "flute" or "ambient".</p>`;
+  const more=$("#mMore"); if(more) more.innerHTML = MUSIC.page<MUSIC.pages && MUSIC.results.length ? `<button class="btn-sm" id="mNext" style="margin-top:10px">Show more (${MUSIC.total} found)</button>` : "";
+  const nx=$("#mNext"); if(nx) nx.onclick=()=>{ nx.disabled=true; nx.textContent="Loading…"; musicSearch(MUSIC.page+1); };
+  list.querySelectorAll("[data-mplay]").forEach(b=>b.onclick=async()=>{
+    const k=+b.dataset.mplay, t=MUSIC.results[k];
+    if(MUSIC.playing===k){ stopMusicPreview(); return; }
+    stopMusicPreview(); b.textContent="…";
+    try{ const blob=await musicBlob(t.url); if(!MUSIC.audio) MUSIC.audio=new Audio(); MUSIC.audio.src=URL.createObjectURL(blob); MUSIC.audio.currentTime=0; await MUSIC.audio.play(); MUSIC.playing=k; b.textContent="■"; b.setAttribute("aria-label","Stop preview"); MUSIC.audio.onended=stopMusicPreview; }
+    catch(e){ b.textContent="▶"; toast("Couldn't play this track: "+e.message); }
+  });
+  list.querySelectorAll("[data-muse]").forEach(b=>b.onclick=async()=>{
+    const t=MUSIC.results[+b.dataset.muse]; b.disabled=true; b.textContent="Adding…";
+    try{
+      const blob=await musicBlob(t.url);
+      const file=new File([blob], (t.title||"track").replace(/[^\w\- ]+/g,"").slice(0,60)+".mp3", {type:blob.type||"audio/mpeg"});
+      await audioCtx().decodeAudioData(await file.arrayBuffer()); // make sure it plays
+      R.music=file; R.musicMeta={ id:t.id, source:"free", title:t.title, creator:t.creator, licence:t.licence, licence_url:t.licence_url, page_url:t.page_url, provider:t.provider, provider_label:PROV[t.provider]||t.provider, attribution_required:t.attribution_required, duration_sec:t.duration_sec };
+      await idb.set("music",file); await idb.set("musicMeta",R.musicMeta);
+      if(S.job){ S.job.music=R.musicMeta; saveLocal(); }
+      stopMusicPreview(); showAssetHints(); updateCredits(); invalidate(); renderMusic();
+      toast("Music added. Prepare the preview to hear it with the video.");
+    }catch(e){ toast("Couldn't use this track: "+e.message); b.disabled=false; b.textContent="Use"; }
+  });
+}
+
 // ================================================================ AI CO-EDITOR (chat under every section)
 // Each section defines: title, context(), fields() [{key,label,type,min,max,options,get,set}], after(applied), image (bool)
 S.chats = S.chats || {};
@@ -1211,6 +1312,7 @@ function jobBrief(){
   return { title:j.title, destination:(j.request||{}).destination, language:(j.request||{}).language, angle:(j.request||{}).angle,
     hook:j.hook, fomo_type:j.fomo_type, cta:j.cta, research:{ one_line:r.one_line, best_season:r.best_season, facts:(r.facts||r.key_facts||[]).slice?.(0,10), how_to_reach:r.how_to_reach },
     fact_check_notes:j.fact_check_notes, warnings:j.warnings,
+    music: R.music ? Object.assign({}, R.musicMeta||{}, {track_length_sec: R.prepared&&R.prepared.musicBuf?+R.prepared.musicBuf.duration.toFixed(1):undefined}) : "none chosen yet",
     scenes:(j.scenes||[]).map((s,i)=>({n:i+1, stage:s.aida_stage, location:s.location, narration:s.narration, on_screen_text:s.on_screen_text, seconds:s.duration_sec, footage: s.card?"title card":(s.footage?`${s.footage.kind} from ${s.footage.source}: ${String(s.footage.desc||"").slice(0,90)}`:"none")})) };
 }
 function snapshot(){
@@ -1374,6 +1476,7 @@ function editDef(tab){
       fld("allVoice","All voices volume","number",()=>G().voiceVol,v=>{ G().voiceVol=v; },{min:0,max:2}),
       fld("music","Music volume","number",()=>G().musicVol,v=>{ G().musicVol=v; },{min:0,max:1}),
       fld("fadeIn","Fade music in","bool",()=>G().fadeIn,v=>{ G().fadeIn=v; }),
+      fld("musicStart","Music starts from (seconds into the track)","number",()=>+G().musicStart||0,v=>{ G().musicStart=v; },{min:0,max:R.prepared&&R.prepared.musicBuf?Math.max(0,Math.floor(R.prepared.musicBuf.duration-5)):0}),
       fld("fadeOut","Fade music out","bool",()=>G().fadeOut,v=>{ G().fadeOut=v; }),
       fld("narration","This scene's narration","text",()=>sc().narration,v=>{ sc().narration=v; },{max:400,note:"needs Prepare again"}),
       fld("voice","AI voice for the whole video","select",()=>$("#rVoice")?$("#rVoice").value:"Kore",v=>{ const s=$("#rVoice"); if(s){ s.value=v; store.set("voice",v); } },{options:VOICES.map(x=>x[0]),note:"needs Prepare again"})];
