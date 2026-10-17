@@ -220,6 +220,14 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:12px 0}
 /* AI director */
 .director .aichat.open{background:var(--bg)}
 .director .aimsgs{max-height:420px}
+/* text, colours & brand */
+.sgroup{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;background:var(--surface)}
+.sgroup summary{cursor:pointer;font-weight:700;font-size:13.5px}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 12px;margin-top:8px;align-items:end}
+.sgrid .wide{grid-column:1/-1}
+.sgrid .chk{display:flex;gap:6px;align-items:center;min-height:32px}
+.sgrid .field{margin:0}.sgrid .rng{margin:0}
+.cn{display:flex;gap:8px;align-items:center}.cn input[type=color]{flex:1}
 </style>
 </head>
 <body>
@@ -834,14 +842,15 @@ function wordTimes(text, start, end){
 // ---------------------------------------------------------------- edit settings (saved with the job)
 const ASSETS = new Map();   // scene id -> {voice, bounds, video, image, defOffset, myVoice}
 function ed(sc){
-  const d = {start:null, speed:1, zoom:1, panX:0, panY:0, motion:"auto", bright:1, contrast:1, sat:1, warmth:0, transition:"dip", titlePos:"top", titleSize:1, hideTitle:false, voiceVol:1, delivery:""};
+  const d = {start:null, speed:1, zoom:1, panX:0, panY:0, motion:"auto", bright:1, contrast:1, sat:1, warmth:0, transition:"dip", titlePos:"top", titleSize:1, hideTitle:false, voiceVol:1, delivery:"", titleColor:"", titleBg:"", titleFont:"", sceneTint:"", sceneTintOpacity:0.25};
   if(!sc.edit) sc.edit={};
   for(const k in d) if(!(k in sc.edit)) sc.edit[k]=d[k];
   return sc.edit;
 }
 function st(){
-  const d = {capStyle:"bold", capPos:0.64, capSize:1, hideCaps:false, accent:"#A8321E", highlight:"#FFD23F", musicVol:0.3, voiceVol:1, fadeIn:true, fadeOut:true, musicStart:0};
-  if(!S.job.style) S.job.style={};
+  const d = Object.assign({}, STYLE_DEFAULTS, {musicVol:0.3, voiceVol:1, fadeIn:true, fadeOut:true, musicStart:0});
+  if(!S.job.style){ S.job.style={}; const b=store.get("brandStyle",null); if(b) BRAND_KEYS.forEach(k=>{ if(k in b) S.job.style[k]=b[k]; }); }
+  if(!S.job.style.website) S.job.style.website = (S.job.branding&&S.job.branding.website) || "negotrip.com";
   for(const k in d) if(!(k in S.job.style)) S.job.style[k]=d[k];
   return S.job.style;
 }
@@ -854,6 +863,7 @@ async function prepare(){
   const job=S.job, voice=$("#rVoice").value, quality=$("#rQual").value, n=job.scenes.length;
   try{
     await document.fonts.load('800 80px "Bricolage Grotesque"').catch(()=>{});
+    await loadStyleFonts();
     const ctx=audioCtx(); ctx.resume().catch(()=>{});
     let steps=0; const totalSteps=n*2+1;
     const tick=(msg)=>{ steps++; setBar(steps/totalSteps); setLog(msg); };
@@ -944,7 +954,7 @@ function renderEditor(){
     <div class="fitbar"><button class="btn-sm primary" id="fitAll" ${S.fitBusy?"disabled":""}>✦ AI: fit visuals to the text (all scenes)</button><button class="btn-sm" id="fitOne" ${S.fitBusy?"disabled":""}>Check scene ${i+1} only</button><span class="small muted" id="fitStatus">${esc(S.fitStatus||"Looks at the real frames of each clip and fixes framing, timing and looks to match the narration and title.")}</span></div>
     <div class="aihost" data-key="director"></div>
     <div id="fitReport"></div>
-    <div class="tabs2" role="tablist">${["Clip","Look & text","Audio","Whole video"].map((t,k)=>`<button role="tab" data-tab="${k}" aria-selected="${(S.editTab||0)===k}">${t}</button>`).join("")}</div>
+    <div class="tabs2" role="tablist">${["Clip","Look & text","Audio","Text, colours & brand"].map((t,k)=>`<button role="tab" data-tab="${k}" aria-selected="${(S.editTab||0)===k}">${t}</button>`).join("")}</div>
     <div class="insp">
       <div data-pane="0" ${(S.editTab||0)===0?"":"hidden"}>
         <p class="small muted" style="margin:0 0 8px">Scene ${i+1}: <b>${esc(sc.location||"")}</b> · ${sc.card?"title card":(sc.footage&&sc.footage.kind==="photo"?"photo":"video")}</p>
@@ -967,6 +977,7 @@ function renderEditor(){
         <div class="row2"><div class="field"><label for="eTitlePos">Title position</label><select id="eTitlePos">${[["top","Top"],["middle","Middle"],["bottom","Lower third"]].map(([v,l])=>`<option value="${v}" ${e.titlePos===v?"selected":""}>${l}</option>`).join("")}</select></div>
         ${rng("eTitleSize","Title size",0.6,1.5,0.05,e.titleSize,v=>Math.round(v*100)+"%")}</div>
         <label class="small"><input type="checkbox" id="eHideTitle" ${e.hideTitle?"checked":""}> Hide title in this scene</label>
+        <div class="sgrid" id="sceneStyle" style="margin-top:10px">${sceneStyleFields(i).map(f=>styleControl(f,"ss_")).join("")}</div>
       </div>
       <div data-pane="2" ${(S.editTab||0)===2?"":"hidden"}>
         <p class="small muted" style="margin:0 0 8px">Voice for scene ${i+1}: ${a.myVoice?"<b>your recording</b>":"AI voice"}</p>
@@ -981,15 +992,9 @@ function renderEditor(){
         <label class="small" style="margin-right:14px"><input type="checkbox" id="gFadeIn" ${G.fadeIn?"checked":""}> Fade music in</label>
         <label class="small"><input type="checkbox" id="gFadeOut" ${G.fadeOut?"checked":""}> Fade music out</label>
       </div>
-      <div data-pane="3" ${(S.editTab||0)===3?"":"hidden"}>
-        <div class="row2"><div class="field"><label for="gCap">Caption style</label><select id="gCap">${[["bold","Bold outline"],["box","Text on dark box"],["minimal","Minimal"]].map(([v,l])=>`<option value="${v}" ${G.capStyle===v?"selected":""}>${l}</option>`).join("")}</select></div>
-        ${rng("gCapSize","Caption size",0.6,1.4,0.05,G.capSize,v=>Math.round(v*100)+"%")}</div>
-        ${rng("gCapPos","Caption height",0.45,0.85,0.01,G.capPos,v=>Math.round(v*100)+"% down")}
-        <label class="small"><input type="checkbox" id="gHideCaps" ${G.hideCaps?"checked":""}> Hide captions</label>
-        <div class="row2" style="margin-top:10px"><div class="field"><label for="gAccent">Call-to-action colour</label><input type="color" id="gAccent" value="${esc(G.accent)}"></div>
-        <div class="field"><label for="gHi">Highlight word colour</label><input type="color" id="gHi" value="${esc(G.highlight)}"></div></div>
-        <div class="field"><label for="gCta">Call to action</label><input type="text" id="gCta" maxlength="50" value="${esc((S.job.cta&&S.job.cta.on_screen)||"")}"></div>
-        <button class="btn-sm" id="gReset">Reset whole-video style</button>
+      <div data-pane="3" ${(S.editTab||0)===3?"":"hidden"} id="globalStyle">
+        ${(()=>{ const fs=editDef(3,0).fields(); const fm=Object.fromEntries(fs.map(f=>[f.key,f])); return STYLE_SCHEMA.map((g,gi)=>`<details class="sgroup" ${(S.openGroups||{0:1,2:1,3:1})[gi]?"open":""} data-gi="${gi}"><summary>${esc(g.g)}</summary><div class="sgrid">${g.items.map(d=>fm[d[0]]?styleControl(fm[d[0]],"gs_"):"").join("")}</div></details>`).join(""); })()}
+        <div class="btns" style="margin-top:10px"><button class="btn-sm" id="gBrandSave">Save as my default style</button><button class="btn-sm" id="gBrandApply">Use my default style</button><button class="btn-sm" id="gReset">Reset text & colours</button></div>
       </div>
       ${(S.editTab||0)<3?`<div class="aihost" id="editChat" data-key="scene:${esc(sc.id)}"></div>`:`<p class="small muted" style="margin:10px 0 0">For changes across the whole video, use the ✦ AI director above.</p>`}
     </div>`;
@@ -1037,14 +1042,12 @@ function bindEditor(){
   $("#eMic").onclick=()=>S.micRec ? S.micRec.stop() : recordVoice(i);
   const ua=$("#eUseAI"); if(ua) ua.onclick=async()=>{ const a=ASSETS.get(sc.id)||{}; a.myVoice=false; ASSETS.set(sc.id,a); await regenVoice(i,true); };
   $("#eHearLine").onclick=async()=>{ const a=ASSETS.get(sc.id); if(!a||!a.voice) return; const ctx=audioCtx(); await Promise.race([ctx.resume(),sleep(1500)]); const s=ctx.createBufferSource(); s.buffer=a.voice; const gn=ctx.createGain(); gn.gain.value=e.voiceVol*G.voiceVol; s.connect(gn); gn.connect(ctx.destination); s.start(); };
-  // whole video
-  $("#gCap").onchange=live(()=>{ G.capStyle=$("#gCap").value; });
-  bindR("gCapSize",v=>{ G.capSize=v; },v=>Math.round(v*100)+"%");
-  bindR("gCapPos",v=>{ G.capPos=v; },v=>Math.round(v*100)+"% down");
-  $("#gHideCaps").onchange=live(()=>{ G.hideCaps=$("#gHideCaps").checked; });
-  $("#gAccent").oninput=live(()=>{ G.accent=$("#gAccent").value; }); $("#gHi").oninput=live(()=>{ G.highlight=$("#gHi").value; });
-  $("#gCta").oninput=live(()=>{ S.job.cta=Object.assign({},S.job.cta||{}, {on_screen:$("#gCta").value}); });
-  $("#gReset").onclick=()=>{ const cta=S.job.cta; S.job.style=null; st(); S.job.cta=cta; saveLocal(); renderEditor(); };
+  // text, colours & brand
+  const gsb=$("#globalStyle"); if(gsb){ bindStyleControls(gsb, editDef(3,0).fields(), ()=>styleChanged());
+    gsb.querySelectorAll("details.sgroup").forEach(d=>d.addEventListener("toggle",()=>{ S.openGroups=S.openGroups||{0:1,2:1,3:1}; S.openGroups[d.dataset.gi]=d.open?1:0; }));
+    $("#gBrandSave").onclick=brandSave; $("#gBrandApply").onclick=brandApply; }
+  const ssb=$("#sceneStyle"); if(ssb) bindStyleControls(ssb, sceneStyleFields(i), ()=>styleChanged());
+  $("#gReset").onclick=()=>{ const G0=st(); BRAND_KEYS.forEach(k=>{ G0[k]=STYLE_DEFAULTS[k]; }); G0.website=(S.job.branding&&S.job.branding.website)||"negotrip.com"; S._fontsDirty=true; styleChanged().then(()=>renderEditor()); };
 }
 async function regenVoice(i, keepMsg){
   const sc=S.job.scenes[i], voice=$("#rVoice").value, txt=(sc.narration||"").trim(); if(!txt) return;
@@ -1081,8 +1084,8 @@ function drawMedia(g,s,idx,p,W,H,k){
   const e=s.e;
   const src = s.image || ((s.video && s.video.readyState>=2 && s.video.videoWidth) ? s.video : null);
   if(!src){
-    const gr=g.createLinearGradient(0,0,W,H); gr.addColorStop(0,"#1B1F3A"); gr.addColorStop(1,st().accent||"#A8321E"); g.fillStyle=gr; g.fillRect(0,0,W,H);
-    g.fillStyle="#fff"; g.textAlign="center"; g.textBaseline="middle"; g.font=`800 ${88*k}px "Bricolage Grotesque", sans-serif`;
+    const G=st(); const gr=g.createLinearGradient(0,0,W,H); gr.addColorStop(0,G.cardBg1); gr.addColorStop(1,G.cardBg2); g.fillStyle=gr; g.fillRect(0,0,W,H);
+    g.fillStyle=G.cardText; g.textAlign="center"; g.textBaseline="middle"; g.font=`${e.titleFont?G.titleWeight:G.titleWeight} ${88*k}px ${fontStack(e.titleFont||G.titleFont)}`;
     wrap(g,(s.sc.location||"").toUpperCase(),W-160*k).forEach((ln,i,a)=>g.fillText(ln,W/2,H*0.42+(i-(a.length-1)/2)*100*k));
     g.textBaseline="alphabetic"; return;
   }
@@ -1098,59 +1101,76 @@ function drawMedia(g,s,idx,p,W,H,k){
   g.drawImage(src,x,y,dw,dh);
   g.restore();
   if(e.warmth){ g.save(); g.globalCompositeOperation="soft-light"; g.fillStyle = e.warmth>0 ? `rgba(255,150,40,${0.45*e.warmth})` : `rgba(40,120,255,${-0.45*e.warmth})`; g.fillRect(0,0,W,H); g.restore(); }
+  const G=st(), tc=e.sceneTint||(G.tintOpacity>0?G.tintColor:""), to=e.sceneTint?e.sceneTintOpacity:G.tintOpacity;
+  if(tc && to>0){ g.save(); g.fillStyle=rgba(tc,to); g.fillRect(0,0,W,H); g.restore(); }
 }
 function drawFrame(t){
   const P=R.prepared; if(!P||!P.scenes.length) return;
   const cv=$("#cv"), g=cv.getContext("2d"), W=P.W, H=P.H, k=W/1080, G=st();
-  const scenes=P.scenes; let idx=scenes.findIndex(s=>t>=s.t0 && t<s.t1); if(idx<0) idx = t<0?0:scenes.length-1;
+  const scenes=P.scenes; P.website=G.website; let idx=scenes.findIndex(s=>t>=s.t0 && t<s.t1); if(idx<0) idx = t<0?0:scenes.length-1;
   const s=scenes[idx], p=Math.max(0,Math.min(1,(t-s.t0)/s.dur)), last=idx===scenes.length-1, e=s.e, into=t-s.t0;
   g.fillStyle="#000"; g.fillRect(0,0,W,H);
   if(e.transition==="fade" && idx>0 && into<0.5){
     const pv=scenes[idx-1]; drawMedia(g,pv,idx-1,1,W,H,k);
     g.save(); g.globalAlpha=Math.max(0,into/0.5); drawMedia(g,s,idx,p,W,H,k); g.restore();
   } else drawMedia(g,s,idx,p,W,H,k);
-  // legibility gradients
-  let gr=g.createLinearGradient(0,0,0,H*0.28); gr.addColorStop(0,"rgba(0,0,0,.55)"); gr.addColorStop(1,"rgba(0,0,0,0)"); g.fillStyle=gr; g.fillRect(0,0,W,H*0.28);
-  gr=g.createLinearGradient(0,H*0.5,0,H); gr.addColorStop(0,"rgba(0,0,0,0)"); gr.addColorStop(1,"rgba(0,0,0,.6)"); g.fillStyle=gr; g.fillRect(0,H*0.5,W,H*0.5);
+  // legibility shading
+  if(G.shade>0){
+    let gr=g.createLinearGradient(0,0,0,H*0.28); gr.addColorStop(0,`rgba(0,0,0,${Math.min(0.9,0.55*G.shade)})`); gr.addColorStop(1,"rgba(0,0,0,0)"); g.fillStyle=gr; g.fillRect(0,0,W,H*0.28);
+    gr=g.createLinearGradient(0,H*0.5,0,H); gr.addColorStop(0,"rgba(0,0,0,0)"); gr.addColorStop(1,`rgba(0,0,0,${Math.min(0.9,0.6*G.shade)})`); g.fillStyle=gr; g.fillRect(0,H*0.5,W,H*0.5);
+  }
   g.textAlign="center"; g.textBaseline="alphabetic";
+  const alignX=(al,w)=> al==="left"?75*k : al==="right"?W-75*k : W/2;
   // scene title
-  const title=(s.sc.on_screen_text||"").toUpperCase();
+  const title=applyCase(s.sc.on_screen_text||"", G.titleCase);
   if(title && !last && !e.hideTitle){
     const a=Math.min(1,into/0.25, (s.t1-t)/0.2); g.globalAlpha=Math.max(0,a);
-    const fs=86*k*e.titleSize; g.fillStyle="#fff"; g.font=`800 ${fs}px "Bricolage Grotesque", sans-serif`;
-    const lines=wrap(g,title,W-150*k); const y0 = e.titlePos==="middle" ? H*0.42-(lines.length-1)*fs*0.56 : e.titlePos==="bottom" ? H*0.80-(lines.length-1)*fs*1.12 : 300*k;
-    lines.forEach((ln,i)=>strokeText(g,ln,W/2,y0+i*fs*1.12,12*k*e.titleSize));
-    g.globalAlpha=1;
+    const fs=86*k*e.titleSize*G.titleSizeAll; g.font=`${G.titleWeight} ${fs}px ${fontStack(e.titleFont||G.titleFont)}`;
+    g.textAlign=G.titleAlign; const tx=alignX(G.titleAlign);
+    const lines=wrap(g,title,W-150*k); const lh=fs*1.12;
+    const y0 = e.titlePos==="middle" ? H*0.42-(lines.length-1)*lh/2 : e.titlePos==="bottom" ? H*0.80-(lines.length-1)*lh : 300*k;
+    const bg=e.titleBg||G.titleBg;
+    if(bg){ const mw=Math.max(...lines.map(l=>g.measureText(l).width)), pad=26*k; const bx = G.titleAlign==="left"?tx-pad : G.titleAlign==="right"?tx-mw-pad : tx-mw/2-pad;
+      g.fillStyle=rgba(bg,G.titleBgOpacity); roundRect(g,bx,y0-fs*0.92-pad*0.5,mw+pad*2,lh*(lines.length-1)+fs*1.2+pad,20*k); g.fill(); }
+    g.fillStyle=e.titleColor||G.titleColor;
+    lines.forEach((ln,i)=>{ const y=y0+i*lh; if(G.titleOutline){ g.lineJoin="round"; g.lineWidth=12*k*e.titleSize*G.titleSizeAll; g.strokeStyle=rgba(G.titleOutlineColor,0.85); g.strokeText(ln,tx,y); } g.fillText(ln,tx,y); });
+    g.globalAlpha=1; g.textAlign="center";
   }
-  if(s.representative){ g.textAlign="left"; g.font=`italic 500 ${30*k}px Figtree, sans-serif`; g.fillStyle="rgba(255,255,255,.85)"; g.fillText("Representative visuals", 44*k, H-60*k); g.textAlign="center"; }
+  if(s.representative && G.showRep){ g.textAlign="left"; g.font=`italic 500 ${30*k}px Figtree, ${FONT_FALLBACK}`; g.fillStyle="rgba(255,255,255,.85)"; g.fillText("Representative visuals", 44*k, H-60*k); g.textAlign="center"; }
   // word-by-word captions
   const ws=s.words; let wi=-1; for(let i=0;i<ws.length;i++){ if(t>=ws[i].start) wi=i; }
   if(!G.hideCaps && wi>=0 && t < (ws[ws.length-1].end+0.3)){
-    const gs=Math.floor(wi/3)*3, grp=ws.slice(gs,gs+3);
+    const nW=Math.max(1,Math.round(G.capWords||3)), gs=Math.floor(wi/nW)*nW, grp=ws.slice(gs,gs+nW);
     const fs=(G.capStyle==="minimal"?60:76)*k*G.capSize;
-    g.font=`${G.capStyle==="minimal"?700:800} ${fs}px "Bricolage Grotesque", sans-serif`;
-    const parts=grp.map(w=>G.capStyle==="minimal"?w.text:w.text.toUpperCase()), sp=g.measureText(" ").width, widths=parts.map(x=>g.measureText(x).width);
+    g.font=`${G.capWeight} ${fs}px ${fontStack(G.capFont)}`;
+    const parts=grp.map(w=>applyCase(w.text,G.capCase)), sp=g.measureText(" ").width, widths=parts.map(x=>g.measureText(x).width);
     let tw=widths.reduce((a,b)=>a+b,0)+sp*(parts.length-1), scale=1; if(tw>W-100*k){ scale=(W-100*k)/tw; }
     g.save(); g.translate(W/2,H*G.capPos); g.scale(scale,scale);
-    if(G.capStyle==="box"){ g.fillStyle="rgba(0,0,0,.72)"; roundRect(g,-tw/2-24*k,-fs*0.95,tw+48*k,fs*1.3,18*k); g.fill(); }
+    if(G.capStyle==="box"){ g.fillStyle=rgba(G.capBg,G.capBgOpacity); roundRect(g,-tw/2-24*k,-fs*0.95,tw+48*k,fs*1.3,18*k); g.fill(); }
     let x=-tw/2; g.textAlign="left";
-    parts.forEach((w,i)=>{ g.fillStyle = (gs+i)===wi ? G.highlight : "#fff";
+    parts.forEach((w,i)=>{ g.fillStyle = (gs+i)===wi ? G.highlight : G.capColor;
       if(G.capStyle==="bold") strokeText(g,w,x,0,11*k); else { g.shadowColor="rgba(0,0,0,.7)"; g.shadowBlur=G.capStyle==="minimal"?12*k:0; g.fillText(w,x,0); g.shadowBlur=0; }
       x+=widths[i]+sp; });
     g.restore(); g.textAlign="center";
   }
-  // CTA on the last scene
+  // CTA + website on the last scene
   if(last){
     const a=Math.max(0,Math.min(1,(into-0.2)/0.3)); g.globalAlpha=a;
-    const cta=((S.job.cta&&S.job.cta.on_screen) || P.cta.on_screen || `DM ${P.keyword} TO PLAN YOUR TRIP`).toUpperCase();
-    g.font=`800 ${60*k}px "Bricolage Grotesque", sans-serif`;
-    const lines=wrap(g,cta,W-220*k), bh=(lines.length*72+56)*k, bw=Math.min(W-100*k, Math.max(...lines.map(l=>g.measureText(l).width))+100*k), by=H*0.74;
-    g.fillStyle=G.accent; roundRect(g,(W-bw)/2,by,bw,bh,28*k); g.fill();
-    g.fillStyle="#fff"; lines.forEach((ln,i)=>g.fillText(ln,W/2,by+(78+i*72)*k));
-    g.font=`600 ${40*k}px Figtree, sans-serif`; strokeText(g,P.website,W/2,by+bh+64*k,6*k);
+    const cta=applyCase((S.job.cta&&S.job.cta.on_screen) || P.cta.on_screen || `DM ${P.keyword} TO PLAN YOUR TRIP`, G.ctaCase);
+    const cfs=60*k*G.ctaSize, clh=72*k*G.ctaSize; g.font=`${G.ctaWeight} ${cfs}px ${fontStack(G.ctaFont)}`;
+    const lines=wrap(g,cta,W-220*k), bh=lines.length*clh+56*k, bw=Math.min(W-100*k, Math.max(...lines.map(l=>g.measureText(l).width))+100*k), by=H*G.ctaPos;
+    if(G.ctaShape!=="none"){ g.fillStyle=rgba(G.accent,G.ctaBgOpacity); roundRect(g,(W-bw)/2,by,bw,bh,G.ctaShape==="pill"?bh/2:G.ctaShape==="square"?2*k:28*k); g.fill(); }
+    g.fillStyle=G.ctaColor; lines.forEach((ln,i)=>{ const y=by+28*k+cfs*0.83+i*clh; if(G.ctaShape==="none"){ strokeText(g,ln,W/2,y,10*k*G.ctaSize); } else g.fillText(ln,W/2,y); });
+    let wy=by+bh+64*k*G.webSize;
+    if(G.showWebsite){ for(const line of [G.website, G.extraLine].filter(x=>String(x||"").trim())){
+      const wfs=40*k*G.webSize; g.font=`600 ${wfs}px ${fontStack(G.webFont)}`;
+      if(G.webBg){ const ww=g.measureText(line).width+40*k; g.fillStyle=rgba(G.webBg,0.9); roundRect(g,(W-ww)/2,wy-wfs*0.95,ww,wfs*1.35,14*k); g.fill(); g.fillStyle=G.webColor; g.fillText(line,W/2,wy); }
+      else { g.fillStyle=G.webColor; strokeText(g,line,W/2,wy,6*k); }
+      wy+=wfs*1.6; } }
     g.globalAlpha=1;
   }
-  if(R.logo){ const lw=190*k, lh=lw*(R.logo.naturalHeight/R.logo.naturalWidth||1); g.drawImage(R.logo,W-lw-44*k,56*k,lw,lh); }
+  if(R.logo && G.logoPos!=="hidden"){ const lw=190*k*G.logoSize, lh=lw*(R.logo.naturalHeight/R.logo.naturalWidth||1), m=44*k;
+    const lx=/left/.test(G.logoPos)?m:W-lw-m, ly=/bottom/.test(G.logoPos)?H-lh-90*k:56*k; g.drawImage(R.logo,lx,ly,lw,lh); }
   // transitions
   if(idx>0 && into<0.15){
     if(e.transition==="dip"){ g.fillStyle=`rgba(0,0,0,${(1-into/0.15)*0.65})`; g.fillRect(0,0,W,H); }
@@ -1247,6 +1267,108 @@ function showResult(blob, mime){
   setLog("Done.");
   setBar(1);
 }
+
+// ================================================================ TEXT, COLOURS & BRAND (one schema drives the controls, the renderer and the AI)
+const FONTS = ["Bricolage Grotesque","Poppins","Montserrat","Oswald","Bebas Neue","Anton","Archivo Black","Playfair Display","Lora","Merriweather","Cinzel","Pacifico","Dancing Script","Caveat","Figtree","Roboto","Open Sans","Noto Sans","Mukta","Baloo 2","Hind","Noto Sans Oriya","Noto Sans Devanagari","Noto Sans Bengali"];
+const FONT_FALLBACK = '"Noto Sans", "Noto Sans Devanagari", "Noto Sans Oriya", "Noto Sans Bengali", "Noto Sans Tamil", "Noto Sans Telugu", sans-serif';
+const fontStack = name => `"${name||"Bricolage Grotesque"}", ${FONT_FALLBACK}`;
+const _fontLinks = new Set(["Bricolage Grotesque","Figtree"]);
+function ensureFont(name){
+  if(!name || _fontLinks.has(name)) return document.fonts.load(`800 40px "${name||"Bricolage Grotesque"}"`).catch(()=>{});
+  _fontLinks.add(name);
+  const fam = name.replace(/ /g,"+");
+  const wght = /Bebas|Anton|Archivo Black|Pacifico|Caveat|Dancing/.test(name) ? "" : ":wght@400;600;700;800";
+  const l=document.createElement("link"); l.rel="stylesheet"; l.href=`https://fonts.googleapis.com/css2?family=${fam}${wght}&display=swap`; document.head.appendChild(l);
+  return new Promise(res=>{ l.onload=()=>document.fonts.load(`700 40px "${name}"`).then(res,res); l.onerror=res; setTimeout(res,4000); });
+}
+async function loadStyleFonts(){
+  if(!S.job) return; const G=st(); const names=new Set([G.titleFont,G.capFont,G.ctaFont,G.webFont]);
+  S.job.scenes.forEach(sc=>{ const e=ed(sc); if(e.titleFont) names.add(e.titleFont); });
+  const lang=(typeof scriptLang==="function"?scriptLang():"en");
+  if(/^(hi|mr|ne)/.test(lang)) names.add("Noto Sans Devanagari"); if(/^or/.test(lang)) names.add("Noto Sans Oriya"); if(/^(bn|as)/.test(lang)) names.add("Noto Sans Bengali");
+  if(/^ta/.test(lang)) names.add("Noto Sans Tamil"); if(/^te/.test(lang)) names.add("Noto Sans Telugu");
+  await Promise.all([...names].filter(Boolean).map(ensureFont));
+}
+const _cc=document.createElement("canvas").getContext("2d");
+function toHex(v){ const s=String(v||"").trim(); if(!s) return undefined; if(/^#[0-9a-f]{6}$/i.test(s)) return s.toLowerCase(); if(/^#[0-9a-f]{3}$/i.test(s)) return "#"+s.slice(1).split("").map(c=>c+c).join("").toLowerCase();
+  _cc.fillStyle="#010203"; _cc.fillStyle=s; const out=_cc.fillStyle; if(out==="#010203" && !/^#?010203$/i.test(s)) return undefined; if(/^#/.test(out)) return out;
+  const m=out.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/); return m ? "#"+[m[1],m[2],m[3]].map(x=>(+x).toString(16).padStart(2,"0")).join("") : undefined; }
+function rgba(hex, a){ const h=toHex(hex)||"#000000"; const n=parseInt(h.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
+function applyCase(t, mode){ t=String(t||""); if(mode==="upper") return t.toUpperCase(); if(mode==="lower") return t.toLowerCase(); if(mode==="title") return t.toLowerCase().replace(/(^|\s)(\p{L})/gu,(m,a,b)=>a+b.toUpperCase()); return t; }
+const CASES=["upper","title","asis","lower"], WEIGHTS=["400","600","700","800"];
+// key, label, type, extra  (type: color | colorNone | number | select | bool | text | font)
+const STYLE_SCHEMA = [
+  {g:"Scene titles", items:[
+    ["titleFont","Title font","font"],["titleWeight","Title weight","select",{options:WEIGHTS}],["titleSizeAll","Title size (all scenes)","number",{min:0.5,max:1.8,step:0.05}],
+    ["titleColor","Title text colour","color"],["titleCase","Title letter case","select",{options:CASES}],["titleAlign","Title alignment","select",{options:["center","left","right"]}],
+    ["titleOutline","Title outline","bool"],["titleOutlineColor","Outline colour","color"],["titleBg","Title background box","colorNone"],["titleBgOpacity","Title box opacity","number",{min:0,max:1,step:0.05}]]},
+  {g:"Captions (spoken words)", items:[
+    ["capStyle","Caption style","select",{options:["bold","box","minimal"]}],["capFont","Caption font","font"],["capWeight","Caption weight","select",{options:WEIGHTS}],
+    ["capSize","Caption size","number",{min:0.5,max:1.6,step:0.05}],["capPos","Caption height (0.40 high – 0.88 low)","number",{min:0.40,max:0.88,step:0.01}],
+    ["capColor","Caption text colour","color"],["highlight","Highlighted word colour","color"],["capBg","Caption box colour (box style)","color"],["capBgOpacity","Caption box opacity","number",{min:0,max:1,step:0.05}],
+    ["capCase","Caption letter case","select",{options:CASES}],["capWords","Words shown at a time","number",{min:1,max:6,step:1}],["hideCaps","Hide captions","bool"]]},
+  {g:"Call to action (last scene)", items:[
+    ["ctaText","Call-to-action text","text",{max:60}],["ctaFont","CTA font","font"],["ctaWeight","CTA weight","select",{options:WEIGHTS}],["ctaSize","CTA text size","number",{min:0.5,max:1.8,step:0.05}],
+    ["ctaColor","CTA text colour","color"],["accent","CTA box background colour","color"],["ctaBgOpacity","CTA box opacity","number",{min:0,max:1,step:0.05}],
+    ["ctaShape","CTA box shape","select",{options:["rounded","pill","square","none"]}],["ctaPos","CTA height (0.30 high – 0.85 low)","number",{min:0.30,max:0.85,step:0.01}],["ctaCase","CTA letter case","select",{options:CASES}]]},
+  {g:"Website & contact line", items:[
+    ["website","Website / handle shown under the CTA","text",{max:60}],["extraLine","Second line (e.g. phone or WhatsApp number)","text",{max:60}],["showWebsite","Show website line","bool"],
+    ["webFont","Website font","font"],["webSize","Website text size","number",{min:0.5,max:2,step:0.05}],["webColor","Website text colour","color"],["webBg","Website background box","colorNone"]]},
+  {g:"Background & overlay", items:[
+    ["tintColor","Colour wash over all footage","color"],["tintOpacity","Colour wash strength","number",{min:0,max:0.7,step:0.02}],
+    ["shade","Dark shading behind text (0 none – 1.5 strong)","number",{min:0,max:1.5,step:0.05}],
+    ["cardBg1","Title-card background (top colour)","color"],["cardBg2","Title-card background (bottom colour)","color"],["cardText","Title-card text colour","color"]]},
+  {g:"Logo & labels", items:[
+    ["logoPos","Logo position","select",{options:["top-right","top-left","bottom-right","bottom-left","hidden"]}],["logoSize","Logo size","number",{min:0.4,max:2,step:0.05}],
+    ["showRep","Show 'Representative visuals' label","bool"]]}
+];
+const STYLE_DEFAULTS = { titleFont:"Bricolage Grotesque", titleWeight:"800", titleSizeAll:1, titleColor:"#ffffff", titleCase:"upper", titleAlign:"center", titleOutline:true, titleOutlineColor:"#000000", titleBg:"", titleBgOpacity:0.75,
+  capStyle:"bold", capFont:"Bricolage Grotesque", capWeight:"800", capSize:1, capPos:0.64, capColor:"#ffffff", highlight:"#FFD23F", capBg:"#000000", capBgOpacity:0.72, capCase:"upper", capWords:3, hideCaps:false,
+  ctaText:"", ctaFont:"Bricolage Grotesque", ctaWeight:"800", ctaSize:1, ctaColor:"#ffffff", accent:"#A8321E", ctaBgOpacity:1, ctaShape:"rounded", ctaPos:0.74, ctaCase:"upper",
+  website:"", extraLine:"", showWebsite:true, webFont:"Figtree", webSize:1, webColor:"#ffffff", webBg:"",
+  tintColor:"#ff9a3c", tintOpacity:0, shade:1, cardBg1:"#1B1F3A", cardBg2:"#A8321E", cardText:"#ffffff",
+  logoPos:"top-right", logoSize:1, showRep:true };
+const BRAND_KEYS = Object.keys(STYLE_DEFAULTS).filter(k=>k!=="ctaText");
+const SCENE_TEXT_SCHEMA = [
+  ["titleColor","Title colour for this scene (none = same as video)","colorNone"],["titleBg","Title background box for this scene (none = same as video)","colorNone"],
+  ["titleFont","Title font for this scene","fontOrNone"],["sceneTint","Colour wash for this scene","colorNone"],["sceneTintOpacity","Scene colour wash strength","number",{min:0,max:0.7,step:0.02}]
+];
+function schemaField(def, obj, prefixLabel){
+  const [key,label,type,x={}] = def;
+  const t = type==="font"||type==="fontOrNone" ? "select" : type;
+  const opts = type==="font" ? FONTS : type==="fontOrNone" ? ["", ...FONTS] : x.options;
+  return Object.assign({key, label:(prefixLabel||"")+label+(type==="color"?" (#hex or colour name)":type==="colorNone"?" (#hex, colour name, or none)":""), type:t, rawType:type, options:opts, min:x.min, max:x.max, step:x.step,
+    get:()=>obj()[key], set:v=>{ obj()[key]=v; if(type==="font"||type==="fontOrNone") S._fontsDirty=true; }}, {});
+}
+function globalStyleFields(){ return STYLE_SCHEMA.flatMap(g=>g.items.map(d=>schemaField(d, st))); }
+function sceneStyleFields(i){ return SCENE_TEXT_SCHEMA.map(d=>schemaField(d, ()=>ed(S.job.scenes[i]))); }
+// ---------- manual controls
+function styleControl(f, idp){
+  const id=idp+f.key, v=f.get();
+  if(f.rawType==="color") return `<div class="field sc"><label for="${id}">${esc(f.label.replace(/ \(#hex.*$/,""))}</label><input type="color" id="${id}" data-sk="${f.key}" value="${esc(toHex(v)||"#000000")}"></div>`;
+  if(f.rawType==="colorNone") return `<div class="field sc"><label for="${id}">${esc(f.label.replace(/ \(#hex.*$/,""))}</label><div class="cn"><input type="color" id="${id}" data-sk="${f.key}" value="${esc(toHex(v)||"#000000")}" ${v?"":"data-off"}><label class="small"><input type="checkbox" data-skoff="${f.key}" ${v?"":"checked"}> none</label></div></div>`;
+  if(f.type==="number") return `<div class="rng sc"><label for="${id}">${esc(f.label)} <output>${(+v).toFixed(f.step>=1?0:2)}</output></label><input type="range" id="${id}" data-sk="${f.key}" min="${f.min}" max="${f.max}" step="${f.step||0.01}" value="${v}"></div>`;
+  if(f.type==="select") return `<div class="field sc"><label for="${id}">${esc(f.label)}</label><select id="${id}" data-sk="${f.key}">${f.options.map(o=>`<option value="${esc(o)}" ${String(v)===String(o)?"selected":""} ${f.rawType.startsWith("font")&&o?`style="font-family:'${esc(o)}'"`:""}>${esc(o===""?"Same as video":o==="asis"?"As typed":o)}</option>`).join("")}</select></div>`;
+  if(f.type==="bool") return `<label class="small sc chk"><input type="checkbox" id="${id}" data-sk="${f.key}" ${v?"checked":""}> ${esc(f.label)}</label>`;
+  return `<div class="field sc wide"><label for="${id}">${esc(f.label)}</label><input type="text" id="${id}" data-sk="${f.key}" maxlength="${f.max||80}" value="${esc(v||"")}"></div>`;
+}
+function bindStyleControls(box, fields, onChange){
+  const fmap=Object.fromEntries(fields.map(f=>[f.key,f]));
+  box.querySelectorAll("[data-sk]").forEach(el=>{
+    const f=fmap[el.dataset.sk]; if(!f) return;
+    const ev = el.type==="range"||el.type==="color"||el.type==="text" ? "input" : "change";
+    el.addEventListener(ev,()=>{
+      let v = el.type==="checkbox" ? el.checked : el.type==="range" ? +el.value : el.value;
+      if(f.rawType==="colorNone"){ const off=box.querySelector(`[data-skoff="${f.key}"]`); if(off) off.checked=false; }
+      f.set(v); const o=el.parentElement.querySelector("output"); if(o) o.textContent=(+v).toFixed(f.step>=1?0:2);
+      onChange(f.key);
+    });
+  });
+  box.querySelectorAll("[data-skoff]").forEach(cb=>cb.addEventListener("change",()=>{ const f=fmap[cb.dataset.skoff]; if(!f) return; const c=box.querySelector(`[data-sk="${f.key}"]`); f.set(cb.checked?"":(c?c.value:"#000000")); onChange(f.key); }));
+}
+async function styleChanged(){ saveLocal(); if(S._fontsDirty){ S._fontsDirty=false; await loadStyleFonts(); } if(R.prepared){ scrubTo(R.scrub||0); } }
+function brandSave(){ const G=st(), b={}; BRAND_KEYS.forEach(k=>b[k]=G[k]); store.set("brandStyle", b); toast("Saved as your default style for new videos on this device"); }
+function brandApply(){ const b=store.get("brandStyle",null); if(!b){ toast("No saved default style yet"); return; } Object.assign(st(), b); S._fontsDirty=true; styleChanged().then(()=>renderEditor()); toast("Your default style applied"); }
 
 // ================================================================ VOICE & LANGUAGE (styles, accents, languages, voice library)
 const STUDIO_VOICES = [
@@ -1503,8 +1625,8 @@ const AI_HINTS = {
   clip:["How should I frame this shot?","Is the pacing right?","Which transition fits here?"],
   look:["Does this look good?","Make it warmer and brighter","Is the title readable?"],
   audio:["Is the voice too fast or slow?","Balance music and voice","Rewrite this line to sound natural"],
-  whole:["Review the whole video","Which caption style suits travel reels?","Pick colours that match our brand"],
-  director:["Make it feel calm and devotional","Put all titles at the bottom and make colours warmer","Make the hook stronger and move the best scene first","Switch to a Hindi voice","Find better footage for weak scenes"]
+  whole:["Change the website to our correct one","Make the CTA box green with white text","Bigger titles in Poppins with a dark box behind","Pick colours that match our brand"],
+  director:["Change the website line and make the CTA box navy blue","Make it feel calm and devotional","Put all titles at the bottom and make colours warmer","Make the hook stronger and move the best scene first","Switch to a Hindi voice","Find better footage for weak scenes"]
 };
 function jobBrief(){
   const j=S.job||{}, r=j.research||{};
@@ -1522,9 +1644,10 @@ function fmtVal(f,v){ if(v==null||v==="") return "—"; if(f.type==="bool") retu
 function coerce(f, raw){
   const s=String(raw==null?"":raw).trim();
   if(f.type==="number"){ const n=parseFloat(s); if(!isFinite(n)) return undefined; return Math.max(f.min??-Infinity, Math.min(f.max??Infinity, n)); }
-  if(f.type==="select"){ const o=(f.options||[]).map(String); const hit=o.find(x=>x.toLowerCase()===s.toLowerCase()); return hit===undefined?undefined:(f.numeric?+hit:hit); }
+  if(f.type==="select"){ const o=(f.options||[]).map(String); const s2=/^(none|same|default|same as video)$/i.test(s)&&o.includes("")?"":s; const hit=o.find(x=>x.toLowerCase()===s2.toLowerCase()); return hit===undefined?undefined:(f.numeric?+hit:hit); }
   if(f.type==="bool") return /^(true|yes|on|1)$/i.test(s);
-  if(f.type==="color") return /^#[0-9a-f]{6}$/i.test(s)?s:undefined;
+  if(f.rawType==="colorNone"){ if(!s || /^(none|transparent|no|off|null|remove)$/i.test(s)) return ""; return toHex(s); }
+  if(f.type==="color") return toHex(s);
   if(f.type==="text"){ return f.max? s.slice(0,f.max) : s; }
   return s;
 }
@@ -1579,6 +1702,7 @@ function bindChat(box, key){
     for(const c of chosen){ const fd=fmap[c.key]; const v=coerce(fd,c.value); if(v===undefined) continue; if(!fd.late) undo.push([c.key,fd.get()]); fd.set(v); applied.push(c.key); }
     m.applied=true; m.undo=undo; m.before=Object.fromEntries(m.changes.filter(c=>fmap[c.key]).map(c=>[c.key,fmap[c.key].get()])); undo.forEach(([k,v])=>{ m.before[k]=v; }); saveLocal();
     S.chatDefs[key].after(applied);
+    if(S._fontsDirty) styleChanged();
     refreshChat(key);
     toast(`Applied ${applied.length} change${applied.length===1?"":"s"}`);
   });
@@ -1662,7 +1786,7 @@ function captionDef(){
 function editDef(tab, idx){
   const i=idx!=null?idx:(S.editSel||0), sc=()=>S.job.scenes[i], e=()=>ed(sc()), G=()=>st();
   const ps=()=>R.prepared&&R.prepared.scenes[i];
-  const titles=["the clip","look & text","audio","the whole video"];
+  const titles=["the clip","look & text","audio","text, colours & brand of the whole video"];
   const sceneCtx=()=>{ const s=sc(), p=ps(), a=ASSETS.get(s.id)||{}; return { video:jobBrief(), total_seconds:R.prepared?+R.prepared.total.toFixed(1):null,
     this_scene:{ n:i+1, of:S.job.scenes.length, role:i===0?"hook":i===S.job.scenes.length-1?"call to action":"middle", location:s.location, narration:s.narration, title:s.on_screen_text,
       media: s.card?"title card":(a.video?"video":a.image?"photo":"none"), footage_desc:s.footage&&String(s.footage.desc||"").slice(0,140), clip_length_sec:a.video?+a.video.duration.toFixed(1):null,
@@ -1687,7 +1811,8 @@ function editDef(tab, idx){
       fld("title","Title text (short, caps)","text",()=>sc().on_screen_text,v=>{ sc().on_screen_text=v; },{max:40}),
       fld("titlePos","Title position","select",()=>e().titlePos,v=>{ e().titlePos=v; },{options:["top","middle","bottom"]}),
       fld("titleSize","Title size","number",()=>e().titleSize,v=>{ e().titleSize=v; },{min:0.6,max:1.5}),
-      fld("hideTitle","Hide title","bool",()=>e().hideTitle,v=>{ e().hideTitle=v; })];
+      fld("hideTitle","Hide title","bool",()=>e().hideTitle,v=>{ e().hideTitle=v; }),
+      ...sceneStyleFields(i)];
   if(tab===2) fields=()=>[
       fld("voiceVol","This scene's voice volume","number",()=>e().voiceVol,v=>{ e().voiceVol=v; },{min:0,max:2}),
       fld("allVoice","All voices volume","number",()=>G().voiceVol,v=>{ G().voiceVol=v; },{min:0,max:2}),
@@ -1702,14 +1827,7 @@ function editDef(tab, idx){
       fld("voiceAccent","Voice accent (free text, e.g. Odia-flavoured English)","text",()=>VC().accent,v=>{ setVC({accent:v}); },{max:60,note:"needs Prepare again"}),
       fld("voiceDirection","Extra voice direction for the whole video","text",()=>VC().custom,v=>{ setVC({custom:v}); },{max:160,note:"needs Prepare again"}),
       fld("delivery","How to say this scene's line","text",()=>e().delivery||"",v=>{ e().delivery=v; },{max:120,note:"makes a new take of this line"})];
-  if(tab===3) fields=()=>[
-      fld("capStyle","Caption style","select",()=>G().capStyle,v=>{ G().capStyle=v; },{options:["bold","box","minimal"]}),
-      fld("capSize","Caption size","number",()=>G().capSize,v=>{ G().capSize=v; },{min:0.6,max:1.4}),
-      fld("capPos","Caption height (0.45 high – 0.85 low)","number",()=>G().capPos,v=>{ G().capPos=v; },{min:0.45,max:0.85}),
-      fld("hideCaps","Hide captions","bool",()=>G().hideCaps,v=>{ G().hideCaps=v; }),
-      fld("accent","Call-to-action box colour (#hex)","color",()=>G().accent,v=>{ G().accent=v; }),
-      fld("highlight","Highlighted word colour (#hex)","color",()=>G().highlight,v=>{ G().highlight=v; }),
-      fld("cta","Call-to-action text","text",()=>(S.job.cta||{}).on_screen||"",v=>{ S.job.cta=Object.assign({},S.job.cta||{},{on_screen:v}); },{max:50})];
+  if(tab===3) fields=()=>globalStyleFields().map(f=>f.key==="ctaText"?Object.assign({},f,{get:()=>(S.job.cta||{}).on_screen||"", set:v=>{ S.job.cta=Object.assign({},S.job.cta||{},{on_screen:v}); }}):f);
   return { kind:["clip","look","audio","whole"][tab], title: tab===3?titles[3]:`${titles[tab]} of scene ${i+1}`, image:true, fields,
     context: tab===3 ? ()=>({ video:jobBrief(), total_seconds:R.prepared?+R.prepared.total.toFixed(1):null, style:G(), scenes_edit:S.job.scenes.map((s,k)=>({n:k+1, edit:ed(s)})) }) : sceneCtx,
     after };
