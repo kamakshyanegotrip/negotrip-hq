@@ -1234,7 +1234,7 @@ async function play(record, from, until){
     try{ master.disconnect(); comp.disconnect(); }catch(e){}
     playBtn.textContent="▶ Play preview"; recBtn.disabled=false; prepBtn.disabled=false;
     if(rec){
-      rec.onstop=()=>{ if(aborted||stoppedEarly){ setLog("Recording cancelled."); return; } const blob=new Blob(chunks,{type:(mime||"video/webm").split(";")[0]}); showResult(blob, mime); };
+      rec.onstop=()=>{ if(aborted||stoppedEarly){ setLog("Recording cancelled."); return; } const blob=new Blob(chunks,{type:(mime||"video/webm").split(";")[0]}); finishRecording(blob, mime); };
       try{ rec.stop(); }catch(e){}
     }else { setLog("Preview finished."); scrubTo(R.scrub||0); }
   }
@@ -1256,18 +1256,56 @@ async function play(record, from, until){
   }
   raf=requestAnimationFrame(loop);
 }
-function showResult(blob, mime){
+// ---- make a standard, phone-friendly MP4 (H.264 + AAC, constant 30 fps, fast start) from the browser recording
+const _scripts={};
+function loadScript(src){ return _scripts[src] || (_scripts[src]=new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src=src; sc.onload=res; sc.onerror=()=>{ delete _scripts[src]; rej(new Error("could not load "+src)); }; document.head.appendChild(sc); })); }
+async function toPhoneMp4(blob, W, H, onProg){
+  await loadScript("vendor/mediabunny.min.js"); const M=window.Mediabunny;
+  try{ if(!(await M.canEncodeAudio("aac"))){ await loadScript("vendor/mediabunny-aac-encoder.min.js"); window.MediabunnyAacEncoder.registerAacEncoder(); } }catch(e){ console.warn("AAC encoder", e); }
+  const vbit = W>=1080 ? 5_000_000 : 3_000_000;
+  let canAvc=false; try{ canAvc = await M.canEncodeVideo("avc",{width:W,height:H,bitrate:vbit}); }catch(e){}
+  const attempt=async(video)=>{
+    const input=new M.Input({source:new M.BlobSource(blob), formats:M.ALL_FORMATS});
+    const output=new M.Output({format:new M.Mp4OutputFormat({fastStart:"in-memory"}), target:new M.BufferTarget()});
+    const conv=await M.Conversion.init({input, output, video, audio:(t)=> t.codec==="aac" ? {codec:"aac"} : {codec:"aac", bitrate:160000}, showWarnings:false});
+    const isV=t=>typeof t.isVideoTrack==="function"?t.isVideoTrack():t.type==="video";
+    const hadAudio=!!(await input.getPrimaryAudioTrack().catch(()=>null));
+    if(!conv.isValid || !conv.utilizedTracks.some(isV) || (hadAudio && !conv.utilizedTracks.some(t=>!isV(t)))){ console.warn("conversion not usable", conv.discardedTracks); return null; }
+    conv.onProgress=p=>{ try{ onProg&&onProg(p); }catch(e){} };
+    await conv.execute();
+    if(!output.target.buffer || output.target.buffer.byteLength<20000) return null;
+    return new Blob([output.target.buffer],{type:"video/mp4"});
+  };
+  let out=null;
+  if(canAvc) out=await attempt({codec:"avc", bitrate:vbit, frameRate:30, keyFrameInterval:2, forceTranscode:true}).catch(e=>{ console.warn(e); return null; });
+  if(!out) out=await attempt({codec:"avc"}).catch(e=>{ console.warn(e); return null; });
+  return out;
+}
+async function finishRecording(blob, mime){
+  if(!blob || blob.size<20000){ showResult(blob, mime); return; }
+  const P=R.prepared||{W:1080,H:1920};
+  $("#resultBox").innerHTML=`<div class="notice" style="margin-top:12px"><b>Making a phone-friendly MP4…</b> <span id="convPct">0%</span><div class="bar" style="margin-top:6px"><i id="convBar" style="width:0%"></i></div><div class="small muted" style="margin-top:4px">Converting to standard H.264 + AAC so it plays on phones, WhatsApp, Instagram and Facebook. Usually under a minute; keep this tab open.</div></div>`;
+  setLog("Converting for phones…");
+  let phone=null;
+  try{ phone=await toPhoneMp4(blob, P.W, P.H, p=>{ const pc=Math.round(p*100); const a=$("#convPct"), b=$("#convBar"); if(a) a.textContent=pc+"%"; if(b) b.style.width=pc+"%"; }); }catch(e){ console.warn(e); }
+  if(phone) showResult(phone, "avc1 phone", blob);
+  else showResult(blob, mime, null, true);
+}
+function showResult(blob, mime, original, convFailed){
   if(!blob || blob.size<20000){ $("#resultBox").innerHTML=`<div class="notice" style="margin-top:12px">The recording came out empty, so there is nothing to download. Keep this tab open and in front while it records, then press <b>2 · Record &amp; download MP4</b> again. Use Chrome or Edge on a computer.</div>`; setLog("Recording failed."); return; }
   const ext = blob.type.includes("mp4") ? "mp4" : "webm";
   const name = `negotrip-${(S.job.request?.destination||"short").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")}-${S.job.job_id}.${ext}`;
   const url=URL.createObjectURL(blob);
   const mb=(blob.size/1048576).toFixed(1);
   S.lastResult={jobId:S.jobId, blob, name, mime, url};
+  const origLink = original ? (()=>{ const u=URL.createObjectURL(original); return `<a class="linkish small" href="${u}" download="${esc(name.replace(/\.mp4$/,"-original."+(original.type.includes("mp4")?"mp4":"webm")))}">original recording</a>`; })() : "";
   $("#resultBox").innerHTML = `<div class="card resultcard" style="margin-top:14px;background:var(--bg)"><h3>Your video is ready ✓</h3>
+    ${original?`<p class="small" style="margin:0 0 6px"><span class="pill ok">Phone-ready MP4</span> H.264 + AAC, 30 fps: plays on WhatsApp, Instagram, Facebook and YouTube.</p>`:""}
+    ${convFailed?`<div class="notice small" style="margin:0 0 8px"><b>Couldn't convert this to a phone-friendly MP4 in this browser.</b> The file below may not open on phones or WhatsApp. Update Chrome or Edge to the latest version on a Windows or Mac computer and record again.</div>`:""}
     <p class="small" style="margin:0 0 8px">It has been saved to your <b>Downloads</b> folder as <b>${esc(name)}</b>. If your browser blocked it, use the button below.</p>
     <div class="stage" style="max-width:220px;margin:0 0 10px"><video src="${url}" controls playsinline></video></div>
     <div class="btns"><a class="btn" id="dlBtn" href="${url}" download="${esc(name)}">⬇ Download ${ext.toUpperCase()} (${mb} MB)</a></div>
-    ${!/avc1/.test(mime||"")?`<p class="small muted">This browser couldn't record H.264, so the file uses a different codec. YouTube accepts it; for Instagram and Facebook, record in the latest Chrome or Edge on a computer.</p>`:""}
+    ${origLink?`<p class="small muted">Also available: ${origLink} (unconverted, for troubleshooting).</p>`:""}
     <p class="small muted">Tick off the checks above before you post.</p></div>`;
   showDlLast();
   try{ saveBlob(blob, name); }catch(e){}
