@@ -776,15 +776,27 @@ $("#scrim").addEventListener("click", closeSheet);
 document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !$("#sheet").hidden) closeSheet(); });
 
 /* ================= boot ================= */
+function withTimeout(p, ms){ return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")), ms))]); }
+function showServerDown(){
+  gate(`<div class="card">${MARK}<h1>NegoTrip HQ</h1><p>Can't reach the NegoTrip server right now. It may be waking up — try again in a minute.</p><button class="gbtn" data-act="recheck">Try again</button></div>`);
+}
 async function boot(){
   if (!sb){ gate(`<div class="card">${MARK}<h1>NegoTrip HQ</h1><p>Couldn't load. Check your internet connection and reload the page.</p></div>`); return; }
-  const { data:{ session } } = await sb.auth.getSession();
+  gate(`<div class="loading">Loading your tools…</div>`);
+  try { await bootInner(); }
+  catch(e){ console.error("boot failed", e); showServerDown(); }
+}
+async function bootInner(){
+  const { data:{ session }, error } = await withTimeout(sb.auth.getSession(), 12000);
+  if (error) throw error;
   if (!session){ const q=new URLSearchParams(location.search); showSignIn(q.get("error_description")||""); return; }
   S.user = session.user;
   gate(`<div class="loading">Loading your tools…</div>`);
   let me = null;
   for (let i=0;i<3 && !me;i++){ // the profile is created right after first sign-in
-    const {data} = await sb.from("profiles").select("*").eq("id",S.user.id).maybeSingle(); me = data;
+    const {data, error} = await withTimeout(sb.from("profiles").select("*").eq("id",S.user.id).maybeSingle(), 12000);
+    if (error && /fetch|network|timeout|5\d\d/i.test(String(error.message||error.code||""))) throw error;
+    me = data;
     if (!me) await new Promise(r=>setTimeout(r,700));
   }
   if (!me){ showSignIn("Signed in, but your profile couldn't be created. Try again in a minute."); return; }
