@@ -508,7 +508,8 @@ function renderJob(){
           <div class="field"><label for="rLogo">Logo <span class="muted">(PNG)</span></label><input type="file" id="rLogo" accept="image/png,image/svg+xml,image/webp"><div class="hint" id="logoHint"></div></div>
           <div class="field"><label for="rMusic">Music <span class="muted">(free library or your own file)</span></label><div class="btns" style="margin-bottom:6px"><button class="btn-sm primary" id="findMusic" type="button">🎵 Find free music</button></div><input type="file" id="rMusic" accept="audio/*"><div class="hint" id="musicHint"></div></div>
         </div>
-        <div class="btns"><button class="btn" id="prepBtn">1 · Prepare preview</button><button class="btn ghost" id="playBtn" disabled>▶ Play preview</button><button class="btn" id="recBtn" disabled>2 · Record video</button></div>
+        <div class="btns"><button class="btn" id="prepBtn">1 · Prepare preview</button><button class="btn ghost" id="playBtn" disabled>▶ Play preview</button><button class="btn" id="recBtn" disabled>2 · Record &amp; download MP4</button><button class="btn ghost" id="dlLast" hidden>⬇ Download video</button></div>
+        <p class="small muted" id="dlHelp" style="margin:6px 0 0">Steps: <b>1 · Prepare preview</b> → (edit) → <b>2 · Record &amp; download MP4</b>. Recording plays the whole video once; the MP4 then saves to your Downloads folder and a download button appears here.</p>
         <div class="bar"><i id="barFill"></i></div>
         <div class="log" id="log">Prepare downloads the approved footage and creates the voiceover (about a minute).</div>
         <div class="notice small">Recording plays the video once in real time. Keep this tab open and visible until it finishes. Works best in Chrome or Edge on a computer.</div>
@@ -752,6 +753,7 @@ async function initRenderPanel(){
   $("#prepBtn").addEventListener("click",prepare);
   $("#playBtn").addEventListener("click",()=>R.playing?stopPlayback():play(false));
   $("#recBtn").addEventListener("click",()=>play(true));
+  showDlLast();
   if(!R.logo){ const f=await idb.get("logo"); if(f) try{ R.logo=await loadImage(f); R.logoName=f.name; }catch(e){} }
   if(!R.music){ const f=await idb.get("music"); if(f){ R.music=f; R.musicMeta=(await idb.get("musicMeta"))||{source:"own",title:f.name||"saved track"}; } }
   updateCredits();
@@ -1255,17 +1257,28 @@ async function play(record, from, until){
   raf=requestAnimationFrame(loop);
 }
 function showResult(blob, mime){
+  if(!blob || blob.size<20000){ $("#resultBox").innerHTML=`<div class="notice" style="margin-top:12px">The recording came out empty, so there is nothing to download. Keep this tab open and in front while it records, then press <b>2 · Record &amp; download MP4</b> again. Use Chrome or Edge on a computer.</div>`; setLog("Recording failed."); return; }
   const ext = blob.type.includes("mp4") ? "mp4" : "webm";
   const name = `negotrip-${(S.job.request?.destination||"short").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")}-${S.job.job_id}.${ext}`;
   const url=URL.createObjectURL(blob);
   const mb=(blob.size/1048576).toFixed(1);
-  $("#resultBox").innerHTML = `<div class="card" style="margin-top:14px;background:var(--bg)"><h3>Your video is ready</h3>
+  S.lastResult={jobId:S.jobId, blob, name, mime, url};
+  $("#resultBox").innerHTML = `<div class="card resultcard" style="margin-top:14px;background:var(--bg)"><h3>Your video is ready ✓</h3>
+    <p class="small" style="margin:0 0 8px">It has been saved to your <b>Downloads</b> folder as <b>${esc(name)}</b>. If your browser blocked it, use the button below.</p>
     <div class="stage" style="max-width:220px;margin:0 0 10px"><video src="${url}" controls playsinline></video></div>
-    <div class="btns"><a class="btn" href="${url}" download="${esc(name)}">Download ${ext.toUpperCase()} (${mb} MB)</a></div>
+    <div class="btns"><a class="btn" id="dlBtn" href="${url}" download="${esc(name)}">⬇ Download ${ext.toUpperCase()} (${mb} MB)</a></div>
     ${!/avc1/.test(mime||"")?`<p class="small muted">This browser couldn't record H.264, so the file uses a different codec. YouTube accepts it; for Instagram and Facebook, record in the latest Chrome or Edge on a computer.</p>`:""}
     <p class="small muted">Tick off the checks above before you post.</p></div>`;
-  setLog("Done.");
+  showDlLast();
+  try{ saveBlob(blob, name); }catch(e){}
+  setTimeout(()=>{ const r=$("#resultBox"); if(r) r.scrollIntoView({behavior:"smooth",block:"center"}); },150);
+  toast("Video saved to your Downloads folder");
+  setLog("Done. Video downloaded.");
   setBar(1);
+}
+function showDlLast(){
+  const b=$("#dlLast"); if(!b) return; const r=S.lastResult;
+  if(r && r.jobId===S.jobId){ b.hidden=false; b.onclick=()=>saveBlob(r.blob, r.name); } else b.hidden=true;
 }
 
 // ================================================================ TEXT, COLOURS & BRAND (one schema drives the controls, the renderer and the AI)
