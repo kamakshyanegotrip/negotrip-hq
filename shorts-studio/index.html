@@ -1974,14 +1974,13 @@ function renderCE(){
           <div class="hint">Star-style presets describe a type of voice; they don't copy any real person.</div></div>
         <div class="row2"><div class="field"><label for="ceGender">Voice</label><select id="ceGender">${["female","male","neutral"].map(g=>`<option ${CE.gender===g?"selected":""}>${g}</option>`).join("")}</select></div><div class="field"><label for="ceLang">Main language</label><select id="ceLang">${LANG_OPTS.map(([c,n])=>`<option value="${c}" ${CE.lang===c?"selected":""}>${n}</option>`).join("")}</select></div></div>
         <button class="btn-sm primary" id="ceDesign" type="button" ${busy?"disabled":""}>${busy==="voice"?"Creating voice…":"✦ Create this voice"}</button>`:""}
-      ${vTab==="cloned"?`<p class="small" style="margin:0 0 8px">Two recordings of <b>the same person</b>, same quiet room, same microphone. Google checks that the consent recording matches the voice.</p>
-        <div class="recbox"><b class="small">1 · Voice sample, 10–30 seconds.</b> <span class="small muted">Read this out naturally:</span><div class="quote">${esc(SAMPLE_LINE)}</div>
-          <div class="btns">${recBtns("sample")}</div></div>
-        <div class="recbox"><b class="small">2 · Consent sentence.</b> <span class="small muted">Read exactly:</span><div class="quote">“${esc(CONSENT_LINE)}”</div>
-          <div class="btns">${recBtns("consent")}</div></div>
+      ${vTab==="cloned"?`<p class="small" style="margin:0 0 8px">One recording of the speaker in a quiet room. Read the box from the top: the short permission line first (Google requires it), a small pause, then the paragraph. About 20–40 seconds in all.</p>
+        <div class="recbox"><div class="quote"><b>“${esc(CONSENT_LINE)}”</b><br><span class="muted small">(pause)</span><br>${esc(SAMPLE_LINE)}</div>
+          ${CE.rec.slot==="all"?`<div class="small"><b>Recording…</b> read the bold line, pause, then the paragraph. Press ■ Stop when done.</div>`:""}
+          <div class="btns">${recBtns("all")}</div></div>
         <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin:8px 0"><input type="checkbox" id="ceVok" ${CE.consent.voice_consent?"checked":""} style="margin-top:3px"> The speaker is 18+ and agreed to their voice being cloned for NegoTrip videos.</label>
         ${(()=>{ const a=CE.rec.sample, c=CE.rec.consent, ok=a&&a.okLen&&c&&c.okLen&&CE.consent.voice_consent;
-          return `<ul class="ready"><li class="${a&&a.okLen?"yes":"no"}">${a&&a.okLen?"✓":"✗"} Voice sample ${a?a.dur.toFixed(1)+" s":"missing"}${a&&!a.okLen?" (needs 10–30 s)":""}</li><li class="${c&&c.okLen?"yes":"no"}">${c&&c.okLen?"✓":"✗"} Consent sentence ${c?c.dur.toFixed(1)+" s":"missing: record or upload it in step 2"}${c&&!c.okLen?" (too short, read the whole sentence)":""}</li><li class="${CE.consent.voice_consent?"yes":"no"}">${CE.consent.voice_consent?"✓":"✗"} Permission ticked</li></ul>
+          return `<ul class="ready"><li class="${a&&c?"yes":"no"}">${a&&c?"✓ Recording "+(CE.rec.total||0).toFixed(1)+" s":"✗ Recording missing: press ● Record or upload one"}</li>${a&&c?`<li class="${a.okLen?"yes":"no"}">${a.okLen?"✓":"✗"} Voice part ${a.dur.toFixed(1)} s${a.okLen?"":" (needs at least 10 s: read the whole paragraph)"}</li>`:""}<li class="${CE.consent.voice_consent?"yes":"no"}">${CE.consent.voice_consent?"✓":"✗"} Permission ticked</li></ul>
           <button class="btn-sm primary" id="ceClone" type="button" ${busy||!ok?"disabled":""}>${busy==="voice"?"Cloning voice… (up to a minute)":"✦ Create cloned voice"}</button>`; })()}
         ${CE.kind==="influencer"?`<p class="hint">For an AI influencer, clone only the voice of a real person who agreed (for example a team member who voices her).</p>`:""}`:""}
     </div>
@@ -2022,39 +2021,61 @@ function renderCE(){
   lazyLooks(m);
 }
 function recBtns(slot){
-  const r=CE.rec[slot], on=CE.rec.slot===slot;
-  return `<button class="btn-sm ${on?"primary":""}" type="button" data-rec="${slot}">${on?"■ Stop recording":"● Record"}</button>
+  const on=CE.rec.slot===slot, a=CE.rec.sample, c=CE.rec.consent;
+  return `<button class="btn-sm ${on?"primary":""}" type="button" data-rec="${slot}">${on?"■ Stop recording":a?"● Record again":"● Record"}</button>
     <label class="btn-sm" style="cursor:pointer">Upload audio<input type="file" class="sr" accept="audio/*,video/*" data-recfile="${slot}"></label>
-    ${r?`<button class="btn-sm" type="button" data-recplay="${slot}" data-pkey="rec:${slot}" data-plabel="▶ Play ${r.dur.toFixed(1)} s">▶ Play ${r.dur.toFixed(1)} s</button><span class="pill ${r.okLen?"ok":"bad"}">${r.okLen?"OK":slot==="sample"?"needs 10–30 s":"too short"}</span>`:""}`;
+    ${a&&c&&!on?`<button class="btn-sm" type="button" data-recplay="consent" data-pkey="rec:consent" data-plabel="▶ Permission line ${c.dur.toFixed(1)} s">▶ Permission line ${c.dur.toFixed(1)} s</button><button class="btn-sm" type="button" data-recplay="sample" data-pkey="rec:sample" data-plabel="▶ Voice part ${a.dur.toFixed(1)} s">▶ Voice part ${a.dur.toFixed(1)} s</button>`:""}`;
 }
 async function recordInto(slot, btn){
   if(CE.rec.active){ const was=CE.rec.slot; stopRec(); if(was===slot) return; }
   let stream;
   try{ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}}); }
   catch(e){ toast("Microphone not available: allow microphone access for this page, or upload a recording."); return; }
-  const mr=new MediaRecorder(stream); const chunks=[]; const t0=Date.now(); const max=slot==="sample"?31000:16000;
+  const mr=new MediaRecorder(stream); const chunks=[]; const t0=Date.now(); const max=46000;
   mr.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
   const timer=setInterval(()=>{ const s=(Date.now()-t0)/1000; const b=document.querySelector(`[data-rec="${slot}"]`); if(b) b.textContent=`■ Stop · ${s.toFixed(0)} s`; if(Date.now()-t0>max) stopRec(); },250);
   mr.onstop=async()=>{ clearInterval(timer); stream.getTracks().forEach(t=>t.stop()); if(!CE) return; CE.rec.active=null; CE.rec.slot=null; await setRecording(slot, new Blob(chunks,{type:mr.mimeType||"audio/webm"})); };
   CE.rec.active=mr; CE.rec.slot=slot; mr.start(250); renderCE();
 }
 async function setRecording(slot, blob){
-  try{ const r=await toWav24k(blob, slot==="sample"?30:15); r.okLen = slot==="sample" ? r.dur>=10 : r.dur>=3; CE.rec[slot]=r; }
-  catch(e){ toast("Couldn't read that recording. Try again or use another file."); }
+  try{
+    const ch=await decode24k(blob, 45), R=24000, total=ch.length/R;
+    const sp=findSplit(ch), cut=sp.at;
+    const cw=wavFrom(ch,0,cut), sw=wavFrom(ch,cut,Math.min(ch.length,cut+30*R));
+    CE.rec.consent={dur:cut/R, blob:cw, url:URL.createObjectURL(cw), okLen:cut/R>=2.5};
+    CE.rec.sample={dur:Math.min(30,(ch.length-cut)/R), blob:sw, url:URL.createObjectURL(sw), okLen:(ch.length-cut)/R>=10};
+    CE.rec.total=total; CE.msg = sp.found ? null : {t:"Couldn't hear a clear pause after the permission line, so it was cut at about 6.5 s. Press ▶ Permission line to check it; if it's cut wrongly, record again with a short pause.", bad:true};
+  }catch(e){ toast("Couldn't read that recording. Try again or use another file."); }
   renderCE();
 }
-// any audio -> 24 kHz mono 16-bit WAV (what Google recommends for voice cloning)
-async function toWav24k(blob, maxSec){
+// any audio -> 24 kHz mono samples (normalised); Google recommends 24 kHz mono 16-bit WAV
+async function decode24k(blob, maxSec){
   const buf=await audioCtx().decodeAudioData((await blob.arrayBuffer()).slice(0));
-  const dur=Math.min(buf.duration, maxSec||30), len=Math.ceil(dur*24000);
+  const len=Math.ceil(Math.min(buf.duration, maxSec||45)*24000);
   const off=new OfflineAudioContext(1, len, 24000); const src=off.createBufferSource(); src.buffer=buf; src.connect(off.destination); src.start();
-  const out=await off.startRendering(); const ch=out.getChannelData(0);
+  const ch=(await off.startRendering()).getChannelData(0);
   let peak=0; for(let i=0;i<ch.length;i++){ const a=Math.abs(ch[i]); if(a>peak) peak=a; }
-  const gain=peak>0.01 ? Math.min(4, 0.89/peak) : 1;
-  const pcm=new Uint8Array(ch.length*2), dv=new DataView(pcm.buffer);
-  for(let i=0;i<ch.length;i++){ const v=Math.max(-1,Math.min(1,ch[i]*gain)); dv.setInt16(i*2, v<0?v*32768:v*32767, true); }
-  const wav=new Blob([pcmToWav(pcm,24000)],{type:"audio/wav"});
-  return { dur, blob:wav, url:URL.createObjectURL(wav) };
+  const g=peak>0.01?Math.min(4,0.89/peak):1; if(g!==1) for(let i=0;i<ch.length;i++) ch[i]*=g;
+  return ch;
+}
+function wavFrom(ch, a, b){
+  const n=Math.max(0,b-a), pcm=new Uint8Array(n*2), dv=new DataView(pcm.buffer);
+  for(let i=0;i<n;i++){ const v=Math.max(-1,Math.min(1,ch[a+i])); dv.setInt16(i*2, v<0?v*32768:v*32767, true); }
+  return new Blob([pcmToWav(pcm,24000)],{type:"audio/wav"});
+}
+// where the permission line ends: the first pause (≥0.35 s) after speech starts, 2.5–14 s in
+function findSplit(ch){
+  const R=24000, F=R/20, n=Math.floor(ch.length/F), rms=new Float32Array(n);
+  for(let k=0;k<n;k++){ let s=0; for(let i=k*F;i<(k+1)*F;i++) s+=ch[i]*ch[i]; rms[k]=Math.sqrt(s/F); }
+  const sorted=Array.from(rms).sort((a,b)=>a-b), loud=sorted[Math.floor(n*0.9)]||0, thr=Math.max(0.008, loud*0.12);
+  let first=0; while(first<n && rms[first]<thr) first++;
+  let run=0;
+  for(let k=first;k<n;k++){
+    if(rms[k]<thr){ run++; const startK=k-run+1;
+      if(run>=7 && startK/20>=Math.max(2.5,first/20+2) && startK/20<=14){ let e=k; while(e<n && rms[e]<thr) e++; return {at:Math.floor(((startK+e)/2)*F), found:true}; } }
+    else run=0;
+  }
+  return {at:Math.min(ch.length, Math.floor(6.5*R)), found:false};
 }
 // one shared player: tap ▶ to play, tap again (■ Stop) to stop; starting another sound stops the previous one
 const PLAY={ key:null, stop:null, n:0 };
@@ -2110,8 +2131,8 @@ async function designVoice(){
 }
 async function cloneVoice(){
   const a=CE.rec.sample, c=CE.rec.consent;
-  if(!a||!a.okLen){ ceMsg("Record or upload a 10–30 second voice sample first (step 1).",true); return; }
-  if(!c||!c.okLen){ ceMsg("Record or upload the consent sentence first (step 2).",true); return; }
+  if(!a||!a.okLen){ ceMsg("The voice part is too short. Record again and read the whole paragraph (at least 10 s after the permission line).",true); return; }
+  if(!c||!c.okLen){ ceMsg("The permission line is missing at the start of the recording. Record again, reading the bold line first.",true); return; }
   if(!CE.consent.voice_consent){ ceMsg("Tick the voice permission box first.",true); return; }
   CE.busy="voice"; CE.msg={t:"Sending both recordings to Google… this can take up to a minute."}; renderCE();
   let msg, bad=false;
