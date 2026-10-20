@@ -274,6 +274,9 @@ div.look{cursor:default}
 .bkpool{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px}
 .bkedit{grid-template-columns:1fr 1fr!important;margin-top:10px}
 .presclip{display:flex;gap:6px;align-items:center;margin:-2px 0 8px;font-weight:600}
+.gatelist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.gaterow{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface);border-radius:10px;padding:8px 10px}
+.scene.flash{outline:3px solid var(--accent);outline-offset:2px}
 .presbar{border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:12px;padding:12px;background:color-mix(in srgb,var(--accent) 6%,var(--bg));margin-bottom:12px}
 .presbar .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .presbar select{width:auto;min-width:160px;height:38px}
@@ -678,8 +681,16 @@ function updateGate(){
   const n=S.job.scenes.length, r=readyCount();
   const p=$("#readyPill"); if(p){ p.textContent=`${r}/${n} scenes approved`; p.className="pill num "+(r===n?"ok":"warn"); }
   const g=$("#gateNote"), pb=$("#prepBtn");
-  if(g){ g.hidden = r===n; g.innerHTML = r===n ? "" : `Approve footage (or choose a title card) for <b>${n-r}</b> more scene${n-r===1?"":"s"} before making the video.`; }
-  if(pb) pb.disabled = r!==n || S.busy;
+  if(g){ g.hidden = r===n;
+    const todo=S.job.scenes.map((sc,i)=>({sc,i})).filter(x=>!sceneReady(x.sc));
+    g.innerHTML = r===n ? "" : `<b>Prepare preview is locked:</b> approve footage (or choose a title card) for ${todo.length===1?"this scene":"these scenes"} first.
+      <div class="gatelist">${todo.map(({sc,i})=>`<div class="gaterow"><span><b>Scene ${i+1}</b>${sc.role?` (${sc.role==="intro"?"Introduction":"Conclusion"})`:""}: ${esc(sc.location||"")} · ${sc.footage?(sc.footage.source==="AI avatar"?"AI shot waiting for approval":"footage waiting for approval"):"no footage chosen"}</span>
+        <span class="btns">${sc.footage?`<button class="btn-sm primary" type="button" data-gok="${i}">✓ Approve current footage</button>`:""}<button class="btn-sm" type="button" data-gcard="${i}">Use a title card</button><button class="btn-sm" type="button" data-ggo="${i}">Go to scene ↑</button></span></div>`).join("")}</div>`;
+    g.querySelectorAll("[data-gok]").forEach(b=>b.onclick=()=>{ const i=+b.dataset.gok; approve(i, S.job.scenes[i].footage); });
+    g.querySelectorAll("[data-gcard]").forEach(b=>b.onclick=()=>{ const sc=S.job.scenes[+b.dataset.gcard]; sc.card=true; invalidate(); saveLocal(); renderScenes(); updateCredits(); });
+    g.querySelectorAll("[data-ggo]").forEach(b=>b.onclick=()=>{ const el=document.querySelector(`.scene[data-scene="${b.dataset.ggo}"]`); if(el){ el.scrollIntoView({behavior:"smooth",block:"center"}); el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"),2000); } });
+  }
+  if(pb){ pb.disabled = r!==n || S.busy; pb.title = r!==n ? "Approve every scene first (see the list above)" : ""; }
 }
 
 async function approve(i, c){
