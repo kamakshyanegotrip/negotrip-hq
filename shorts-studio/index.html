@@ -266,6 +266,14 @@ div.look{cursor:default}
 .cemsg.bad{background:color-mix(in srgb,var(--danger) 14%,transparent)}
 .ready{list-style:none;padding:0;margin:6px 0 8px;font-size:13px;display:flex;flex-direction:column;gap:3px}
 .ready .no{color:var(--danger)} .ready .yes{color:var(--ok)}
+.aifab{position:fixed;right:16px;bottom:16px;z-index:45;border:0;border-radius:999px;padding:12px 18px;background:var(--accent);color:var(--accent-ink);font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer}
+.bkthemes{display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap}
+.bkbg{border-top:1px dashed var(--line);margin-top:10px;padding-top:10px}
+.bkideas{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.bkidea{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--surface);font-size:13px}
+.bkpool{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px}
+.bkedit{grid-template-columns:1fr 1fr!important;margin-top:10px}
+.presclip{display:flex;gap:6px;align-items:center;margin:-2px 0 8px;font-weight:600}
 .presbar{border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:12px;padding:12px;background:color-mix(in srgb,var(--accent) 6%,var(--bg));margin-bottom:12px}
 .presbar .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .presbar select{width:auto;min-width:160px;height:38px}
@@ -602,8 +610,12 @@ function renderJob(){
   mountDirector();
   mountChat(document.querySelector('.aihost[data-key="caption"]'), "caption", captionDef());
   renderNarr(); resumeShotPolls();
+  if(!S.chats.bookends) S.chats.bookends={open:true,msgs:[],draft:""};
   renderBookends(); mountChat(document.querySelector('.aihost[data-key="bookends"]'), "bookends", bookendsDef());
   applyPendingPresenter(); renderPresBar();
+  if(!$("#aiFab")){ const f=document.createElement("button"); f.id="aiFab"; f.className="aifab"; f.type="button"; f.textContent="✦ AI: change the whole video"; document.body.appendChild(f);
+    f.onclick=()=>{ const h=document.querySelector('.aihost[data-key="director"]'); if(!h) return; S.chats.director=S.chats.director||{msgs:[],draft:""}; S.chats.director.open=true; mountDirector(); h.scrollIntoView({behavior:"smooth",block:"center"}); setTimeout(()=>{ const t=h.querySelector("textarea"); if(t) t.focus(); },400); }; }
+  $("#aiFab").hidden=false;
 }
 
 function renderScenes(){
@@ -626,7 +638,7 @@ function sceneHtml(sc,i){
     <div><button class="thumbbtn" data-preview="${i}:sel" ${c?"":"disabled"} aria-label="Preview selected footage">${thumbHtml(c,"thumb")}${c&&c.kind==="video"?'<span class="play">▶</span>':""}</button></div>
     <div>
       <div class="meta"><span class="loc">${i+1}. ${esc(sc.location||"")}</span>${sc.role?`<span class="pill acc">${sc.role==="intro"?"Opening":"Closing"}</span>`:""}<span class="pill ${sc.type==="anchor"?"acc":""}">${sc.type==="anchor"?"Presenter":"B-roll"}</span>${status}${m&&!sc.card?`<span class="pill ${m[1]}">${m[0]}</span>`:""}</div>
-      ${sceneAvatarLine(sc)}
+      ${presSceneToggle(sc)}${sceneAvatarLine(sc)}
       ${c&&!sc.card?`<div class="small muted" style="margin:-4px 0 8px">${c.kind==="photo"?"Photo":"Video"} · ${licHtml(c)}${c.page_url?` · <a href="${esc(c.page_url)}" target="_blank" rel="noopener">source ↗</a>`:""}</div>`:""}
       <div class="btns" style="margin-bottom:8px">
         ${c&&!sc.card&&!sc.approved?`<button class="btn-sm primary" data-approve="${i}">✓ Approve this footage</button>`:""}
@@ -651,6 +663,7 @@ function sceneHtml(sc,i){
 function bindScenes(){
   const w=$("#sceneList");
   w.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("input",()=>{ const [i,f]=el.dataset.edit.split(":"); S.job.scenes[i][f] = f==="duration_sec" ? Math.max(2,Math.min(20,+el.value||3)) : el.value; if(R.prepared && f!=="narration"){ relayout(); scrubTo(R.scrub||0); } else invalidate(); saveLocal(); }));
+  w.querySelectorAll("[data-presone]").forEach(c=>c.addEventListener("change",()=>{ const sc=S.job.scenes.find(x=>String(x.id)===c.dataset.presone); if(sc){ presSetScene(sc,c.checked); invalidate(); saveLocal(); renderScenes(); } }));
   w.querySelectorAll("[data-people]").forEach(b=>b.addEventListener("click",()=>openShot(+b.dataset.people)));
   w.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click",()=>{ const i=b.dataset.toggle; S.openAlts[i]=!S.openAlts[i]; renderScenes(); }));
   w.querySelectorAll("[data-approve]").forEach(b=>b.addEventListener("click",()=>approve(+b.dataset.approve, S.job.scenes[+b.dataset.approve].footage)));
@@ -674,7 +687,7 @@ async function approve(i, c){
   sc.footage=c; sc.approved=true; sc.card=false; c.verified=true;
   if(!sc.candidates.find(x=>x.cid===c.cid)) sc.candidates.unshift(c);
   invalidate(); saveLocal(); renderScenes(); updateCredits();
-  if(c.source!=="Your library" && c.source!=="AI avatar") api("verdict",{verdict:"approved", item:c, place:placeOf(sc), destination:S.job.request?.destination||""}).catch(e=>toast("Saved here, but couldn't save the approval for next time: "+e.message));
+  if(c.source!=="Your library" && c.source!=="AI avatar" && c.source!=="AI image") api("verdict",{verdict:"approved", item:c, place:placeOf(sc), destination:S.job.request?.destination||""}).catch(e=>toast("Saved here, but couldn't save the approval for next time: "+e.message));
 }
 async function reject(i, c, note){
   const sc=S.job.scenes[i]; if(!c) return;
@@ -685,7 +698,7 @@ async function reject(i, c, note){
     if(sc.footage && sc.footage.verified) sc.approved=true;
   }
   invalidate(); saveLocal(); renderScenes(); updateCredits();
-  if(c.source==="AI avatar"){ toast("Shot removed."); return; }
+  if(c.source==="AI avatar"||c.source==="AI image"){ toast("Removed."); return; }
   api("verdict",{verdict:"rejected", item:c, place:placeOf(sc), destination:S.job.request?.destination||"", note:note||""}).catch(e=>toast("Couldn't save the rejection: "+e.message));
   toast("Rejected. It won't be suggested for "+placeOf(sc)+" again.");
 }
@@ -1898,7 +1911,7 @@ const SHOT_FINISH = [
 ];
 const INFL_IDEAS = ["Odia woman in her late 20s, warm smile, long black hair, travel vlogger style","Indian man in his early 30s, short beard, friendly, adventurous backpacker look","Indian woman in her 40s, elegant, cheerful family-holiday host","Young Indian couple's friendly travel guide, man in his mid 20s, curly hair, energetic"];
 const LANG_OPTS = [["en-IN","English (India)"],["hi-IN","Hindi"],["or-IN","Odia"],["bn-IN","Bengali"],["ta-IN","Tamil"],["te-IN","Telugu"],["mr-IN","Marathi"],["en-US","English (US)"],["en-GB","English (UK)"]];
-SRC_SHORT["AI avatar"]="AI person";
+SRC_SHORT["AI avatar"]="AI person"; SRC_SHORT["AI image"]="AI image";
 
 function castActive(){ return CAST.list.filter(m=>!m.archived); }
 function castById(id){ return CAST.list.find(m=>m.cast_id===id); }
@@ -2333,52 +2346,61 @@ async function pollShot(scId){
 function resumeShotPolls(){ if(!S.job) return; S.job.scenes.forEach(sc=>{ if(sc.avatar && sc.avatar.pending){ if(sc.avatar.pending.operation) pollShot(sc.id); else sc.avatar.pending=null; } }); }
 
 
-// ---------------------------------------------------------------- presenter: put one person into many scenes at once
-function presTargets(which){
-  const sc=S.job.scenes;
-  if(which==="all") return sc.map((s,i)=>i).filter(i=>!sc[i].role);
-  if(which==="bookends") return sc.map((s,i)=>i).filter(i=>sc[i].role);
-  const a=sc.map((s,i)=>i).filter(i=>sc[i].type==="anchor" && !sc[i].role); return a.length?a:sc.map((s,i)=>i).filter(i=>!sc[i].role).slice(0,2);
+// ---------------------------------------------------------------- presenter: choose exactly which clips the presenter appears in
+function presIds(){ const P=S.job.presenter; if(!P) return [];
+  if(!Array.isArray(P.scenes)){ const sc=S.job.scenes; let idx=P.which==="all"?sc.filter(s=>!s.role):P.which==="bookends"?sc.filter(s=>s.role):sc.filter(s=>s.type==="anchor"&&!s.role); P.scenes=idx.map(s=>String(s.id)); }
+  return P.scenes; }
+function presDefaultIds(){ const sc=S.job.scenes; const a=sc.filter(s=>s.type==="anchor"&&!s.role); return (a.length?a:sc.filter(s=>!s.role).slice(0,2)).map(s=>String(s.id)); }
+function presSetScene(sc, on){
+  const P=S.job.presenter; if(!P||!P.id) return; const m=castById(P.id); const id=String(sc.id); const ids=presIds();
+  if(on){ if(!ids.includes(id)) ids.push(id); const av=scAv(sc); av.cast_ids=[P.id]; if(!av.action) av.action=sc.role==="outro"?"Waves goodbye and smiles at the camera":sc.role==="intro"?"Greets the camera with a warm smile":"Talks to the camera like a travel vlogger"; av.speak=!!(P.speak&&m&&m.voice_id); }
+  else { P.scenes=ids.filter(x=>x!==id); if(sc.avatar && (sc.avatar.cast_ids||[]).join()===P.id){ sc.avatar.cast_ids=[]; sc.avatar.speak=false; } }
 }
-function renderFormPres(){
-  const sel=$("#fPres"); if(!sel) return; const v=sel.value;
-  sel.innerHTML=`<option value="">No presenter</option>`+castActive().filter(m=>m.look_drive_id).map(m=>`<option value="${esc(m.cast_id)}" ${v===m.cast_id?"selected":""}>${esc(m.name)}${m.voice_id?"":" (no voice)"}</option>`).join("");
-}
-function applyPresenter(id, which, speak){
-  const m=castById(id); if(!m) return 0; const idx=presTargets(which);
-  idx.forEach(i=>{ const av=scAv(S.job.scenes[i]); av.cast_ids=[id]; if(!av.action) av.action=S.job.scenes[i].role==="outro"?"Waves goodbye and smiles at the camera":"Talks to the camera like a travel vlogger"; av.speak=!!(speak&&m.voice_id); });
-  const prev=S.job.presenter&&S.job.presenter.id;
-  S.job.presenter={id, which, speak:!!speak};
-  if(speak && m.voice_id) S.job.narrator_cast=id; else if(S.job.narrator_cast && S.job.narrator_cast===prev) S.job.narrator_cast="";
+function applyPresenter(id, sceneIds, speak){
+  const m=castById(id); if(!m) return 0; const prev=S.job.presenter;
+  if(prev && prev.id && prev.id!==id) S.job.scenes.forEach(sc=>{ if(sc.avatar && (sc.avatar.cast_ids||[]).join()===prev.id){ sc.avatar.cast_ids=[]; sc.avatar.speak=false; } });
+  S.job.presenter={id, scenes:[], speak:!!speak};
+  const want=new Set((sceneIds||presDefaultIds()).map(String));
+  S.job.scenes.forEach(sc=>{ if(want.has(String(sc.id))) presSetScene(sc,true); });
+  if(speak && m.voice_id) S.job.narrator_cast=id; else if(S.job.narrator_cast && prev && S.job.narrator_cast===prev.id) S.job.narrator_cast="";
   if(speak && !m.voice_id) setTimeout(()=>toast(m.name+" has no voice yet: the normal voice narrates. Give them a voice under People."),400);
-  invalidate(); saveLocal(); renderScenes(); renderNarr(); return idx.length;
+  invalidate(); saveLocal(); renderScenes(); renderNarr(); return S.job.presenter.scenes.length;
 }
+function presTogglesHtml(){ const ids=new Set(presIds());
+  return S.job.scenes.map((sc,i)=>{ const lab=sc.role==="intro"?"Intro":sc.role==="outro"?"End":String(i+1-(S.job.scenes[0]&&S.job.scenes[0].role==="intro"?1:0));
+    const shot=sc.footage&&sc.footage.source==="AI avatar"; return `<button type="button" class="aihint ${ids.has(String(sc.id))?"on":""}" data-presclip="${esc(String(sc.id))}" title="${esc(sc.location||"")}">${lab}${shot?" ✓":""}</button>`; }).join(""); }
 function applyPendingPresenter(){
   if(!S.job || S.job.presenter) return; const id=store.get("presenter."+S.jobId,null); if(!id) return;
   if(!CAST.loaded){ setTimeout(applyPendingPresenter,1500); return; }
-  store.set("presenter."+S.jobId,null); const n=applyPresenter(id,"anchor",true); const m=castById(id);
-  if(n && m) toast(`${m.name} is set up as presenter in ${n} scene${n===1?"":"s"}. Press “Create shots” to put them in.`);
+  store.set("presenter."+S.jobId,null); const n=applyPresenter(id,null,true); const m=castById(id);
+  if(n && m) toast(`${m.name} is set up as presenter in ${n} clip${n===1?"":"s"}. Press “Create shots” to put them in.`);
 }
 function renderPresBar(){
   const h=$("#presBar"); if(!h||!S.job) return;
-  const ppl=castActive().filter(m=>m.look_drive_id), P=S.job.presenter||{}, which=P.which||"anchor";
+  const ppl=castActive().filter(m=>m.look_drive_id), P=S.job.presenter||{};
   if(!ppl.length){ h.innerHTML=`<b>👤 Presenter</b> <span class="small muted">· No people yet. Create a person or AI influencer under <b>People</b> (left), then choose them here.</span>`; return; }
-  const cur=P.id && castById(P.id), idx=presTargets(which);
-  const todo=idx.filter(i=>{ const s=S.job.scenes[i]; return !(s.footage&&s.footage.source==="AI avatar"); });
+  const cur=P.id && castById(P.id), ids=presIds(), scenes=S.job.scenes.filter(s=>ids.includes(String(s.id)));
+  const todo=scenes.filter(s=>!(s.footage&&s.footage.source==="AI avatar")).map(s=>S.job.scenes.indexOf(s));
   h.innerHTML=`<div class="row"><b>👤 Presenter</b>${cur?`<span class="jth ph" data-look="${esc(cur.look_drive_id)}"></span>`:""}
     <select id="presWho" aria-label="Presenter"><option value="">Choose a person…</option>${ppl.map(m=>`<option value="${esc(m.cast_id)}" ${P.id===m.cast_id?"selected":""}>${esc(m.name)} · ${m.kind==="avatar"?"real person":"AI influencer"}</option>`).join("")}</select>
-    <select id="presWhich" aria-label="Which scenes"><option value="anchor" ${which==="anchor"?"selected":""}>Presenter scenes (${presTargets("anchor").length})</option><option value="all" ${which==="all"?"selected":""}>All scenes (${presTargets("all").length})</option>${presTargets("bookends").length?`<option value="bookends" ${which==="bookends"?"selected":""}>Introduction & conclusion (${presTargets("bookends").length})</option>`:""}</select>
-    <label class="small" style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="presSpeak" ${P.speak!==false?"checked":""}> speaks in own voice</label>
-    <button class="btn-sm" id="presApply" type="button">Set up</button>
-    ${cur?`<button class="btn-sm primary" id="presMake" type="button" ${todo.length&&!SHOT.batch?"":"disabled"}>${SHOT.batch?esc(SHOT.batch):todo.length?`✦ Create ${todo.length} shot${todo.length===1?"":"s"} (~${rupees(todo.length*COST.image)})`:"✓ Shots created"}</button>`:""}</div>
-    <div class="small muted" style="margin-top:6px">${cur?`${esc(cur.name)} is in scene${idx.length===1?"":"s"} ${idx.map(i=>i+1).join(", ")}. Each shot then needs ✓ Approve; open 👤 People in this scene to change the action, props or animate it.`:"Choose who presents this video and in which scenes, then press Set up and Create shots."}</div>`;
-  const go=()=>{ const id=$("#presWho").value; if(!id){ toast("Choose a person first"); return; } const n=applyPresenter(id,$("#presWhich").value,$("#presSpeak").checked); toast(`Set up in ${n} scene${n===1?"":"s"}`); };
-  $("#presApply").onclick=go;
-  $("#presWho").onchange=()=>{ if($("#presWho").value) go(); };
-  $("#presWhich").onchange=()=>{ if(S.job.presenter) go(); else renderPresBar(); };
-  $("#presSpeak").onchange=()=>{ if(S.job.presenter) go(); };
+    <label class="small" style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="presSpeak" ${P.speak!==false?"checked":""}> speaks in own voice</label></div>
+    ${cur?`<div class="row" style="margin-top:8px"><span class="small muted">Show in clips:</span><span class="chips">${presTogglesHtml()}</span>
+      <span class="btns"><button class="btn-sm" type="button" data-presq="anchor">Presenter scenes</button><button class="btn-sm" type="button" data-presq="all">All</button><button class="btn-sm" type="button" data-presq="none">None</button></span></div>
+    <div class="row" style="margin-top:8px"><button class="btn-sm primary" id="presMake" type="button" ${todo.length&&!SHOT.batch?"":"disabled"}>${SHOT.batch?esc(SHOT.batch):todo.length?`✦ Create ${todo.length} shot${todo.length===1?"":"s"} (~${rupees(todo.length*COST.image)})`:scenes.length?"✓ Shots created":"Tick some clips first"}</button>
+      <span class="small muted">${esc(cur.name)} appears in ${scenes.length} clip${scenes.length===1?"":"s"}. ✓ = shot made. Each shot then needs ✓ Approve; use 👤 People in this scene to change the action or props, or to animate it.</span></div>`:`<div class="small muted" style="margin-top:6px">Choose who presents this video, then tick the clips they appear in.</div>`}`;
+  $("#presWho").onchange=()=>{ const id=$("#presWho").value; if(id){ const n=applyPresenter(id, P.id?presIds():null, $("#presSpeak").checked); toast(`${castById(id).name}: ${n} clip${n===1?"":"s"}`); } };
+  $("#presSpeak").onchange=()=>{ if(P.id) applyPresenter(P.id, presIds(), $("#presSpeak").checked); };
+  h.querySelectorAll("[data-presclip]").forEach(b=>b.onclick=()=>{ const sc=S.job.scenes.find(s=>String(s.id)===b.dataset.presclip); if(!sc) return; presSetScene(sc, !presIds().includes(String(sc.id))); invalidate(); saveLocal(); renderScenes(); });
+  h.querySelectorAll("[data-presq]").forEach(b=>b.onclick=()=>{ const q=b.dataset.presq; const want=q==="none"?[]:q==="all"?S.job.scenes.map(s=>String(s.id)):presDefaultIds(); S.job.scenes.forEach(sc=>presSetScene(sc, want.includes(String(sc.id)))); invalidate(); saveLocal(); renderScenes(); });
   const mk=$("#presMake"); if(mk) mk.onclick=()=>createPresenterShots(todo);
   lazyLooks(h);
+}
+function presSceneToggle(sc){ const P=S.job&&S.job.presenter; const m=P&&P.id&&castById(P.id); if(!m) return "";
+  const on=presIds().includes(String(sc.id)); return `<label class="small presclip"><input type="checkbox" data-presone="${esc(String(sc.id))}" ${on?"checked":""}> 👤 ${esc(m.name)} presents this clip</label>`; }
+
+function renderFormPres(){
+  const sel=$("#fPres"); if(!sel) return; const v=sel.value;
+  sel.innerHTML=`<option value="">No presenter</option>`+castActive().filter(m=>m.look_drive_id).map(m=>`<option value="${esc(m.cast_id)}" ${v===m.cast_id?"selected":""}>${esc(m.name)}${m.voice_id?"":" (no voice)"}</option>`).join("");
 }
 async function createPresenterShots(list){
   if(SHOT.batch) return; let ok=0;
@@ -2540,11 +2562,27 @@ async function sendChat(key, text, prompt){
 }
 
 // ================================================================ INTRODUCTION & CONCLUSION (opening and closing lines as their own scenes)
+// Lines are written to fit the theme and to flow into scene 1 / out of the last scene. Backgrounds: title card, a scene's footage,
+// stock footage found by search, or an AI background image (~₹3). AI chat can change everything (it never spends money by itself).
+const BK_THEMES = [
+  ["auto","✦ Match the video","work out the theme from the script itself"],
+  ["spiritual","Spiritual & devotional","pilgrimage, temples, faith, peace and blessings"],
+  ["heritage","Heritage & history","ancient monuments, legends, craftsmanship and history"],
+  ["adventure","Adventure & thrill","treks, water sports, wild landscapes, excitement"],
+  ["nature","Nature & wildlife","lakes, forests, birds, dolphins, calm natural beauty"],
+  ["beach","Beach & relaxation","sea, sunrise, sand, slow holidays"],
+  ["family","Family holiday","fun for all ages, comfort, togetherness"],
+  ["romantic","Romantic / honeymoon","couples, sunsets, intimate moments"],
+  ["culture","Food & culture","local food, festivals, crafts, people and traditions"],
+  ["luxury","Luxury & premium","comfort, exclusivity, curated experiences"],
+  ["budget","Budget & value","smart, affordable, great value trips"],
+  ["festival","Festival special","festival season, celebrations, Rath Yatra, Durga Puja"]
+];
 const OPEN_STYLES = [
-  ["welcome","Warm welcome","a warm, friendly welcome from NegoTrip to the destination"],
-  ["hook","Hook question","a curiosity-hook question that makes the viewer keep watching"],
-  ["fact","Surprising fact","one surprising but TRUE fact from the research"],
-  ["pov","POV / you are here","an immersive 'POV: you are standing at…' opener"],
+  ["welcome","Warm welcome","a warm, friendly welcome that sets the theme"],
+  ["hook","Hook question","a curiosity question that makes the viewer keep watching"],
+  ["fact","Surprising fact","one surprising but TRUE fact taken from the research or script"],
+  ["pov","POV / you are here","an immersive 'POV: you are…' opener"],
   ["story","Story opener","a short story-style opener, like the start of a legend"],
   ["teaser","Teaser","a teaser of the best things the viewer is about to see"],
   ["namaste","Namaste greeting","a warm Indian 'Namaste' style greeting and invitation"]
@@ -2558,119 +2596,207 @@ const CLOSE_STYLES = [
   ["fomo","Honest urgency","honest urgency: best season or limited dates, no invented offers or prices"],
   ["tagline","Brand tagline","a short memorable NegoTrip tagline sign-off"]
 ];
-function bkDest(){ const j=S.job||{}; return ((j.request||{}).destination||"").split(",")[0].trim() || "Odisha"; }
+function bkDest(){
+  const j=S.job||{}; let d=((j.request||{}).destination||"").split(",")[0];
+  d=d.replace(/\b(\d+\s*(nights?|n|days?|d)\b|package|packages|tour|tours|trip|itinerary|holiday)\b/gi," ").replace(/[\/&+]+/g," ").replace(/\s+/g," ").trim();
+  return d || ((j.scenes||[]).find(s=>!s.role&&s.location)||{}).location || "Odisha";
+}
 function bkKey(){ const j=S.job||{}; return (j.cta&&j.cta.keyword) || (j.request&&j.request.cta_keyword) || bkDest().toUpperCase().split(/\s+/)[0]; }
+function bkMain(){ return S.job.scenes.filter(s=>!s.role); }
 function bkTemplates(kind, style){
-  const d=bkDest(), k=bkKey(), fact=((S.job.research||{}).facts||(S.job.research||{}).key_facts||[])[0];
+  const d=bkDest(), k=bkKey(), main=bkMain(), first=main[0]||{}, last=main[main.length-1]||{};
+  const p1=first.location||d, fact=((S.job.research||{}).facts||(S.job.research||{}).key_facts||[])[0];
   const T = {
-    welcome:[["Welcome to "+d+" — let's explore it together.","WELCOME TO "+d.toUpperCase()],["Pack your bags, we're going to "+d+"!","LET'S GO"]],
-    hook:[["Have you ever seen a place like "+d+"?","WAIT FOR IT"],["Why does everyone fall in love with "+d+"?","WHY "+d.toUpperCase()+"?"]],
-    fact:[[fact?String(fact).split(/[.;]/)[0].slice(0,110)+".":"Here's something most people don't know about "+d+".","DID YOU KNOW?"]],
-    pov:[["POV: you've just arrived in "+d+" and it's even better than the photos.","POV: "+d.toUpperCase()]],
-    story:[["Long ago, a story began in "+d+"… and it's still being told.","THE STORY"]],
-    teaser:[["In the next few seconds: the best of "+d+".","THE BEST OF "+d.toUpperCase()]],
+    welcome:[["Welcome to "+d+". Let's begin at "+p1+".","WELCOME TO "+d.toUpperCase()]],
+    hook:[["Ever wondered what makes "+p1+" so special?","WHY "+p1.toUpperCase()+"?"]],
+    fact:[[fact?String(fact).split(/[.;]/)[0].slice(0,110)+".":"Here's what most people don't know about "+d+".","DID YOU KNOW?"]],
+    pov:[["POV: you've just arrived in "+d+", and "+p1+" is your first stop.","POV: "+d.toUpperCase()]],
+    story:[["Every journey in "+d+" begins with a story. Ours starts at "+p1+".","THE STORY"]],
+    teaser:[["From "+p1+" to "+(last.location||d)+": here's the best of "+d+".","THE BEST OF "+d.toUpperCase()]],
     namaste:[["Namaste! Come, let NegoTrip show you "+d+".","NAMASTE"]],
-    cta:[["Ready for "+d+"? Let NegoTrip plan it for you.","PLAN YOUR TRIP"],["Your "+d+" trip starts with one message to NegoTrip.","BOOK WITH NEGOTRIP"]],
-    dm:[["DM "+k+" and we'll plan your trip.","DM "+k],["Comment or DM "+k+" for the full plan.","DM "+k]],
-    thanks:[["Thanks for watching — see you in "+d+"!","SEE YOU SOON"]],
-    question:[["Who would you take to "+d+"? Tell us below.","TAG YOUR TRAVEL BUDDY"]],
-    follow:[["Save this for your trip and follow NegoTrip for more.","SAVE & FOLLOW"]],
-    fomo:[["The best season doesn't wait — plan your "+d+" trip early.","PLAN EARLY"]],
-    tagline:[["NegoTrip — travel made personal.","NEGOTRIP"]]
+    cta:[["Loved "+d+"? Let NegoTrip plan your trip.","PLAN YOUR TRIP"]],
+    dm:[["DM "+k+" and we'll plan your "+d+" trip.","DM "+k]],
+    thanks:[["Thanks for watching. See you in "+d+"!","SEE YOU SOON"]],
+    question:[["Which stop would you visit first? Tell us below.","WHICH ONE FIRST?"]],
+    follow:[["Save this for your "+d+" trip and follow NegoTrip.","SAVE & FOLLOW"]],
+    fomo:[["The best season doesn't wait. Plan your "+d+" trip early.","PLAN EARLY"]],
+    tagline:[["NegoTrip. Travel made personal.","NEGOTRIP"]]
   };
   return (T[style]||[]).map(([line,title])=>({line,title:title.slice(0,40),src:"template"}));
 }
-function BK(){ const j=S.job; if(!j.bookends) j.bookends={ intro:{on:false,style:"welcome",options:[],line:"",title:"",visual:"card",secs:3,ask:""}, outro:{on:false,style:"cta",options:[],line:"",title:"",visual:"card",secs:4,ask:""} }; return j.bookends; }
-function bkScene(kind){ return S.job.scenes.find(s=>s.role===kind); }
-function bkOrder(){ // intro first, conclusion last, whatever else moved
-  if(!S.job) return; const sc=S.job.scenes; const i=sc.findIndex(s=>s.role==="intro"); if(i>0) sc.unshift(sc.splice(i,1)[0]);
-  const o=sc.findIndex(s=>s.role==="outro"); if(o>=0 && o!==sc.length-1) sc.push(sc.splice(o,1)[0]);
+function BK(){ const j=S.job;
+  if(!j.bookends) j.bookends={};
+  const B=j.bookends;
+  B.theme=B.theme||"auto";
+  for(const [k,st,secs] of [["intro","welcome",3],["outro","cta",4]]){ const d={on:false,style:st,options:[],line:"",title:"",visual:"card",secs,ask:"",bgIdeas:[],bgAsk:""}; B[k]=B[k]||{}; for(const x in d) if(B[k][x]===undefined) B[k][x]=d[x]; }
+  return B;
 }
-function bkVisualOpts(kind){ return [["card","Title card (text on brand colour)"], ...S.job.scenes.filter(s=>!s.role && !s.card && s.footage && s.approved).map(s=>["scene:"+s.id, "Footage from scene "+(S.job.scenes.indexOf(s)+1)+": "+(s.location||"")])]; }
+const BK_CLEAN=new WeakSet();
+function bkScene(kind){ return S.job.scenes.find(s=>s.role===kind); }
+function bkOrder(){ if(!S.job) return; const sc=S.job.scenes; const i=sc.findIndex(s=>s.role==="intro"); if(i>0) sc.unshift(sc.splice(i,1)[0]); const o=sc.findIndex(s=>s.role==="outro"); if(o>=0 && o!==sc.length-1) sc.push(sc.splice(o,1)[0]); }
+function bkVisualOpts(kind){ const sc=bkScene(kind); const own=sc&&!sc.card&&sc.footage&&!/^scene:/.test(BK()[kind].visual);
+  return [["card","Title card (brand colour)"], ...(own||BK()[kind].visual==="own"?[["own","Chosen background below"]]:[]), ...bkMain().filter(s=>!s.card && s.footage && s.approved).map(s=>["scene:"+s.id, "Footage of scene "+(S.job.scenes.indexOf(s)+1)+": "+(s.location||"")])]; }
 function bkSync(kind){
   const b=BK()[kind]; let sc=bkScene(kind);
-  if(!b.on){ if(sc){ S.job.scenes.splice(S.job.scenes.indexOf(sc),1); } return; }
+  if(!b.on){ if(sc) S.job.scenes.splice(S.job.scenes.indexOf(sc),1); return; }
   if(!b.line){ const t=bkTemplates(kind,b.style)[0]; if(t){ b.line=t.line; b.title=t.title; } }
   if(!sc){ sc={ id:kind, role:kind, aida_stage:kind==="intro"?"Introduction":"Conclusion", type:"anchor", location:kind==="intro"?"Introduction":"Conclusion", candidates:[], approved:true };
     if(kind==="intro") S.job.scenes.unshift(sc); else S.job.scenes.push(sc); }
   sc.narration=b.line; sc.on_screen_text=b.title; sc.duration_sec=b.secs;
   const src = /^scene:/.test(b.visual) ? S.job.scenes.find(s=>"scene:"+s.id===b.visual) : null;
-  if(src && src.footage && src.approved){ sc.card=false; sc.footage=src.footage; sc.approved=true; if(!sc.candidates.find(c=>c.cid===src.footage.cid)) sc.candidates=[src.footage, ...sc.candidates.filter(c=>c.source==="AI avatar")]; }
+  if(src && src.footage && src.approved){ sc.card=false; sc.footage=src.footage; sc.approved=true; }
+  else if(b.visual==="own" && sc.footage){ sc.card=false; }
   else if(!(sc.footage && sc.footage.source==="AI avatar" && sc.approved)){ sc.card=true; }
   bkOrder();
 }
-function bkChanged(kind, big){ bkSync(kind); saveLocal(); if(big) invalidate(); else if(R.prepared){ relayout(); scrubTo(R.scrub||0); } renderScenes(); updateCredits(); renderBookends(); }
-function bookendsCardHtml(){ return `<div class="card" id="bkCard"><h2>Introduction &amp; conclusion</h2><p class="small muted" style="margin:-4px 0 12px">Add an opening line before the first scene and a closing line after the last. Pick from the options, get more from the AI, or write your own. Each becomes its own scene (title card or footage), voiced like the rest.</p><div id="bkBody"></div><div class="aihost" data-key="bookends"></div></div>`; }
+function bkPullAll(){ if(!S.job) return; for(const k of ["intro","outro"]){ const b=BK()[k], sc=bkScene(k); if(sc){ b.on=true; b.line=sc.narration||""; b.title=sc.on_screen_text||""; b.secs=+sc.duration_sec||b.secs; if(!sc.card && sc.footage && b.visual==="card") b.visual="own"; } else b.on=false; } }
+function bkChanged(kind, big){ bkSync(kind); saveLocal(); if(big) invalidate(); else if(R.prepared){ relayout(); scrubTo(R.scrub||0); } renderScenes(); updateCredits(); }
+function bookendsCardHtml(){ return `<div class="card" id="bkCard"><h2>Introduction &amp; conclusion</h2><p class="small muted" style="margin:-4px 0 10px">An opening line before the first scene and a closing line after the last, written to fit the video's theme and flow into (and out of) your scenes. Each becomes its own clip with a background you choose, voiced like the rest.</p>
+  <div class="bkthemes"><span class="small muted">Theme</span> <span class="chips" id="bkThemes"></span></div>
+  <div id="bkBody"></div><div class="aihost" data-key="bookends"></div></div>`; }
+function bkThumb(c){ return thumbHtml(c,""); }
 function bkPartHtml(kind){
   const b=BK()[kind], styles=kind==="intro"?OPEN_STYLES:CLOSE_STYLES, name=kind==="intro"?"introduction":"conclusion";
-  const opts=[...bkTemplates(kind,b.style), ...(b.options||[])];
+  const opts=[...(b.options||[]), ...bkTemplates(kind,b.style)];
+  const sc=bkScene(kind), cur=sc&&!sc.card?sc.footage:null;
+  const pool=(sc?(sc.candidates||[]):[]).filter(c=>!c._rejected).slice(0,16);
   return `<div class="bkpart">
-    <label class="bkon"><input type="checkbox" data-bkon="${kind}" ${b.on?"checked":""}> <b>${kind==="intro"?"Add an introduction (opening line)":"Add a conclusion (closing line)"}</b></label>
+    <label class="bkon"><input type="checkbox" data-bkon="${kind}" ${b.on?"checked":""}> <b>${kind==="intro"?"Add an introduction (opening clip)":"Add a conclusion (closing clip)"}</b></label>
     ${b.on?`
     <div class="small muted" style="margin:8px 0 4px">Style</div>
     <div class="chips">${styles.map(([k,t])=>`<button type="button" class="aihint ${b.style===k?"on":""}" data-bkstyle="${kind}:${k}">${esc(t)}</button>`).join("")}</div>
-    <div class="small muted" style="margin:10px 0 4px">Choose a line</div>
-    <div class="bkopts">${opts.map((o,k)=>`<label class="bkopt ${o.line===b.line?"on":""}"><input type="radio" name="bk-${kind}" data-bkpick="${kind}:${k}" ${o.line===b.line?"checked":""}><span>${esc(o.line)}<br><span class="pill">${esc(o.title||"")}</span>${o.src==="ai"?` <span class="pill acc">AI</span>`:""}</span></label>`).join("")}</div>
-    <form class="searchrow" data-bkai="${kind}" style="margin-top:8px"><input type="text" maxlength="300" value="${esc(b.ask||"")}" placeholder="Optional: tell the AI what you want, e.g. mention sunrise, sound devotional, in Hindi"><button class="btn-sm primary" ${b.busy?"disabled":""}>${b.busy?"Writing…":"✦ 6 more with AI"}</button></form>
-    <div class="row2" style="grid-template-columns:1fr 1fr">
+    <form class="searchrow" data-bkai="${kind}" style="margin-top:10px"><input type="text" maxlength="300" value="${esc(b.ask||"")}" placeholder="Optional: tell the AI what you want, e.g. mention sunrise, sound devotional, in Hindi"><button class="btn-sm primary" ${b.busy?"disabled":""}>${b.busy?"Writing…":"✦ Suggest 6 lines that fit this video"}</button></form>
+    <div class="small muted" style="margin:6px 0 4px">Choose a line ${b.options&&b.options.length?"":"<span class='muted'>(press ✦ Suggest for lines written for this video)</span>"}</div>
+    <div class="bkopts">${opts.map((o,k)=>`<label class="bkopt ${o.line===b.line?"on":""}"><input type="radio" name="bk-${kind}" data-bkpick="${kind}:${k}" ${o.line===b.line?"checked":""}><span>${esc(o.line)}<br><span class="pill">${esc(o.title||"")}</span>${o.src==="ai"?` <span class="pill acc">AI · fits the video</span>`:` <span class="pill">quick template</span>`}</span></label>`).join("")}</div>
+    <div class="row2 bkedit">
       <div class="field"><label class="small muted" for="bkl-${kind}">Spoken line (edit freely)</label><textarea id="bkl-${kind}" data-bkline="${kind}" maxlength="300" style="min-height:60px">${esc(b.line)}</textarea></div>
       <div><div class="field"><label class="small muted" for="bkt-${kind}">On-screen title</label><input type="text" id="bkt-${kind}" data-bktitle="${kind}" maxlength="40" value="${esc(b.title)}"></div>
-        <div class="row2" style="grid-template-columns:1fr 80px"><div class="field"><label class="small muted" for="bkv-${kind}">Shows</label><select id="bkv-${kind}" data-bkvis="${kind}">${bkVisualOpts(kind).map(([v,t])=>`<option value="${esc(v)}" ${b.visual===v?"selected":""}>${esc(t)}</option>`).join("")}</select></div>
-        <div class="field"><label class="small muted" for="bks-${kind}">Seconds</label><input type="number" id="bks-${kind}" data-bksecs="${kind}" min="2" max="8" value="${esc(b.secs)}"></div></div></div>
+        <div class="field"><label class="small muted" for="bks-${kind}">Seconds</label><input type="number" id="bks-${kind}" data-bksecs="${kind}" min="2" max="8" value="${esc(b.secs)}"></div></div>
     </div>
-    <p class="hint" style="margin:0">Tip: to have a person say the ${name} on screen, use 👤 People on the ${name} scene below.</p>`:""}
+    <div class="bkbg">
+      <div class="btns" style="justify-content:space-between"><b class="small">Background</b><span class="small muted">now: ${sc&&sc.card?"title card":cur?esc((cur.source==="AI image"?"AI image: ":"")+String(cur.desc||cur.source||"").slice(0,60)):"title card"}</span></div>
+      <div class="field" style="margin:6px 0"><select data-bkvis="${kind}" aria-label="Background">${bkVisualOpts(kind).map(([v,t])=>`<option value="${esc(v)}" ${b.visual===v?"selected":""}>${esc(t)}</option>`).join("")}</select></div>
+      <div class="btns"><button class="btn-sm" type="button" data-bkbgsug="${kind}" ${b.bgBusy?"disabled":""}>${b.bgBusy==="ideas"?"Thinking…":"✦ Suggest backgrounds for this "+name}</button></div>
+      ${(b.bgIdeas||[]).length?`<div class="bkideas">${b.bgIdeas.map((x,k)=>`<div class="bkidea"><span>${esc(x.desc)}</span><span class="btns"><button class="btn-sm" type="button" data-bkfind="${kind}:${k}">🔎 Find footage</button><button class="btn-sm primary" type="button" data-bkimg="${kind}:${k}" ${b.bgBusy?"disabled":""}>✦ AI image (~${rupees(COST.image)})</button></span></div>`).join("")}</div>`:""}
+      <form class="searchrow" data-bkown="${kind}" style="margin-top:8px"><input type="text" maxlength="300" value="${esc(b.bgAsk||"")}" placeholder="Or describe your own, e.g. Puri beach at sunrise with fishing boats"><button class="btn-sm" type="submit" name="find">🔎 Find</button><button class="btn-sm primary" type="button" data-bkownimg="${kind}" ${b.bgBusy?"disabled":""}>${b.bgBusy==="img"?"Creating…":"✦ AI image"}</button></form>
+      ${pool.length?`<div class="small muted" style="margin:6px 0 4px">Pick a background</div><div class="bkpool">${pool.map(c=>`<button type="button" class="alt" data-bkuse="${kind}|${esc(c.cid)}" aria-pressed="${!!(cur&&cur.cid===c.cid)}" title="${esc(c.desc||"")}">${bkThumb(c)}<span class="tag">${esc(c.source==="AI image"?"AI image":(SRC_SHORT[c.source]||c.source||""))}${c.kind==="video"?" · video":""}</span></button>`).join("")}</div>`:""}
+    </div>
+    <p class="hint" style="margin:6px 0 0">To have the presenter say the ${name} on screen, tick it in the 👤 Presenter bar below.</p>`:""}
   </div>`;
 }
-function bkPullAll(){ if(!S.job) return; for(const k of ["intro","outro"]){ const b=BK()[k], sc=bkScene(k); if(sc){ b.on=true; b.line=sc.narration||""; b.title=sc.on_screen_text||""; b.secs=+sc.duration_sec||b.secs; } else b.on=false; } }
 function renderBookends(){
   const host=$("#bkBody"); if(!host||!S.job) return;
-  bkPullAll();
+  bkPullAll(); const B=BK();
+  if(!BK_CLEAN.has(S.job)){ BK_CLEAN.add(S.job); ["intro","outro"].forEach(k=>{ B[k].busy=false; B[k].bgBusy=false; }); }
+  const th=$("#bkThemes"); if(th){ th.innerHTML=BK_THEMES.map(([k,t,d])=>`<button type="button" class="aihint ${B.theme===k?"on":""}" data-bktheme="${k}" title="${esc(d)}">${esc(t)}</button>`).join("");
+    th.querySelectorAll("[data-bktheme]").forEach(b=>b.onclick=()=>{ B.theme=b.dataset.bktheme; ["intro","outro"].forEach(k=>{ B[k].options=[]; B[k].bgIdeas=[]; }); saveLocal(); renderBookends(); ["intro","outro"].forEach(k=>{ if(B[k].on) bkSuggest(k); }); }); }
   host.innerHTML=bkPartHtml("intro")+bkPartHtml("outro");
-  host.querySelectorAll("[data-bkon]").forEach(c=>c.onchange=()=>{ const k=c.dataset.bkon; BK()[k].on=c.checked; bkChanged(k,true); });
-  host.querySelectorAll("[data-bkstyle]").forEach(b=>b.onclick=()=>{ const [k,st]=b.dataset.bkstyle.split(":"); const bk=BK()[k]; bk.style=st; const t=bkTemplates(k,st)[0]; if(t){ bk.line=t.line; bk.title=t.title; } bkChanged(k,true); });
-  host.querySelectorAll("[data-bkpick]").forEach(r=>r.onchange=()=>{ const [k,n]=r.dataset.bkpick.split(":"); const bk=BK()[k]; const o=[...bkTemplates(k,bk.style), ...(bk.options||[])][+n]; if(o){ bk.line=o.line; bk.title=o.title||bk.title; bkChanged(k,true); } });
-  host.querySelectorAll("[data-bkline]").forEach(t=>t.onchange=()=>{ const k=t.dataset.bkline; BK()[k].line=t.value.trim(); bkChanged(k,true); });
-  host.querySelectorAll("[data-bktitle]").forEach(t=>t.onchange=()=>{ const k=t.dataset.bktitle; BK()[k].title=t.value.trim(); bkChanged(k,false); });
-  host.querySelectorAll("[data-bkvis]").forEach(t=>t.onchange=()=>{ const k=t.dataset.bkvis; BK()[k].visual=t.value; bkChanged(k,true); });
-  host.querySelectorAll("[data-bksecs]").forEach(t=>t.onchange=()=>{ const k=t.dataset.bksecs; BK()[k].secs=Math.max(2,Math.min(8,+t.value||3)); bkChanged(k,false); });
-  host.querySelectorAll("[data-bkai]").forEach(f=>f.onsubmit=e=>{ e.preventDefault(); const k=f.dataset.bkai; BK()[k].ask=f.querySelector("input").value.trim(); bkSuggest(k); });
+  host.querySelectorAll("[data-bkon]").forEach(c=>c.onchange=()=>{ const k=c.dataset.bkon; B[k].on=c.checked; bkChanged(k,true); if(c.checked && !(B[k].options||[]).length) bkSuggest(k); });
+  host.querySelectorAll("[data-bkstyle]").forEach(b=>b.onclick=()=>{ const [k,st]=b.dataset.bkstyle.split(":"); B[k].style=st; B[k].options=[]; const t=bkTemplates(k,st)[0]; if(t){ B[k].line=t.line; B[k].title=t.title; } bkChanged(k,true); bkSuggest(k); });
+  host.querySelectorAll("[data-bkpick]").forEach(r=>r.onchange=()=>{ const [k,n]=r.dataset.bkpick.split(":"); const b=B[k]; const o=[...(b.options||[]), ...bkTemplates(k,b.style)][+n]; if(o){ b.line=o.line; b.title=o.title||b.title; bkChanged(k,true); } });
+  host.querySelectorAll("[data-bkline]").forEach(t=>t.onchange=()=>{ const k=t.dataset.bkline; B[k].line=t.value.trim(); bkChanged(k,true); });
+  host.querySelectorAll("[data-bktitle]").forEach(t=>t.onchange=()=>{ const k=t.dataset.bktitle; B[k].title=t.value.trim(); bkChanged(k,false); });
+  host.querySelectorAll("[data-bkvis]").forEach(t=>t.onchange=()=>{ const k=t.dataset.bkvis; B[k].visual=t.value; bkChanged(k,true); });
+  host.querySelectorAll("[data-bksecs]").forEach(t=>t.onchange=()=>{ const k=t.dataset.bksecs; B[k].secs=Math.max(2,Math.min(8,+t.value||3)); bkChanged(k,false); });
+  host.querySelectorAll("[data-bkai]").forEach(f=>f.onsubmit=e=>{ e.preventDefault(); const k=f.dataset.bkai; B[k].ask=f.querySelector("input").value.trim(); bkSuggest(k); });
+  host.querySelectorAll("[data-bkbgsug]").forEach(b=>b.onclick=()=>bkSuggestBg(b.dataset.bkbgsug));
+  host.querySelectorAll("[data-bkfind]").forEach(b=>b.onclick=()=>{ const [k,n]=b.dataset.bkfind.split(":"); const x=B[k].bgIdeas[+n]; if(x) bkFind(k, x.query||x.desc); });
+  host.querySelectorAll("[data-bkimg]").forEach(b=>b.onclick=()=>{ const [k,n]=b.dataset.bkimg.split(":"); const x=B[k].bgIdeas[+n]; if(x) bkImage(k, x.desc); });
+  host.querySelectorAll("[data-bkown]").forEach(f=>{ const inp=f.querySelector("input"); inp.oninput=()=>{ B[f.dataset.bkown].bgAsk=inp.value; };
+    f.onsubmit=e=>{ e.preventDefault(); const v=inp.value.trim(); if(v) bkFind(f.dataset.bkown, v); else toast("Describe the background first"); }; });
+  host.querySelectorAll("[data-bkownimg]").forEach(b=>b.onclick=()=>{ const k=b.dataset.bkownimg; const v=(B[k].bgAsk||"").trim(); if(v) bkImage(k, v); else toast("Describe the background first"); });
+  host.querySelectorAll("[data-bkuse]").forEach(b=>b.onclick=()=>{ const [k,cid]=[b.dataset.bkuse.split("|")[0], b.dataset.bkuse.split("|").slice(1).join("|")]; const sc=bkScene(k); const c=sc&&sc.candidates.find(x=>x.cid===cid); if(!c) return; sc.footage=c; sc.card=false; sc.approved=true; B[k].visual="own"; saveLocal(); invalidate(); renderScenes(); updateCredits(); });
+}
+function bkFlowContext(kind){
+  const main=bkMain(); const pick=s=>s?{location:s.location, narration:s.narration, on_screen_text:s.on_screen_text}:null;
+  return { theme:(BK_THEMES.find(t=>t[0]===BK().theme)||BK_THEMES[0]).slice(1).join(": "), title:S.job.title, hook:S.job.hook,
+    next_scene_after_intro:pick(main[0]), scene_before_conclusion:pick(main[main.length-1]),
+    whole_script:main.map((s,i)=>`${i+1}. ${s.location}: ${s.narration}`), cta:S.job.cta, cta_keyword:bkKey(), destination:bkDest(),
+    other_part_line:(BK()[kind==="intro"?"outro":"intro"]||{}).line||"" };
 }
 async function bkSuggest(kind){
   const b=BK()[kind]; if(b.busy) return;
   const styles=kind==="intro"?OPEN_STYLES:CLOSE_STYLES, st=styles.find(x=>x[0]===b.style)||styles[0], n=6;
   b.busy=true; renderBookends();
   const fields=[]; for(let k=1;k<=n;k++){ fields.push({key:"line"+k,label:`Option ${k}: spoken line`,type:"text",max:200}); fields.push({key:"title"+k,label:`Option ${k}: on-screen title (1-4 words)`,type:"text",max:40}); }
-  const what = kind==="intro" ? "OPENING lines for the very start of the video (spoken in about 2-4 seconds, before scene 1)" : "CLOSING lines for the very end of the video (spoken in about 3-5 seconds, after the last scene)";
-  const prompt = `Write ${n} different ${what}. Style: ${st[1]} — ${st[2]}. ${b.ask?"The user asks: "+b.ask+". ":""}Write them in ${langName(scriptLang())} unless the user asks otherwise. Each 6-18 words, natural to say aloud, honest: no invented facts, prices, discounts or offers. Mention ${bkDest()} or NegoTrip where it fits.${kind==="outro"?" The call-to-action keyword is "+bkKey()+".":""} Make all ${n} clearly different from each other and from the current line. Fill line1..line${n} and title1..title${n} (title: 1-4 words, capitals). Reply in one short sentence.`;
+  const flow = kind==="intro"
+    ? "It must lead naturally INTO scene 1 (CONTEXT.next_scene_after_intro): set up what scene 1 shows and says, without repeating its words."
+    : "It must follow naturally FROM the last scene (CONTEXT.scene_before_conclusion), wrap up the whole video's story and theme, and end with the call to action where the style asks for it.";
+  const prompt = `Write ${n} different ${kind==="intro"?"OPENING lines (spoken in about 2-4 seconds, before scene 1)":"CLOSING lines (spoken in about 3-5 seconds, after the last scene)"} for this travel Short. Theme: ${CONTEXT_THEME()}. Style: ${st[1]} — ${st[2]}. ${flow} ${b.ask?"The user asks: "+b.ask+". ":""}Write in ${langName(scriptLang())} unless the user asks otherwise. Each 6-18 words, natural to say aloud, honest: no invented facts, prices, discounts or offers. Name the real destination (${bkDest()}) or a place from the script, never package wording like "3 nights 4 days".${kind==="outro"?" The call-to-action keyword is "+bkKey()+".":""} Make all ${n} clearly different. Fill line1..line${n} and title1..title${n} (title: 1-4 words, capitals). Reply in one short sentence.`;
   try{
-    const r=await api("assist",{ scope:"the "+(kind==="intro"?"introduction":"conclusion")+" lines", max_changes:n*2, context:{ video:jobBrief(), current_line:b.line, other_part:(BK()[kind==="intro"?"outro":"intro"]||{}).line||"" }, fields:fields.map(f=>({key:f.key,label:f.label,type:f.type,max:f.max})), messages:[{role:"user",text:prompt}] });
+    const r=await api("assist",{ scope:"the "+(kind==="intro"?"introduction":"conclusion")+" lines", max_changes:n*2, context:Object.assign({video:jobBrief(), current_line:b.line}, bkFlowContext(kind)), fields, messages:[{role:"user",text:prompt}] });
     const ch=Object.fromEntries((r.changes||[]).map(c=>[c.key,String(c.value||"").trim()]));
     const got=[]; for(let k=1;k<=n;k++){ if(ch["line"+k]) got.push({line:ch["line"+k].slice(0,300), title:(ch["title"+k]||"").slice(0,40), src:"ai"}); }
     if(!got.length) throw new Error(r.reply||"The AI didn't return any lines. Try again.");
-    b.options=[...got, ...(b.options||[])].slice(0,18); saveLocal(); toast(`${got.length} new options added`);
+    const seen=new Set(); b.options=[...got, ...(b.options||[])].filter(o=>{ const k=o.line.toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true; }).slice(0,12);
+    if(!b.line || bkTemplates(kind,b.style).some(t=>t.line===b.line)){ b.line=got[0].line; b.title=got[0].title||b.title; bkSync(kind); invalidate(); }
+    saveLocal();
   }catch(e){ toast(e.message); }
-  b.busy=false; renderBookends();
+  b.busy=false; renderScenes();
+}
+function CONTEXT_THEME(){ const t=BK_THEMES.find(x=>x[0]===BK().theme)||BK_THEMES[0]; return t[0]==="auto" ? "match the theme of the script itself" : t[1]+" ("+t[2]+")"; }
+async function bkSuggestBg(kind){
+  const b=BK()[kind]; if(b.bgBusy) return; b.bgBusy="ideas"; renderBookends();
+  const fields=[]; for(let k=1;k<=3;k++){ fields.push({key:"bg"+k,label:`Background idea ${k}: one-sentence description of a real place/view`,type:"text",max:220}); fields.push({key:"q"+k,label:`Background idea ${k}: 2-4 stock-footage search words`,type:"text",max:50}); }
+  const prompt=`Suggest 3 different vertical background visuals for the ${kind==="intro"?"OPENING":"CLOSING"} clip of this travel Short. Theme: ${CONTEXT_THEME()}. The spoken line is: "${b.line}". The background must be a real place from this video (${bkDest()}) and ${kind==="intro"?"lead visually into scene 1":"feel like a satisfying ending after the last scene"}; leave calm space for a title. Fill bg1..bg3 and q1..q3. Reply in one short sentence.`;
+  try{
+    const r=await api("assist",{ scope:"backgrounds for the "+(kind==="intro"?"introduction":"conclusion"), max_changes:6, context:Object.assign({video:jobBrief()}, bkFlowContext(kind)), fields, messages:[{role:"user",text:prompt}] });
+    const ch=Object.fromEntries((r.changes||[]).map(c=>[c.key,String(c.value||"").trim()]));
+    const ideas=[1,2,3].map(k=>ch["bg"+k]?{desc:ch["bg"+k], query:ch["q"+k]||""}:null).filter(Boolean);
+    if(!ideas.length) throw new Error(r.reply||"No ideas came back. Try again.");
+    b.bgIdeas=ideas; saveLocal();
+  }catch(e){ toast(e.message); }
+  b.bgBusy=false; renderBookends();
+}
+async function bkFind(kind, q){
+  const sc=bkScene(kind); if(!sc){ toast("Turn it on first"); return; }
+  const b=BK()[kind]; b.bgBusy="find"; renderBookends();
+  try{ const r=await api("search",{query:String(q).slice(0,80), place:bkDest(), destination:(S.job.request||{}).destination||"", limit:12});
+    const have=new Set(sc.candidates.map(x=>x.cid)); let n=0; for(const c of (r.candidates||[])){ if(!have.has(c.cid)){ c.ai_ok=false; sc.candidates.unshift(c); n++; } }
+    saveLocal(); toast(n?`${n} backgrounds found. Tap one to use it.`:"Nothing new found. Try other words."); }
+  catch(e){ toast(e.message); }
+  b.bgBusy=false; renderBookends();
+}
+async function bkImage(kind, desc){
+  const sc=bkScene(kind); if(!sc){ toast("Turn it on first"); return; }
+  const b=BK()[kind]; if(b.bgBusy) return; b.bgBusy="img"; renderBookends();
+  try{
+    const main=bkMain(), near=kind==="intro"?main[0]:main[main.length-1]; const refs=[];
+    if(near && !near.card && near.footage && near.approved){ try{ refs.push(await frameOf(near.footage)); }catch(e){} }
+    const t=BK_THEMES.find(x=>x[0]===BK().theme); const mood=(t&&t[0]!=="auto"?t[1]+", ":"")+(kind==="intro"?"inviting opening shot":"warm, satisfying closing shot");
+    const r=await api("shot_image",{ bg_only:true, part:kind, setting:desc, extra:mood, refs });
+    if(!r||!r.ok) throw new Error((r&&r.error)||"No image came back. Try again.");
+    const url=URL.createObjectURL(b64ToBlob(r.data,r.mime)); S.media.set("own:"+r.drive_id,url);
+    const c={ cid:"aiimg:"+r.drive_id, source:"AI image", kind:"photo", drive_id:r.drive_id, desc:"AI background: "+desc.slice(0,200), licence:"AI-generated (Google Gemini)", credit:"", ai_ok:true, thumbnail:await smallThumb(url), local_url:url };
+    sc.candidates=[c, ...(sc.candidates||[])]; sc.footage=c; sc.card=false; sc.approved=true; b.visual="own"; aiSpend().images++;
+    saveLocal(); invalidate(); renderScenes(); updateCredits(); toast("AI background created and used. Pick another any time.");
+  }catch(e){ toast(e.message); }
+  b.bgBusy=false; renderBookends();
 }
 function bookendFields(){
   bkPullAll(); const f=[]; const B=()=>BK();
+  f.push(fld("theme","Theme for the introduction and conclusion","select",()=>B().theme,v=>{ B().theme=v; },{options:BK_THEMES.map(t=>t[0])}));
   for(const kind of ["intro","outro"]){
     const nm=kind==="intro"?"Introduction":"Conclusion", styles=kind==="intro"?OPEN_STYLES:CLOSE_STYLES;
     f.push(fld(kind+"_on",`${nm}: include it (true/false)`,"bool",()=>!!B()[kind].on,v=>{ B()[kind].on=!!v; }));
     f.push(fld(kind+"_style",`${nm}: style`,"select",()=>B()[kind].style,v=>{ B()[kind].style=v; },{options:styles.map(s=>s[0])}));
-    f.push(fld(kind+"_line",`${nm}: spoken line (6-18 words; turning this on happens automatically when set)`,"text",()=>B()[kind].line,v=>{ B()[kind].line=v; if(v) B()[kind].on=true; },{max:300}));
+    f.push(fld(kind+"_line",`${nm}: spoken line (6-18 words, must flow ${kind==="intro"?"into scene 1":"from the last scene"}; setting it turns it on)`,"text",()=>B()[kind].line,v=>{ B()[kind].line=v; if(v) B()[kind].on=true; },{max:300}));
     f.push(fld(kind+"_title",`${nm}: on-screen title (1-4 words)`,"text",()=>B()[kind].title,v=>{ B()[kind].title=v; },{max:40}));
-    f.push(fld(kind+"_visual",`${nm}: what it shows ('card' for a title card, or 'scene:ID' to reuse that scene's footage)`,"select",()=>B()[kind].visual,v=>{ B()[kind].visual=v; },{options:bkVisualOpts(kind).map(o=>o[0])}));
+    f.push(fld(kind+"_visual",`${nm}: background ('card' title card, 'own' = the chosen background, or 'scene:ID' to reuse a scene's footage)`,"select",()=>B()[kind].visual,v=>{ B()[kind].visual=v; },{options:bkVisualOpts(kind).map(o=>o[0]).concat(["own"]).filter((x,i,a)=>a.indexOf(x)===i)}));
     f.push(fld(kind+"_secs",`${nm}: seconds`,"number",()=>+B()[kind].secs,v=>{ B()[kind].secs=v; },{min:2,max:8}));
+    f.push({key:kind+"_bg_search", label:`${nm}: search stock footage for a new background (search words; the user then taps one)`, type:"text", max:80, get:()=>"", set:v=>{ if(v) setTimeout(()=>bkFind(kind,v),50); }, late:1});
+    f.push({key:kind+"_bg_idea", label:`${nm}: describe an AI background image for the user to create (they press ✦ AI image, ~₹3)`, type:"text", max:300, get:()=>B()[kind].bgAsk||"", set:v=>{ B()[kind].bgAsk=v; }});
   }
   return f;
 }
 function bookendsDef(){
-  return { kind:"bookends", title:"the introduction and conclusion", image:false, maxChanges:12,
+  return { kind:"bookends", title:"the introduction and conclusion", image:false, maxChanges:16,
     fields:bookendFields,
-    context:()=>({ video:jobBrief(), intro_styles:OPEN_STYLES.map(s=>s[0]+": "+s[2]), conclusion_styles:CLOSE_STYLES.map(s=>s[0]+": "+s[2]), cta_keyword:bkKey(), note:"Lines must be honest: no invented facts, prices or offers. Write in the script language unless asked." }),
-    after:()=>{ bkSync("intro"); bkSync("outro"); invalidate(); renderScenes(); updateCredits(); renderBookends(); } };
+    context:()=>Object.assign({ video:jobBrief(), themes:BK_THEMES.map(s=>s[0]+": "+s[2]), intro_styles:OPEN_STYLES.map(s=>s[0]+": "+s[2]), conclusion_styles:CLOSE_STYLES.map(s=>s[0]+": "+s[2]), note:"Lines must flow with the scenes and be honest: no invented facts, prices or offers. Write in the script language unless asked. Never invent package wording." }, bkFlowContext("intro"), {scene_before_conclusion:bkFlowContext("outro").scene_before_conclusion}),
+    after:()=>{ bkSync("intro"); bkSync("outro"); invalidate(); renderScenes(); updateCredits(); } };
 }
-AI_HINTS.bookends=["Give me a stronger hook to open","Make the ending a clear DM call to action","Open with a Namaste and close with a thank-you","Write both in Hindi"];
+AI_HINTS.bookends=["Make the opening lead better into the first scene","Make the ending a clear DM call to action","Make both feel spiritual and calm","Suggest a background for the opening","Write both in Hindi"];
+
 
 // ---------------------------------------------------------------- section definitions
 const fld=(key,label,type,get,set,extra)=>Object.assign({key,label,type,get,set},extra||{});
