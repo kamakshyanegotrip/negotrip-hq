@@ -1517,6 +1517,11 @@ const STYLE_PRESETS = [
   ["luxury","Premium & luxurious","refined, smooth and premium, relaxed confidence"],
   ["friend","Friendly local guide","friendly local guide talking to a friend, casual and warm"],
   ["announcer","Excited announcement","bright, excited announcer building anticipation, but natural"],
+  ["trailer","★ Movie-trailer voice","deep, resonant, cinematic movie-trailer narrator, slow dramatic build, powerful pauses"],
+  ["bollywood","★ Bollywood-style host","charismatic, larger-than-life film-star host, playful swagger, big warm smile in the voice"],
+  ["anchor","★ News-anchor polish","crisp, authoritative prime-time news anchor, precise diction, confident and trustworthy"],
+  ["rj","★ Radio-jockey energy","lively FM radio jockey, upbeat, conversational, quick wit and bounce"],
+  ["poet","★ Poetic & soulful","soulful, poetic narrator, soft husky warmth, savouring every word"],
   ["none","Plain (no style)",""]
 ];
 const PACES = [["slow","Slow & calm","slow, relaxed pace with small pauses"],["natural","Natural",""],["brisk","Brisk","slightly brisk pace"],["fast","Fast & punchy","fast, punchy pace for short-form video"]];
@@ -1841,6 +1846,29 @@ const CONSENT_LINE = "I am the owner of this voice and I consent to Google using
 const SAMPLE_LINE = "Namaste! I'm so happy you're here. Odisha is full of surprises: golden beaches at Puri, the giant stone wheels of Konark, quiet lakes full of dolphins at Chilika, and the best street food you will ever taste. Pack light, bring your curiosity, and let's explore it together with NegoTrip.";
 const PROP_LIB = [["📷","camera"],["🤳","selfie stick with phone"],["🎒","backpack"],["🕶","sunglasses"],["🗺","paper map"],["☂","umbrella"],["🥥","coconut with a straw"],["☕","clay cup of chai"],["🚲","bicycle"],["🛵","scooter"],["🛶","kayak paddle"],["🏄","surfboard"],["🔭","binoculars"],["🧳","travel suitcase"],["🪁","kite"],["🌸","flower garland"],["🪔","lit diya lamp"],["🎣","fishing rod"],["🥾","trekking pole"],["🏐","beach ball"],["🍦","ice cream"],["🎧","headphones"],["🚁","drone with controller"],["👒","sun hat"]];
 const ACTION_LIB = ["Walks towards the camera smiling","Waves and points at the landmark","Takes a selfie with the view","Sits and enjoys the view","Talks to the camera like a travel vlogger","Laughs and spins around happily","Sips from a coconut looking at the sea","Rides past on a bicycle"];
+const VOICE_ARCH = [
+  ["Movie-trailer","male","Deep, resonant, cinematic male voice like a blockbuster trailer narrator; slow, dramatic, commanding, with powerful pauses"],
+  ["Film-star host","male","Charismatic Indian male film-star style host; larger-than-life, playful swagger, warm and smiling, Indian English accent"],
+  ["Leading lady","female","Glamorous, warm Indian female film-star style voice; graceful, confident, expressive, with a soft smile"],
+  ["News anchor","female","Crisp, authoritative prime-time female news anchor; precise diction, calm confidence, trustworthy"],
+  ["Radio jockey","male","Lively young Indian FM radio jockey; upbeat, chatty, quick-witted, full of energy"],
+  ["Soulful storyteller","female","Soulful, slightly husky Indian female storyteller; poetic, unhurried, deeply warm"],
+  ["Spiritual guide","male","Calm, deep, reverent Indian male spiritual guide; gentle, unhurried, full of quiet awe"]
+];
+const STAR_LOOKS = [
+  ["★ Film-star glamour","Fictional Indian woman in her late 20s with movie-star glamour: radiant skin, glossy long hair, confident elegant poise, red-carpet presence","flowing designer saree with a modern blouse, statement earrings"],
+  ["★ Leading man","Fictional Indian man in his early 30s with leading-man charisma: chiselled features, styled hair, light stubble, confident easy smile","tailored linen shirt, aviator sunglasses in hand, smart trousers"],
+  ["★ Fashion influencer","Fictional Indian woman in her mid 20s, top fashion-influencer style, striking and photogenic, trendy and confident","chic resort-wear co-ord set, hat and minimal gold jewellery"],
+  ["★ Celebrity chef host","Fictional cheerful Indian man in his 40s, celebrity TV-show host vibe, expressive and charming","crisp white kurta with a smart Nehru jacket"],
+  ["★ Adventure star","Fictional athletic Indian woman in her early 30s, adventure-TV star look, sun-kissed and fearless","technical outdoor jacket, cargo trousers, trail shoes"]
+];
+const SHOT_FINISH = [
+  ["natural","Natural travel photo",""],
+  ["campaign","★ Celebrity ad campaign","high-end celebrity brand-campaign photography: flawless professional lighting, subtle rim light, polished skin retouching, rich colours, magazine-cover quality"],
+  ["cinematic","★ Cinematic film still","cinematic film still: anamorphic look, shallow depth of field, dramatic directional light, filmic colour grade"],
+  ["editorial","★ Fashion editorial","luxury fashion-editorial look: confident model posing, clean composition, refined styling, soft diffused light"],
+  ["golden","★ Golden-hour glow","warm golden-hour sunlight, glowing backlight on hair, soft lens flare, dreamy warm tones"]
+];
 const INFL_IDEAS = ["Odia woman in her late 20s, warm smile, long black hair, travel vlogger style","Indian man in his early 30s, short beard, friendly, adventurous backpacker look","Indian woman in her 40s, elegant, cheerful family-holiday host","Young Indian couple's friendly travel guide, man in his mid 20s, curly hair, energetic"];
 const LANG_OPTS = [["en-IN","English (India)"],["hi-IN","Hindi"],["or-IN","Odia"],["bn-IN","Bengali"],["ta-IN","Tamil"],["te-IN","Telugu"],["mr-IN","Marathi"],["en-US","English (US)"],["en-GB","English (UK)"]];
 SRC_SHORT["AI avatar"]="AI person";
@@ -1925,7 +1953,7 @@ function renderCE(){
         <label class="small" style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="ceOk" ${CE.consent.confirmed?"checked":""} style="margin-top:3px"> This person is 18 or older and has agreed to an AI likeness of them being made and used in NegoTrip videos and ads.</label>
       </div>`:`
       <div class="field"><label for="ceDesc">Describe the influencer <span class="muted">(a made-up person: age, look, hair, style, vibe)</span></label><textarea id="ceDesc" maxlength="1500" placeholder="${esc(INFL_IDEAS[0])}">${esc(CE.description)}</textarea>
-        <div class="chips" style="margin-top:6px">${INFL_IDEAS.map((t,k)=>`<button class="aihint" data-idea="${k}" type="button">${esc(t.split(",")[0])}</button>`).join("")}</div>
+        <div class="chips" style="margin-top:6px">${INFL_IDEAS.map((t,k)=>`<button class="aihint" data-idea="${k}" type="button">${esc(t.split(",")[0])}</button>`).join("")}${STAR_LOOKS.map((t,k)=>`<button class="aihint" data-star="${k}" type="button">${esc(t[0])}</button>`).join("")}</div>
         <div class="hint">The AI creates a fictional person who doesn't look like anyone real or famous.</div></div>`}
     <div class="field"><label for="ceOutfit">Outfit for the look <span class="muted">(optional)</span></label><input type="text" id="ceOutfit" maxlength="300" value="${esc(CE.outfit)}" placeholder="e.g. white linen shirt, beige shorts, sneakers"></div>
 
@@ -1937,7 +1965,9 @@ function renderCE(){
     <div class="sec"><h3>Voice <span class="small muted" style="font-weight:400">· now: ${voiceNow}</span></h3>
       <div class="tabs2" role="tablist">${[["studio","Studio voice"],["designed","Design a voice"],["cloned","Clone a real voice"]].map(([k,t])=>`<button type="button" role="tab" data-vtab="${k}" aria-selected="${vTab===k}">${t}</button>`).join("")}</div>
       ${vTab==="studio"?`<div class="row2" style="grid-template-columns:1fr auto;align-items:end"><div class="field" style="margin:0"><label for="ceStudio">Ready-made Gemini voice</label><select id="ceStudio"><optgroup label="Female">${FEMALE_V.map(v=>`<option ${CE.studio===v?"selected":""}>${v}</option>`).join("")}</optgroup><optgroup label="Male">${MALE_V.map(v=>`<option ${CE.studio===v?"selected":""}>${v}</option>`).join("")}</optgroup></select></div><button class="btn-sm" id="ceUseStudio" type="button">Use this voice</button></div><p class="hint">Free to choose. Language and accent come from the video's voice settings.</p>`:""}
-      ${vTab==="designed"?`<div class="field"><label for="ceVdesc">Describe the voice</label><textarea id="ceVdesc" maxlength="600" placeholder="e.g. Warm, bright young woman from Odisha, friendly travel host, Indian English accent, smiles while she talks">${esc(CE.voice_desc)}</textarea></div>
+      ${vTab==="designed"?`<div class="field"><label for="ceVdesc">Describe the voice</label><textarea id="ceVdesc" maxlength="600" placeholder="e.g. Warm, bright young woman from Odisha, friendly travel host, Indian English accent, smiles while she talks">${esc(CE.voice_desc)}</textarea>
+          <div class="chips" style="margin-top:6px">${VOICE_ARCH.map((v,k)=>`<button class="aihint" type="button" data-varch="${k}">★ ${esc(v[0])}</button>`).join("")}</div>
+          <div class="hint">Star-style presets describe a type of voice; they don't copy any real person.</div></div>
         <div class="row2"><div class="field"><label for="ceGender">Voice</label><select id="ceGender">${["female","male","neutral"].map(g=>`<option ${CE.gender===g?"selected":""}>${g}</option>`).join("")}</select></div><div class="field"><label for="ceLang">Main language</label><select id="ceLang">${LANG_OPTS.map(([c,n])=>`<option value="${c}" ${CE.lang===c?"selected":""}>${n}</option>`).join("")}</select></div></div>
         <button class="btn-sm primary" id="ceDesign" type="button" ${busy?"disabled":""}>${busy==="voice"?"Creating voice…":"✦ Create this voice"}</button>`:""}
       ${vTab==="cloned"?`<p class="small" style="margin:0 0 8px">Two recordings of <b>the same person</b>, same quiet room, same microphone. Google checks that the consent recording matches the voice.</p>
@@ -1956,6 +1986,7 @@ function renderCE(){
   q("#ceName").oninput=e=>CE.name=e.target.value;
   if(q("#ceOutfit")) q("#ceOutfit").oninput=e=>CE.outfit=e.target.value;
   if(q("#ceDesc")) q("#ceDesc").oninput=e=>CE.description=e.target.value;
+  m.querySelectorAll("[data-star]").forEach(b=>b.onclick=()=>{ const t=STAR_LOOKS[+b.dataset.star]; CE.description=t[1]; CE.outfit=t[2]; q("#ceDesc").value=CE.description; q("#ceOutfit").value=CE.outfit; });
   m.querySelectorAll("[data-idea]").forEach(b=>b.onclick=()=>{ CE.description=INFL_IDEAS[+b.dataset.idea]; q("#ceDesc").value=CE.description; });
   if(q("#ceRel")) q("#ceRel").onchange=e=>{ CE.consent.relation=e.target.value;  };
   if(q("#cePerson")) q("#cePerson").oninput=e=>CE.consent.person=e.target.value;
@@ -1967,6 +1998,7 @@ function renderCE(){
   m.querySelectorAll("[data-vtab]").forEach(b=>b.onclick=()=>{ stopRec(); CE.tab=b.dataset.vtab; renderCE(); });
   if(q("#ceStudio")) q("#ceStudio").onchange=e=>CE.studio=e.target.value;
   if(q("#ceUseStudio")) q("#ceUseStudio").onclick=()=>{ CE.voice_id=CE.studio; CE.voice_kind="studio"; CE.voice_desc=""; renderCE(); };
+  m.querySelectorAll("[data-varch]").forEach(b=>b.onclick=()=>{ const v=VOICE_ARCH[+b.dataset.varch]; CE.voice_desc=v[2]; CE.gender=v[1]; renderCE(); });
   if(q("#ceVdesc")) q("#ceVdesc").oninput=e=>CE.voice_desc=e.target.value;
   if(q("#ceGender")) q("#ceGender").onchange=e=>CE.gender=e.target.value;
   if(q("#ceLang")) q("#ceLang").onchange=e=>CE.lang=e.target.value;
@@ -2116,6 +2148,7 @@ function openShot(i){
     ${av.bg==="footage"?`<div class="field"><div class="bgpick">${bgs.slice(0,12).map(c=>`<button type="button" class="alt" data-bg="${esc(c.cid)}" aria-pressed="${c.cid===av.bg_cid}" title="${esc(c.desc||"")}">${thumbHtml(c,"")}</button>`).join("")}</div><div class="hint">${bgc&&bgc.kind==="video"?"A frame from this clip is used as the real place.":"The person is placed inside this real place."}</div></div>`:""}
     ${av.bg==="upload"?`<div class="field"><input type="file" accept="image/*" id="shBgFile">${tmp.bg?`<img src="${esc(tmp.bg.url)}" alt="" style="max-height:120px;border-radius:8px;display:block;margin-top:6px">`:""}</div>`:""}
     ${av.bg==="describe"?`<div class="field"><input type="text" id="shSet" maxlength="300" value="${esc(av.setting)}" placeholder="e.g. Puri beach at sunrise with fishing boats"></div>`:""}
+    <div class="field"><label for="shFinish">Look & finish</label><select id="shFinish">${SHOT_FINISH.map(([k,t])=>`<option value="${k}" ${(av.finish||"natural")===k?"selected":""}>${esc(t)}</option>`).join("")}</select></div>
     <div class="field"><label for="shExtra">Anything else? <span class="muted">(optional)</span></label><input type="text" id="shExtra" maxlength="400" value="${esc(av.extra)}" placeholder="e.g. wearing a red saree, golden-hour light, looking at the camera"></div>
     <label class="small" style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><input type="checkbox" id="shSpeak" ${av.speak?"checked":""}> The first person speaks this scene's narration in their own voice</label>
     <div class="btns"><button class="btn" id="shGo" type="button" ${SHOT.busy?"disabled":""}>${SHOT.busy==="img"?"Creating shot… (about 20 s)":`✦ Create shot (~${rupees(COST.image)})`}</button><span class="small muted" id="shSpend">${esc(spendText())}</span></div>
@@ -2140,6 +2173,7 @@ function openShot(i){
   m.querySelectorAll("[data-bg]").forEach(b=>b.onclick=()=>{ av.bg_cid=b.dataset.bg; keep(); openShot(i); });
   if(q("#shBgFile")) q("#shBgFile").onchange=async e=>{ const f=e.target.files[0]; if(!f) return; try{ tmp.bg=await toJpegB64(f,1280,0.9); }catch(err){ toast("Couldn't read that photo"); } openShot(i); };
   if(q("#shSet")) q("#shSet").oninput=e=>{ av.setting=e.target.value; keep(); };
+  q("#shFinish").onchange=e=>{ av.finish=e.target.value; keep(); };
   q("#shExtra").oninput=e=>{ av.extra=e.target.value; keep(); };
   q("#shSpeak").onchange=e=>{ av.speak=e.target.checked; keep(); invalidate(); };
   q("#shGo").onclick=()=>createShot(i);
@@ -2169,7 +2203,7 @@ async function createShot(i){
     if(av.bg==="footage"){ const c=bgChoices(sc).find(x=>x.cid===av.bg_cid); if(c) background=await frameOf(c); }
     else if(av.bg==="upload"){ if(!tmp.bg) throw new Error("Upload a photo of the place, or choose another background."); background={mime:tmp.bg.mime,data:tmp.bg.data}; }
     const body={ characters, background, prop_images:(tmp.props||[]).map(p=>({name:p.name,mime:p.mime,data:p.data})), props:av.props, framing:av.framing, what:av.action,
-      names:people.map(p=>p.name).join(" and "), setting: av.bg==="describe" ? (av.setting||placeOf(sc)) : placeOf(sc), extra:av.extra };
+      names:people.map(p=>p.name).join(" and "), setting: av.bg==="describe" ? (av.setting||placeOf(sc)) : placeOf(sc), extra:[(SHOT_FINISH.find(f=>f[0]===av.finish)||[])[2], av.extra].filter(Boolean).join("; ").slice(0,400) };
     const r=await api("shot_image", body);
     if(!r || !r.ok) throw new Error((r&&r.error)||"No image came back. Try again.");
     const blob=b64ToBlob(r.data, r.mime), url=URL.createObjectURL(blob); S.media.set("own:"+r.drive_id, url);
@@ -2245,6 +2279,7 @@ function avatarFields(i){
     fld("avatar_action","What the people do / act out in the AI shot","text",()=>av().action||"",v=>{ scAv(sc()).action=v; },{max:400}),
     fld("avatar_props","Equipment, tools or props they use (comma-separated)","text",()=>(av().props||[]).join(", "),v=>{ scAv(sc()).props=String(v||"").split(",").map(x=>x.trim()).filter(Boolean).slice(0,6); },{max:300}),
     fld("avatar_framing","AI shot framing","select",()=>av().framing||"medium",v=>{ scAv(sc()).framing=v; },{options:["wide","medium","close"]}),
+    fld("avatar_finish","AI shot look & finish (natural, campaign = celebrity ad campaign, cinematic, editorial, golden = golden hour)","select",()=>av().finish||"natural",v=>{ scAv(sc()).finish=v; },{options:SHOT_FINISH.map(f=>f[0])}),
     fld("avatar_extra","Extra look instructions for the AI shot (clothes, light, expression)","text",()=>av().extra||"",v=>{ scAv(sc()).extra=v; },{max:400}),
     fld("avatar_speaks","The first person speaks this scene's narration in their own voice","bool",()=>!!av().speak,v=>{ scAv(sc()).speak=!!v; })
   ];
