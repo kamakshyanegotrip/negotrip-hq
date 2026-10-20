@@ -1846,7 +1846,8 @@ const CAST = { list:[], loaded:false, err:"", polling:new Set(), tmp:{} };
 const VOICE_KIND = { studio:"Studio voice", cloned:"Cloned voice", designed:"Designed voice" };
 const FEMALE_V = ["Kore","Aoede","Leda","Zephyr","Callirrhoe","Autonoe","Despina","Erinome","Laomedeia","Achernar","Gacrux","Pulcherrima","Vindemiatrix","Sulafat"];
 const MALE_V = ["Puck","Charon","Fenrir","Orus","Enceladus","Iapetus","Umbriel","Algieba","Algenib","Rasalgethi","Alnilam","Schedar","Achird","Zubenelgenubi","Sadachbia","Sadaltager"];
-const CONSENT_LINE = "I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.";
+const CONSENT_LINES = { en:"I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.", hi:"मैं इस आवाज का मालिक हूं और मैं सिंथेटिक आवाज मॉडल बनाने के लिए Google को इस आवाज का उपयोग करने की सहमति देता हूं" };
+let CONSENT_LINE = CONSENT_LINES.en;
 const SAMPLE_LINE = "Namaste! I'm so happy you're here. Odisha is full of surprises: golden beaches at Puri, the giant stone wheels of Konark, quiet lakes full of dolphins at Chilika, and the best street food you will ever taste. Pack light, bring your curiosity, and let's explore it together with NegoTrip.";
 const PROP_LIB = [["📷","camera"],["🤳","selfie stick with phone"],["🎒","backpack"],["🕶","sunglasses"],["🗺","paper map"],["☂","umbrella"],["🥥","coconut with a straw"],["☕","clay cup of chai"],["🚲","bicycle"],["🛵","scooter"],["🛶","kayak paddle"],["🏄","surfboard"],["🔭","binoculars"],["🧳","travel suitcase"],["🪁","kite"],["🌸","flower garland"],["🪔","lit diya lamp"],["🎣","fishing rod"],["🥾","trekking pole"],["🏐","beach ball"],["🍦","ice cream"],["🎧","headphones"],["🚁","drone with controller"],["👒","sun hat"]];
 const ACTION_LIB = ["Walks towards the camera smiling","Waves and points at the landmark","Takes a selfie with the view","Sits and enjoys the view","Talks to the camera like a travel vlogger","Laughs and spins around happily","Sips from a coconut looking at the sea","Rides past on a bicycle"];
@@ -1975,7 +1976,7 @@ function renderCE(){
         <div class="row2"><div class="field"><label for="ceGender">Voice</label><select id="ceGender">${["female","male","neutral"].map(g=>`<option ${CE.gender===g?"selected":""}>${g}</option>`).join("")}</select></div><div class="field"><label for="ceLang">Main language</label><select id="ceLang">${LANG_OPTS.map(([c,n])=>`<option value="${c}" ${CE.lang===c?"selected":""}>${n}</option>`).join("")}</select></div></div>
         <button class="btn-sm primary" id="ceDesign" type="button" ${busy?"disabled":""}>${busy==="voice"?"Creating voice…":"✦ Create this voice"}</button>`:""}
       ${vTab==="cloned"?`<p class="small" style="margin:0 0 8px">One recording of the speaker in a quiet room. Read the box from the top: the short permission line first (Google requires it), a small pause, then the paragraph. About 20–40 seconds in all.</p>
-        <div class="recbox"><div class="quote"><b>“${esc(CONSENT_LINE)}”</b><br><span class="muted small">(pause)</span><br>${esc(SAMPLE_LINE)}</div>
+        <div class="recbox"><div class="btns small">Permission line in: <select id="ceCl" style="width:auto;height:32px;font-size:13px">${[["en","English"],["hi","हिन्दी Hindi"]].map(([k,t])=>`<option value="${k}" ${(CE.cl||"en")===k?"selected":""}>${t}</option>`).join("")}</select></div><div class="quote"><b>“${esc(CONSENT_LINES[CE.cl||"en"])}”</b><br><span class="muted small">(pause)</span><br>${esc(SAMPLE_LINE)}</div>
           ${CE.rec.slot==="all"?`<div class="small"><b>Recording…</b> read the bold line, pause, then the paragraph. Press ■ Stop when done.</div>`:""}
           <div class="btns">${recBtns("all")}</div></div>
         <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin:8px 0"><input type="checkbox" id="ceVok" ${CE.consent.voice_consent?"checked":""} style="margin-top:3px"> The speaker is 18+ and agreed to their voice being cloned for NegoTrip videos.</label>
@@ -1997,6 +1998,7 @@ function renderCE(){
   if(q("#ceRel")) q("#ceRel").onchange=e=>{ CE.consent.relation=e.target.value;  };
   if(q("#cePerson")) q("#cePerson").oninput=e=>CE.consent.person=e.target.value;
   if(q("#ceOk")) q("#ceOk").onchange=e=>CE.consent.confirmed=e.target.checked;
+  if(q("#ceCl")) q("#ceCl").onchange=e=>{ CE.cl=e.target.value; renderCE(); };
   if(q("#ceVok")) q("#ceVok").onchange=e=>{ CE.consent.voice_consent=e.target.checked; renderCE(); };
   if(q("#cePhotos")) q("#cePhotos").onchange=async e=>{ const files=[...e.target.files].slice(0,5-CE.photos.length); for(const f of files){ try{ CE.photos.push(await toJpegB64(f,1024,0.88)); }catch(err){ toast("Couldn't read "+f.name); } } renderCE(); };
   m.querySelectorAll("[data-rmph]").forEach(b=>b.onclick=()=>{ CE.photos.splice(+b.dataset.rmph,1); renderCE(); });
@@ -2029,7 +2031,7 @@ function recBtns(slot){
 async function recordInto(slot, btn){
   if(CE.rec.active){ const was=CE.rec.slot; stopRec(); if(was===slot) return; }
   let stream;
-  try{ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}}); }
+  try{ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1}}); }
   catch(e){ toast("Microphone not available: allow microphone access for this page, or upload a recording."); return; }
   const mr=new MediaRecorder(stream); const chunks=[]; const t0=Date.now(); const max=46000;
   mr.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
@@ -2041,9 +2043,9 @@ async function setRecording(slot, blob){
   try{
     const ch=await decode24k(blob, 45), R=24000, total=ch.length/R;
     const sp=findSplit(ch), cut=sp.at;
-    const cw=wavFrom(ch,0,cut), sw=wavFrom(ch,cut,Math.min(ch.length,cut+30*R));
+    const endAt=quietEnd(ch, cut, Math.min(ch.length, cut+28*R)); const cw=wavFrom(ch,0,cut), sw=wavFrom(ch,cut,endAt);
     CE.rec.consent={dur:cut/R, blob:cw, url:URL.createObjectURL(cw), okLen:cut/R>=2.5};
-    CE.rec.sample={dur:Math.min(30,(ch.length-cut)/R), blob:sw, url:URL.createObjectURL(sw), okLen:(ch.length-cut)/R>=10};
+    CE.rec.sample={dur:(endAt-cut)/R, blob:sw, url:URL.createObjectURL(sw), okLen:(endAt-cut)/R>=10};
     CE.rec.total=total; CE.msg = sp.found ? null : {t:"Couldn't hear a clear pause after the permission line, so it was cut at about 6.5 s. Press ▶ Permission line to check it; if it's cut wrongly, record again with a short pause.", bad:true};
   }catch(e){ toast("Couldn't read that recording. Try again or use another file."); }
   renderCE();
@@ -2062,6 +2064,13 @@ function wavFrom(ch, a, b){
   const n=Math.max(0,b-a), pcm=new Uint8Array(n*2), dv=new DataView(pcm.buffer);
   for(let i=0;i<n;i++){ const v=Math.max(-1,Math.min(1,ch[a+i])); dv.setInt16(i*2, v<0?v*32768:v*32767, true); }
   return new Blob([pcmToWav(pcm,24000)],{type:"audio/wav"});
+}
+// end the voice part on a quiet moment (not mid-word), at most `max`
+function quietEnd(ch, from, max){
+  if(max>=ch.length) return ch.length;
+  const F=1200; let best=max, bestE=Infinity;
+  for(let e=max; e>Math.max(from+10*24000, max-4*24000); e-=F){ let s=0; for(let i=e-F;i<e;i++) s+=ch[i]*ch[i]; if(s<bestE){ bestE=s; best=e; } }
+  return best;
 }
 // where the permission line ends: the first pause (≥0.35 s) after speech starts, 2.5–14 s in
 function findSplit(ch){
