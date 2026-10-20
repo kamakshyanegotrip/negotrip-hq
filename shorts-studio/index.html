@@ -266,6 +266,10 @@ div.look{cursor:default}
 .cemsg.bad{background:color-mix(in srgb,var(--danger) 14%,transparent)}
 .ready{list-style:none;padding:0;margin:6px 0 8px;font-size:13px;display:flex;flex-direction:column;gap:3px}
 .ready .no{color:var(--danger)} .ready .yes{color:var(--ok)}
+.presbar{border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:12px;padding:12px;background:color-mix(in srgb,var(--accent) 6%,var(--bg));margin-bottom:12px}
+.presbar .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.presbar select{width:auto;min-width:160px;height:38px}
+.presbar img,.presbar .jth{width:30px;height:46px;border-radius:6px;object-fit:cover}
 .bkpart{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg);margin-bottom:10px}
 .bkon{display:flex;gap:8px;align-items:center;cursor:pointer}
 .bkopts{display:flex;flex-direction:column;gap:6px}
@@ -375,6 +379,7 @@ function renderShell(){
           <div class="field"><label for="fLang">Language</label><select id="fLang">${LANGS.map(l=>`<option ${f.language===l?"selected":""}>${l}</option>`).join("")}</select></div>
         </div>
         <div class="field"><label for="fAngle">Angle</label><select id="fAngle">${ANGLES.map(a=>`<option ${f.angle===a?"selected":""}>${a}</option>`).join("")}</select></div>
+        <div class="field"><label for="fPres">Presenter <span class="muted">(optional: a person from People)</span></label><select id="fPres"><option value="">No presenter</option></select><div class="hint">They'll be set up in the presenter scenes and speak in their own voice. Shots are made when you press Create (about ₹3 each).</div></div>
         <div class="field"><label for="fNotes">Anything to include? <span class="muted">(optional)</span></label><textarea id="fNotes" maxlength="500" placeholder="e.g. Mention our 3 nights / 4 days Puri–Konark package"></textarea></div>
         <button class="btn block" id="fGo">Write script & find footage</button>
         <p class="small muted" style="margin:8px 0 0">Takes 1–3 minutes. You can review and edit everything before making the video.</p>
@@ -423,6 +428,7 @@ async function startJob(){
   try{
     const r = await api("create", body);
     if(!r.job_id) throw new Error("No job id returned");
+    const pres=($("#fPres")||{}).value; if(pres) store.set("presenter."+r.job_id, pres);
     $("#fDest").value = ""; $("#fNotes").value = "";
     S.jobs.unshift({job_id:String(r.job_id), destination:dest, status:"running", title:"", created_at:new Date().toISOString()});
     renderJobs();
@@ -547,6 +553,7 @@ function renderJob(){
     <h2>Scenes & footage</h2>
     <p class="small muted" style="margin:-4px 0 12px">Every scene needs footage that a person has <b>approved</b> before the video can be made, whatever its source. Tap a clip to preview it, then <b>Approve</b> or <b>Reject</b>. Approvals and rejections are remembered for that place, so next time the right footage comes first. Your own uploads go into the team library.</p>
     <div class="aihost" data-key="script"></div>
+    <div class="presbar" id="presBar"></div>
     <div class="scenes" id="sceneList"></div>
   </div>
 
@@ -596,6 +603,7 @@ function renderJob(){
   mountChat(document.querySelector('.aihost[data-key="caption"]'), "caption", captionDef());
   renderNarr(); resumeShotPolls();
   renderBookends(); mountChat(document.querySelector('.aihost[data-key="bookends"]'), "bookends", bookendsDef());
+  applyPendingPresenter(); renderPresBar();
 }
 
 function renderScenes(){
@@ -605,6 +613,7 @@ function renderScenes(){
   bindScenes();
   updateGate();
   if(typeof renderBookends==="function") renderBookends();
+  if(typeof renderPresBar==="function") renderPresBar();
 }
 function sceneHtml(sc,i){
   const c = sc.card ? null : sc.footage;
@@ -1915,12 +1924,12 @@ function spendText(){ const s=aiSpend(); const inr=s.images*COST.image+s.video_s
 async function loadCast(){
   try{ const r=await api("cast_list"); CAST.list=(r&&r.cast)||[]; CAST.loaded=true; CAST.err=""; }
   catch(e){ CAST.err="Couldn't load people: "+e.message; }
-  renderCast(); renderNarr();
+  renderCast(); renderNarr(); renderFormPres(); if(S.job) renderPresBar();
 }
 function castCardHtml(){
   return `<section class="card" id="castCard">
     <div class="btns" style="justify-content:space-between;margin-bottom:6px"><h2 style="margin:0">People</h2><label class="small muted" style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="castArch"> Archived</label></div>
-    <p class="small muted" style="margin:0 0 10px">Real people (with their permission) and AI influencers who can appear in a scene, use props and speak in their own voice.</p>
+    <p class="small muted" style="margin:0 0 10px">Real people (with their permission) and AI influencers who can appear in a scene, use props and speak in their own voice. <b>To use one:</b> open a video, then choose them as <b>Presenter</b> at the top of Scenes &amp; footage, or press <b>👤 People in this scene</b> on any scene.</p>
     <ul class="jobs" id="castList"></ul>
     <div class="btns" style="margin-top:10px"><button class="btn-sm primary" id="newAvatar" type="button">＋ Person from photos</button><button class="btn-sm" id="newInfl" type="button">＋ AI influencer</button></div>
   </section>`;
@@ -2263,7 +2272,8 @@ async function createShot(i){
   const people=(av.cast_ids||[]).map(castById).filter(m=>m&&m.look_drive_id);
   if(!people.length){ toast("Tick at least one person."); return; }
   if(SHOT.busy) return;
-  SHOT.busy="img"; openShot(i);
+  SHOT.busy="img"; if(!SHOT.batch) openShot(i);
+  if(av.bg==="footage" && !bgChoices(sc).find(c=>c.cid===av.bg_cid)){ const bgs=bgChoices(sc); av.bg_cid=(sc.footage && sc.footage.source!=="AI avatar" && !sc.card ? sc.footage.cid : (bgs[0]&&bgs[0].cid)) || ""; }
   try{
     const characters=[]; for(const p of people){ const r=await toJpegB64(await driveUrl(p.look_drive_id),1024,0.9); characters.push({name:p.name, mime:r.mime, data:r.data}); }
     let background=null;
@@ -2321,6 +2331,66 @@ async function pollShot(scId){
   } finally { CAST.polling.delete(scId); }
 }
 function resumeShotPolls(){ if(!S.job) return; S.job.scenes.forEach(sc=>{ if(sc.avatar && sc.avatar.pending){ if(sc.avatar.pending.operation) pollShot(sc.id); else sc.avatar.pending=null; } }); }
+
+
+// ---------------------------------------------------------------- presenter: put one person into many scenes at once
+function presTargets(which){
+  const sc=S.job.scenes;
+  if(which==="all") return sc.map((s,i)=>i).filter(i=>!sc[i].role);
+  if(which==="bookends") return sc.map((s,i)=>i).filter(i=>sc[i].role);
+  const a=sc.map((s,i)=>i).filter(i=>sc[i].type==="anchor" && !sc[i].role); return a.length?a:sc.map((s,i)=>i).filter(i=>!sc[i].role).slice(0,2);
+}
+function renderFormPres(){
+  const sel=$("#fPres"); if(!sel) return; const v=sel.value;
+  sel.innerHTML=`<option value="">No presenter</option>`+castActive().filter(m=>m.look_drive_id).map(m=>`<option value="${esc(m.cast_id)}" ${v===m.cast_id?"selected":""}>${esc(m.name)}${m.voice_id?"":" (no voice)"}</option>`).join("");
+}
+function applyPresenter(id, which, speak){
+  const m=castById(id); if(!m) return 0; const idx=presTargets(which);
+  idx.forEach(i=>{ const av=scAv(S.job.scenes[i]); av.cast_ids=[id]; if(!av.action) av.action=S.job.scenes[i].role==="outro"?"Waves goodbye and smiles at the camera":"Talks to the camera like a travel vlogger"; av.speak=!!(speak&&m.voice_id); });
+  const prev=S.job.presenter&&S.job.presenter.id;
+  S.job.presenter={id, which, speak:!!speak};
+  if(speak && m.voice_id) S.job.narrator_cast=id; else if(S.job.narrator_cast && S.job.narrator_cast===prev) S.job.narrator_cast="";
+  if(speak && !m.voice_id) setTimeout(()=>toast(m.name+" has no voice yet: the normal voice narrates. Give them a voice under People."),400);
+  invalidate(); saveLocal(); renderScenes(); renderNarr(); return idx.length;
+}
+function applyPendingPresenter(){
+  if(!S.job || S.job.presenter) return; const id=store.get("presenter."+S.jobId,null); if(!id) return;
+  if(!CAST.loaded){ setTimeout(applyPendingPresenter,1500); return; }
+  store.set("presenter."+S.jobId,null); const n=applyPresenter(id,"anchor",true); const m=castById(id);
+  if(n && m) toast(`${m.name} is set up as presenter in ${n} scene${n===1?"":"s"}. Press “Create shots” to put them in.`);
+}
+function renderPresBar(){
+  const h=$("#presBar"); if(!h||!S.job) return;
+  const ppl=castActive().filter(m=>m.look_drive_id), P=S.job.presenter||{}, which=P.which||"anchor";
+  if(!ppl.length){ h.innerHTML=`<b>👤 Presenter</b> <span class="small muted">· No people yet. Create a person or AI influencer under <b>People</b> (left), then choose them here.</span>`; return; }
+  const cur=P.id && castById(P.id), idx=presTargets(which);
+  const todo=idx.filter(i=>{ const s=S.job.scenes[i]; return !(s.footage&&s.footage.source==="AI avatar"); });
+  h.innerHTML=`<div class="row"><b>👤 Presenter</b>${cur?`<span class="jth ph" data-look="${esc(cur.look_drive_id)}"></span>`:""}
+    <select id="presWho" aria-label="Presenter"><option value="">Choose a person…</option>${ppl.map(m=>`<option value="${esc(m.cast_id)}" ${P.id===m.cast_id?"selected":""}>${esc(m.name)} · ${m.kind==="avatar"?"real person":"AI influencer"}</option>`).join("")}</select>
+    <select id="presWhich" aria-label="Which scenes"><option value="anchor" ${which==="anchor"?"selected":""}>Presenter scenes (${presTargets("anchor").length})</option><option value="all" ${which==="all"?"selected":""}>All scenes (${presTargets("all").length})</option>${presTargets("bookends").length?`<option value="bookends" ${which==="bookends"?"selected":""}>Introduction & conclusion (${presTargets("bookends").length})</option>`:""}</select>
+    <label class="small" style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="presSpeak" ${P.speak!==false?"checked":""}> speaks in own voice</label>
+    <button class="btn-sm" id="presApply" type="button">Set up</button>
+    ${cur?`<button class="btn-sm primary" id="presMake" type="button" ${todo.length&&!SHOT.batch?"":"disabled"}>${SHOT.batch?esc(SHOT.batch):todo.length?`✦ Create ${todo.length} shot${todo.length===1?"":"s"} (~${rupees(todo.length*COST.image)})`:"✓ Shots created"}</button>`:""}</div>
+    <div class="small muted" style="margin-top:6px">${cur?`${esc(cur.name)} is in scene${idx.length===1?"":"s"} ${idx.map(i=>i+1).join(", ")}. Each shot then needs ✓ Approve; open 👤 People in this scene to change the action, props or animate it.`:"Choose who presents this video and in which scenes, then press Set up and Create shots."}</div>`;
+  const go=()=>{ const id=$("#presWho").value; if(!id){ toast("Choose a person first"); return; } const n=applyPresenter(id,$("#presWhich").value,$("#presSpeak").checked); toast(`Set up in ${n} scene${n===1?"":"s"}`); };
+  $("#presApply").onclick=go;
+  $("#presWho").onchange=()=>{ if($("#presWho").value) go(); };
+  $("#presWhich").onchange=()=>{ if(S.job.presenter) go(); else renderPresBar(); };
+  $("#presSpeak").onchange=()=>{ if(S.job.presenter) go(); };
+  const mk=$("#presMake"); if(mk) mk.onclick=()=>createPresenterShots(todo);
+  lazyLooks(h);
+}
+async function createPresenterShots(list){
+  if(SHOT.batch) return; let ok=0;
+  for(let k=0;k<list.length;k++){
+    SHOT.batch=`Creating shot ${k+1} of ${list.length}…`; renderPresBar();
+    const before=(S.job.scenes[list[k]].candidates||[]).length;
+    await createShot(list[k]);
+    if((S.job.scenes[list[k]].candidates||[]).length>before) ok++;
+  }
+  SHOT.batch=null; renderScenes(); renderPresBar();
+  toast(ok?`${ok} shot${ok===1?"":"s"} created. Check each one and press ✓ Approve.`:"No shots were created.");
+}
 
 // ---------------------------------------------------------------- voices: who narrates
 function sceneVoice(sc){
