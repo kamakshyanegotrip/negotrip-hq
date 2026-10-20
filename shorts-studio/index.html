@@ -228,6 +228,18 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:12px 0}
 .sgrid .chk{display:flex;gap:6px;align-items:center;min-height:32px}
 .sgrid .field{margin:0}.sgrid .rng{margin:0}
 .cn{display:flex;gap:8px;align-items:center}.cn input[type=color]{flex:1}
+/* saving + library */
+.jobhead{flex-wrap:wrap}
+.namein{font-family:var(--display);font-weight:600;font-size:19px;border:1px solid transparent;background:transparent;color:var(--ink);padding:2px 6px;margin:2px 0 2px -6px;border-radius:8px;width:100%;max-width:520px}
+.namein:hover,.namein:focus{border-color:var(--line);background:var(--bg)}
+.libbar{display:flex;gap:6px;margin-bottom:8px}.libbar input{flex:1;min-width:0;height:34px;font-size:13px;padding:6px 10px}.libbar select{width:auto;height:34px;font-size:13px;padding:4px 8px}
+.jobs .jrow{display:flex;gap:4px;align-items:stretch}
+.jobs .jrow>button[data-job]{flex:1;min-width:0;justify-content:flex-start;gap:10px}
+.jobs .jtx{min-width:0;overflow:hidden}.jobs .jt{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jobs .jth{width:36px;height:54px;border-radius:6px;object-fit:cover;flex:0 0 36px;background:var(--surface-2)}
+.jobs .jarch{width:34px;border:1px solid var(--line);background:var(--bg);border-radius:9px;cursor:pointer;font-size:14px;color:var(--ink)}
+.jobs .jrow .pill{margin-top:3px;display:inline-block}
+.jobs{max-height:560px}
 </style>
 </head>
 <body>
@@ -333,28 +345,36 @@ function renderShell(){
         <p class="small muted" style="margin:8px 0 0">Takes 1–3 minutes. You can review and edit everything before making the video.</p>
       </form>
       <section class="card">
-        <div class="btns" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0">Recent videos</h2><button class="btn-sm" id="refreshJobs">Refresh</button></div>
+        <div class="btns" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0">My videos</h2><button class="btn-sm" id="refreshJobs">Refresh</button></div>
+        <div class="libbar"><input type="search" id="libQ" placeholder="Search name or place" aria-label="Search videos"><select id="libF" aria-label="Show"><option value="all">All</option><option value="mine">Made by me</option><option value="video">Video made</option><option value="archived">Archived</option></select></div>
         <ul class="jobs" id="jobList"></ul>
+        <p class="small muted" style="margin:8px 0 0">Everything saves automatically to the team server. Open any video to carry on where you left off, from any computer.</p>
       </section>
     </aside>
     <section id="work"></section>
   </div>`;
   $("#newForm").addEventListener("submit", e=>{ e.preventDefault(); startJob(); });
   $("#refreshJobs").addEventListener("click", ()=>loadJobs().then(renderJobs).catch(e=>toast(e.message)));
+  $("#libQ").addEventListener("input", renderJobs); $("#libF").addEventListener("change", renderJobs);
   renderJobs();
   renderWork();
 }
 async function loadJobs(){ const r = await api("jobs"); S.jobs = (r && r.jobs) || []; }
 function renderJobs(){
   const ul = $("#jobList"); if(!ul) return;
-  if(!S.jobs.length){ ul.innerHTML = `<li class="small muted">No videos yet.</li>`; return; }
-  ul.innerHTML = S.jobs.map(j=>{
-    const d = j.created_at ? new Date(j.created_at) : null;
-    const when = d ? d.toLocaleDateString(undefined,{day:"numeric",month:"short"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}) : "";
-    const pill = j.status==="done" ? `<span class="pill ok">Ready</span>` : j.status==="running" ? `<span class="pill warn">Working</span>` : `<span class="pill">${esc(j.status)}</span>`;
-    return `<li><button data-job="${esc(j.job_id)}" aria-current="${S.jobId===String(j.job_id)}"><span><span class="jt">${esc(j.title || j.destination)}</span><br><span class="jd">${esc(j.destination)} · ${esc(when)}</span></span>${pill}</button></li>`;
+  const q=(($("#libQ")||{}).value||"").trim().toLowerCase(), f=(($("#libF")||{}).value||"all");
+  let list=S.jobs.filter(j=> f==="archived" ? j.archived : !j.archived);
+  if(f==="mine") list=list.filter(j=>!j.created_by || j.created_by===S.email || j.updated_by===S.email);
+  if(f==="video") list=list.filter(j=>j.video_at);
+  if(q) list=list.filter(j=>[j.name,j.title,j.destination,j.job_id].join(" ").toLowerCase().includes(q));
+  if(!list.length){ ul.innerHTML = `<li class="small muted">${S.jobs.length?"Nothing matches.":"No videos yet."}</li>`; return; }
+  ul.innerHTML = list.map(j=>{
+    const when = j.saved_at ? "edited "+ago(j.saved_at)+(j.updated_by?" by "+who(j.updated_by):"") : (j.created_at ? "created "+ago(j.created_at) : "");
+    const st = j.status==="running"||j.status==="processing" ? ["Working","warn"] : (j.status==="error"||j.status==="failed") ? ["Failed","bad"] : j.video_at ? ["Video made","ok"] : j.stage==="Footage approved" ? ["Ready to make","ok"] : j.stage ? ["Draft · "+j.stage,"warn"] : ["Script ready",""];
+    return `<li class="jrow"><button data-job="${esc(j.job_id)}" aria-current="${S.jobId===String(j.job_id)}">${j.thumb?`<img class="jth" src="${esc(j.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="jth ph"></span>`}<span class="jtx"><span class="jt">${esc(j.name || j.title || j.destination)}</span><br><span class="jd">${esc(j.destination)} · ${esc(when)}</span><br><span class="pill ${st[1]}">${esc(st[0])}</span></span></button><button class="jarch" data-arch="${esc(j.job_id)}" title="${j.archived?"Restore":"Archive"}" aria-label="${j.archived?"Restore":"Archive"} ${esc(j.name||j.title||"")}">${j.archived?"↩":"🗄"}</button></li>`;
   }).join("");
   ul.querySelectorAll("button[data-job]").forEach(b=>b.addEventListener("click",()=>openJob(b.dataset.job)));
+  ul.querySelectorAll("button[data-arch]").forEach(b=>b.addEventListener("click",()=>{ const j=S.jobs.find(x=>String(x.job_id)===b.dataset.arch); if(j) setArchived(j.job_id, !j.archived); }));
 }
 
 // ---------------------------------------------------------------- create + poll
@@ -374,6 +394,7 @@ async function startJob(){
   finally{ btn.disabled=false; btn.textContent="Write script & find footage"; }
 }
 async function openJob(id){
+  if(S.job && SAVE.dirty && S.jobId!==String(id)) await saveNow();
   clearTimeout(S.pollTimer);
   S.jobId = String(id); S.job = null; S.result = null; S.checks = store.get("checks."+id, {}); S.openAlts = {};
   history.replaceState(null, "", "#job="+id);
@@ -388,9 +409,11 @@ async function poll(){
     const r = await api("job", {job_id:id});
     if(id !== S.jobId) return;
     if(r.status === "done" && r.job){
-      const local = store.get("job."+id, null);
-      S.job = normalizeJob(local && local.job ? local.job : r.job); renderWork();
+      const job = await loadSavedJob(id, normalizeJob(r.job));
+      if(id !== S.jobId) return;
+      S.job = normalizeJob(job); renderWork();
       const j = S.jobs.find(x=>String(x.job_id)===id); if(j){ j.status="done"; j.title=r.job.title; renderJobs(); }
+      getVideo(id).then(v=>{ if(v && v.blob && id===S.jobId){ S.lastResult={jobId:id, blob:v.blob, name:v.name}; showDlLast(); } });
       return;
     }
     if(r.status === "error"){ S.job=null; renderWork("error", r.error); return; }
@@ -440,7 +463,6 @@ function normalizeJob(job){
   });
   return job;
 }
-function saveLocal(){ if(S.job) store.set("job."+S.jobId, {saved:Date.now(), job:S.job}); }
 function placeOf(sc){ return (sc.location||"").trim() || (S.job.request&&S.job.request.destination) || "scene"; }
 function sceneReady(sc){ return sc.card || (sc.footage && sc.approved); }
 function readyCount(){ return S.job.scenes.filter(sceneReady).length; }
@@ -468,9 +490,12 @@ function renderJob(){
   w.innerHTML = `
   <div class="card">
     <div class="jobhead">
-      <div><div class="eyebrow">${esc(j.request?.destination)} · ${esc(j.request?.angle)} · ${esc(j.request?.language)} · job ${esc(j.job_id)}</div><h2>${esc(j.title)}</h2><div class="muted small">Planned length about ${total}s · ${j.scenes.length} scenes</div></div>
-      <div class="btns"><span class="pill num" id="readyPill"></span><a class="btn" href="#make" id="toMake">Make the video ↓</a></div>
+      <div style="min-width:0;flex:1 1 100%"><div class="eyebrow">${esc(j.request?.destination)} · ${esc(j.request?.angle)} · ${esc(j.request?.language)} · job ${esc(j.job_id)}</div>
+        <input class="namein" id="jobName" maxlength="120" value="${esc(j._name||"")}" placeholder="${esc(j.title||"Name this video")}" aria-label="Video name">
+        <div class="muted small">${esc(j._name?j.title:"")}${j._name?" · ":""}Planned length about ${total}s · ${j.scenes.length} scenes</div></div>
+      <div class="btns"><span class="pill" id="saveState"></span><button class="btn-sm" id="saveBtn">💾 Save</button><span class="pill num" id="readyPill"></span><a class="btn" href="#make" id="toMake">Make the video ↓</a></div>
     </div>
+    <div class="notice small" id="conflictBox" hidden></div>
     <div class="director"><div class="small muted" style="margin:12px 0 6px"><b style="color:var(--accent)">✦ AI director</b> · tell the AI what you want changed anywhere in the video: script, scenes, order, footage, framing, looks, titles, captions, voice, language, music, caption for posting. It proposes the exact changes; you apply them.</div><div class="aihost" data-key="director"></div></div>
   </div>
 
@@ -522,6 +547,9 @@ function renderJob(){
   renderScenes();
   bindJob();
   initRenderPanel();
+  $("#saveBtn").onclick=()=>{ SAVE.dirty=true; saveNow(); };
+  $("#jobName").addEventListener("change",e=>renameJob(e.target.value.trim()));
+  renderSaveState();
   mountChat(document.querySelector('.aihost[data-key="script"]'), "script", scriptDef());
   if(!S.chats.director) S.chats.director={open:true,msgs:[],draft:""};
   mountDirector();
@@ -594,7 +622,7 @@ async function approve(i, c){
 }
 async function reject(i, c, note){
   const sc=S.job.scenes[i]; if(!c) return;
-  c._rejected=true;
+  c._rejected=true; (sc.candidates||[]).forEach(x=>{ if(x.cid===c.cid) x._rejected=true; });
   if(sc.footage && sc.footage.cid===c.cid){
     sc.approved=false;
     sc.footage = sc.candidates.find(x=>!x._rejected && x.ai_ok!==false) || sc.candidates.find(x=>!x._rejected) || null;
@@ -1298,6 +1326,7 @@ function showResult(blob, mime, original, convFailed){
   const url=URL.createObjectURL(blob);
   const mb=(blob.size/1048576).toFixed(1);
   S.lastResult={jobId:S.jobId, blob, name, mime, url};
+  if(!convFailed && S.job){ S.job.video_at=new Date().toISOString(); saveLocal(); keepVideo(S.jobId, blob, name); }
   const origLink = original ? (()=>{ const u=URL.createObjectURL(original); return `<a class="linkish small" href="${u}" download="${esc(name.replace(/\.mp4$/,"-original."+(original.type.includes("mp4")?"mp4":"webm")))}">original recording</a>`; })() : "";
   $("#resultBox").innerHTML = `<div class="card resultcard" style="margin-top:14px;background:var(--bg)"><h3>Your video is ready ✓</h3>
     ${original?`<p class="small" style="margin:0 0 6px"><span class="pill ok">Phone-ready MP4</span> H.264 + AAC, 30 fps: plays on WhatsApp, Instagram, Facebook and YouTube.</p>`:""}
@@ -1665,6 +1694,108 @@ function renderMusic(){
     }catch(e){ toast("Couldn't use this track: "+e.message); b.disabled=false; b.textContent="Use"; }
   });
 }
+
+// ================================================================ SAVING (team server) + MY VIDEOS
+// Every change is saved automatically to the team server (n8n data tables), so work is never lost and
+// can be reopened from any computer. A small backup is also kept in this browser until the server has it.
+const SAVE = { timer:null, dirty:false, saving:false, version:0, savedAt:"", savedBy:"", error:"", conflict:null, jobId:null, orig:null };
+function packDraft(job, orig){
+  const ref = new Map(); (orig&&orig.scenes||[]).forEach(s=>(s.candidates||[]).forEach(c=>{ if(c&&c.cid) ref.set(c.cid,c); }));
+  const strip = c => { if(!c) return c; const o=Object.assign({},c); delete o.local_url; delete o.local_thumb; return o; };
+  const clone = JSON.parse(JSON.stringify(job, (k,v)=> (k==="local_url"||k==="local_thumb") ? undefined : v));
+  clone.scenes.forEach(sc=>{ sc.candidates=(sc.candidates||[]).map(c=> ref.has(c.cid) ? {cid:c.cid, _ref:1, _rejected:c._rejected||undefined, verified:c.verified||undefined, ai_ok:c.ai_ok} : strip(c)); });
+  clone._packed = 1;
+  return clone;
+}
+function unpackDraft(d, orig){
+  if(!d || !d._packed) return d;
+  const ref = new Map(); (orig&&orig.scenes||[]).forEach(s=>(s.candidates||[]).forEach(c=>{ if(c&&c.cid) ref.set(c.cid,c); }));
+  d.scenes.forEach(sc=>{ sc.candidates=(sc.candidates||[]).map(c=> c._ref ? Object.assign({}, ref.get(c.cid)||{cid:c.cid}, {_rejected:c._rejected, verified:c.verified, ai_ok:c.ai_ok}) : c).filter(c=>c&&c.cid); });
+  delete d._packed; return d;
+}
+function jobMeta(){
+  const j=S.job||{}, n=(j.scenes||[]).length, r=typeof readyCount==="function"?readyCount():0;
+  const first=(j.scenes||[]).map(s=>!s.card&&s.footage).find(c=>c&&/^https?:/.test(c.thumbnail||""));
+  return { name:j._name||"", destination:(j.request&&j.request.destination)||"", title:j.title||"", status:"done",
+    stage: j.video_at ? "Video made" : (n && r===n ? "Footage approved" : `${r}/${n} approved`),
+    thumb: first?first.thumbnail:"", scenes:n, seconds:(j.scenes||[]).reduce((a,s)=>a+(+s.duration_sec||0),0), video_at:j.video_at||"" };
+}
+function backupLocal(){
+  if(!S.job) return;
+  try{
+    const keys=Object.keys(localStorage).filter(k=>k.startsWith("shorts.job.") && k!=="shorts.job."+S.jobId);
+    keys.forEach(k=>{ try{ const v=JSON.parse(localStorage.getItem(k)); if(!v||!v.dirty) localStorage.removeItem(k); }catch(e){ localStorage.removeItem(k); } });
+  }catch(e){}
+  store.set("job."+S.jobId, {saved:Date.now(), version:SAVE.version, dirty:SAVE.dirty, job:packDraft(S.job, SAVE.orig)});
+}
+function saveLocal(){ // called after every edit
+  if(!S.job) return;
+  SAVE.dirty=true; SAVE.error=""; backupLocal(); renderSaveState();
+  clearTimeout(SAVE.timer); SAVE.timer=setTimeout(()=>saveNow(), 2500);
+}
+async function saveNow(force){
+  clearTimeout(SAVE.timer);
+  if(!S.job || !S.jobId) return;
+  if(SAVE.saving){ SAVE.again=true; return; }
+  if(!SAVE.dirty && !force) return;
+  const id=S.jobId; SAVE.saving=true; renderSaveState();
+  try{
+    const r=await api("save",{job_id:id, base_version:SAVE.version, force:force==="overwrite", draft:packDraft(S.job, SAVE.orig), meta:jobMeta()});
+    if(id!==S.jobId) return;
+    if(r.conflict){ SAVE.conflict=r; SAVE.error="conflict"; }
+    else if(r.ok){ SAVE.version=r.version; SAVE.savedAt=r.saved_at; SAVE.savedBy=S.email; SAVE.dirty=SAVE.again?true:false; SAVE.conflict=null; SAVE.error="";
+      backupLocal(); const j=S.jobs.find(x=>String(x.job_id)===id); if(j){ Object.assign(j, jobMeta(), {saved_at:r.saved_at, updated_by:S.email, version:r.version, archived:false}); renderJobs(); } }
+    else throw new Error("Save failed");
+  }catch(e){ if(id===S.jobId) SAVE.error=e.message||"Couldn't save"; }
+  finally{ SAVE.saving=false; renderSaveState(); if(SAVE.again){ SAVE.again=false; SAVE.dirty=true; SAVE.timer=setTimeout(()=>saveNow(),1500); } else if(SAVE.error && SAVE.error!=="conflict" && id===S.jobId){ SAVE.timer=setTimeout(()=>saveNow(),15000); } }
+}
+function ago(iso){ if(!iso) return ""; const s=(Date.now()-Date.parse(iso))/1000; if(!isFinite(s)) return ""; if(s<60) return "just now"; if(s<3600) return Math.round(s/60)+" min ago"; if(s<86400) return Math.round(s/3600)+" h ago"; const d=new Date(iso); return d.toLocaleDateString(undefined,{day:"numeric",month:"short"}); }
+function who(email){ return !email ? "" : email===S.email ? "you" : email.split("@")[0]; }
+function renderSaveState(){
+  const el=$("#saveState"); if(!el) return;
+  let cls="", txt="";
+  if(SAVE.error==="conflict"){ cls="bad"; txt="Newer version on server"; }
+  else if(SAVE.saving){ cls="warn"; txt="Saving…"; }
+  else if(SAVE.error){ cls="bad"; txt="Not saved – retrying"; }
+  else if(SAVE.dirty){ cls="warn"; txt="Unsaved changes"; }
+  else if(SAVE.savedAt){ cls="ok"; txt="✓ Saved "+ago(SAVE.savedAt)+(SAVE.savedBy&&SAVE.savedBy!==S.email?" by "+who(SAVE.savedBy):""); }
+  else { cls=""; txt="Not saved yet"; }
+  el.className="pill "+cls; el.textContent=txt; el.title = SAVE.error && SAVE.error!=="conflict" ? SAVE.error : "";
+  const box=$("#conflictBox"); if(box){
+    if(SAVE.conflict){ box.hidden=false; box.innerHTML=`<b>${esc(who(SAVE.conflict.saved_by)||"Someone")}</b> saved a newer version of this video ${esc(ago(SAVE.conflict.saved_at))}. <button class="btn-sm" id="cfLoad">Load their version</button> <button class="btn-sm" id="cfMine">Keep mine (overwrite)</button>`;
+      $("#cfLoad").onclick=()=>{ SAVE.conflict=null; SAVE.dirty=false; store.set("job."+S.jobId,null); openJob(S.jobId); };
+      $("#cfMine").onclick=()=>{ SAVE.conflict=null; SAVE.error=""; SAVE.dirty=true; saveNow("overwrite"); }; }
+    else { box.hidden=true; box.innerHTML=""; }
+  }
+}
+setInterval(()=>{ if(!SAVE.saving && !SAVE.dirty) renderSaveState(); }, 30000);
+window.addEventListener("beforeunload", e=>{ if(S.job && (SAVE.dirty||SAVE.saving)){ saveNow(); e.preventDefault(); e.returnValue=""; } });
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="hidden" && SAVE.dirty) saveNow(); });
+// load the saved version when a finished job is opened
+async function loadSavedJob(id, engineJob){
+  SAVE.orig = JSON.parse(JSON.stringify(engineJob)); SAVE.version=0; SAVE.savedAt=""; SAVE.savedBy=""; SAVE.dirty=false; SAVE.error=""; SAVE.conflict=null; SAVE.jobId=id;
+  let server=null; try{ const r=await api("draft",{job_id:id}); if(r && r.found && r.draft_json) server=r; }catch(e){ console.warn("draft load", e); }
+  const local=store.get("job."+id, null);
+  let job=null, fromLocal=false;
+  if(server){ try{ job=unpackDraft(JSON.parse(server.draft_json), SAVE.orig); SAVE.version=server.version; SAVE.savedAt=server.saved_at; SAVE.savedBy=server.saved_by; }catch(e){ job=null; } }
+  if(local && local.job && (!job || (local.dirty && (local.version||0)>=SAVE.version) || (!server && local.job))){
+    job=unpackDraft(local.job, SAVE.orig); fromLocal=true;
+    if(!server) SAVE.version=0; else SAVE.version=local.version||SAVE.version;
+  }
+  if(!job) job=JSON.parse(JSON.stringify(engineJob));
+  if(fromLocal){ SAVE.dirty=true; setTimeout(()=>saveNow(), 800); }
+  return job;
+}
+async function renameJob(name){
+  if(!S.job) return; S.job._name=String(name||"").slice(0,120); saveLocal();
+}
+async function setArchived(id, archived){
+  try{ await api("project",{job_id:id, changes:{archived}}); const j=S.jobs.find(x=>String(x.job_id)===String(id)); if(j) j.archived=archived; renderJobs(); toast(archived?"Moved to Archived":"Restored"); }
+  catch(e){ toast(e.message); }
+}
+// local copy of finished videos (this computer only) so they can be downloaded again later
+async function keepVideo(id, blob, name){ try{ await idb.set("video."+id, {blob, name, at:new Date().toISOString()}); }catch(e){} }
+async function getVideo(id){ try{ return await idb.get("video."+id); }catch(e){ return null; } }
 
 // ================================================================ AI CO-EDITOR (chat under every section)
 // Each section defines: title, context(), fields() [{key,label,type,min,max,options,get,set}], after(applied), image (bool)
