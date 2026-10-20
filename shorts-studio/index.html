@@ -1702,7 +1702,7 @@ function musicCredit(){
   const by = m.creator?` by ${m.creator}`:"";
   return `Music: "${m.title}"${by} (${m.provider_label||m.provider||"Openverse"}), ${m.licence}${m.licence_url?" ("+m.licence_url+")":""}`;
 }
-const PROV = { jamendo:"Jamendo", freesound:"Freesound", wikimedia_audio:"Wikimedia Commons", ccmixter:"ccMixter" };
+const PROV = { jamendo:"Jamendo", freesound:"Freesound", wikimedia_audio:"Wikimedia Commons", wikimedia:"Wikimedia Commons", ccmixter:"ccMixter" };
 function fmtDur(s){ if(!s&&s!==0) return ""; s=Math.round(s); return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; }
 function stopMusicPreview(){ if(MUSIC.audio){ try{ MUSIC.audio.pause(); }catch(e){} } MUSIC.playing=null; document.querySelectorAll("[data-mplay]").forEach(b=>{ b.textContent="▶"; b.setAttribute("aria-label","Play preview"); }); }
 async function musicBlob(url){
@@ -1734,19 +1734,19 @@ async function musicSearch(page){
     const r=await api("music",{query:MUSIC.q||"instrumental", length:MUSIC.length, page});
     if(r.error) throw new Error(r.error);
     MUSIC.results = page===1 ? (r.tracks||[]) : MUSIC.results.concat(r.tracks||[]);
-    MUSIC.page=page; MUSIC.total=r.total||0; MUSIC.pages=r.page_count||1;
+    MUSIC.page=page; MUSIC.total=r.total||0; MUSIC.pages=r.page_count||1; MUSIC.note=r.note||"";
   }catch(e){ if(list) list.innerHTML=`<p class="small muted">Couldn't search music: ${esc(e.message)}. Try again.</p>`; MUSIC.busy=false; return; }
   MUSIC.busy=false; renderMusic();
 }
 function renderMusic(){
   const list=$("#mList"); if(!list) return;
   const cur=R.musicMeta&&R.musicMeta.id;
-  list.innerHTML = MUSIC.results.length ? MUSIC.results.map((t,k)=>`<div class="mrow ${cur===t.id?"on":""}">
+  list.innerHTML = (MUSIC.note&&MUSIC.results.length?`<p class="small muted" style="margin:0 0 6px">Openverse (the usual music library) isn't responding right now, so these free tracks come from Wikimedia Commons.</p>`:"") + (MUSIC.results.length ? MUSIC.results.map((t,k)=>`<div class="mrow ${cur===t.id?"on":""}">
       <button class="mplay" data-mplay="${k}" aria-label="Play preview">▶</button>
       <div class="minfo"><div class="mt">${esc(t.title)}</div><div class="small muted">${esc(t.creator||"Unknown artist")} · ${esc(PROV[t.provider]||t.provider)} · ${fmtDur(t.duration_sec)}${(t.tags||t.genres||[]).length?` · ${esc([...(t.genres||[]),...(t.tags||[])].slice(0,4).join(", "))}`:""}</div></div>
       <span class="pill ${t.attribution_required?"warn":"ok"}">${esc(t.licence)}</span>
       <button class="btn-sm ${cur===t.id?"":"primary"}" data-muse="${k}" ${cur===t.id?"disabled":""}>${cur===t.id?"In use ✓":"Use"}</button>
-    </div>`).join("") : `<p class="small muted">No tracks found. Try a single word like "sitar", "flute" or "ambient".</p>`;
+    </div>`).join("") : `<p class="small muted">No tracks found. Try a single word like "sitar", "flute" or "ambient".</p>`);
   const more=$("#mMore"); if(more) more.innerHTML = MUSIC.page<MUSIC.pages && MUSIC.results.length ? `<button class="btn-sm" id="mNext" style="margin-top:10px">Show more (${MUSIC.total} found)</button>` : "";
   const nx=$("#mNext"); if(nx) nx.onclick=()=>{ nx.disabled=true; nx.textContent="Loading…"; musicSearch(MUSIC.page+1); };
   list.querySelectorAll("[data-mplay]").forEach(b=>b.onclick=async()=>{
