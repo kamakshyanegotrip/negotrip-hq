@@ -149,7 +149,7 @@ img.thumb{display:block;object-fit:cover;width:100%;aspect-ratio:9/16;height:aut
 
 .gate{min-height:70vh;display:grid;place-items:center}
 .gate .card{max-width:440px;text-align:center;padding:28px 22px}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:40;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;max-width:calc(100% - 32px)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:80;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;max-width:calc(100% - 32px)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 /* editor */
 .editor{border-top:1px solid var(--line);margin-top:16px;padding-top:6px}
@@ -262,6 +262,10 @@ div.look{cursor:default}
 .shots{display:flex;flex-direction:column;gap:10px}
 .shot{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;align-items:start}
 .shot.on .alt{border-color:var(--accent)}
+.cemsg{border-radius:10px;padding:8px 10px;font-size:13px;margin-top:8px;background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.cemsg.bad{background:color-mix(in srgb,var(--danger) 14%,transparent)}
+.ready{list-style:none;padding:0;margin:6px 0 8px;font-size:13px;display:flex;flex-direction:column;gap:3px}
+.ready .no{color:var(--danger)} .ready .yes{color:var(--ok)}
 </style>
 </head>
 <body>
@@ -1941,7 +1945,7 @@ function renderCE(){
   if(!CE) return;
   const av=CE.kind==="avatar", busy=CE.busy;
   const vTab=CE.tab;
-  const voiceNow = CE.voice_id ? `${esc(VOICE_KIND[CE.voice_kind]||"Voice")}${CE.voice_kind==="studio"?" · "+esc(CE.voice_id):""} <button class="btn-sm" id="ceTest" type="button" ${busy?"disabled":""}>▶ Test</button>` : `<span class="muted">none yet</span>`;
+  const voiceNow = CE.voice_id ? `${esc(VOICE_KIND[CE.voice_kind]||"Voice")}${CE.voice_kind==="studio"?" · "+esc(CE.voice_id):""} <button class="btn-sm" id="ceTest" type="button" data-pkey="test:${esc(CE.voice_id)}" data-plabel="▶ Test" ${busy?"disabled":""}>▶ Test</button>` : `<span class="muted">none yet</span>`;
   const m=modal(`<div class="mhead"><b>${CE.cast_id?"Edit":"New"} ${av?"person from photos":"AI influencer"}</b><button class="btn-sm" data-close>Close</button></div>
     <div class="field"><label for="ceName">Name</label><input type="text" id="ceName" maxlength="80" value="${esc(CE.name)}" placeholder="${av?"e.g. Kamakshya":"e.g. Riya"}"></div>
     ${av?`
@@ -1976,12 +1980,15 @@ function renderCE(){
         <div class="recbox"><b class="small">2 · Consent sentence.</b> <span class="small muted">Read exactly:</span><div class="quote">“${esc(CONSENT_LINE)}”</div>
           <div class="btns">${recBtns("consent")}</div></div>
         <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin:8px 0"><input type="checkbox" id="ceVok" ${CE.consent.voice_consent?"checked":""} style="margin-top:3px"> The speaker is 18+ and agreed to their voice being cloned for NegoTrip videos.</label>
-        <button class="btn-sm primary" id="ceClone" type="button" ${busy?"disabled":""}>${busy==="voice"?"Cloning voice… (up to a minute)":"✦ Create cloned voice"}</button>
+        ${(()=>{ const a=CE.rec.sample, c=CE.rec.consent, ok=a&&a.okLen&&c&&c.okLen&&CE.consent.voice_consent;
+          return `<ul class="ready"><li class="${a&&a.okLen?"yes":"no"}">${a&&a.okLen?"✓":"✗"} Voice sample ${a?a.dur.toFixed(1)+" s":"missing"}${a&&!a.okLen?" (needs 10–30 s)":""}</li><li class="${c&&c.okLen?"yes":"no"}">${c&&c.okLen?"✓":"✗"} Consent sentence ${c?c.dur.toFixed(1)+" s":"missing: record or upload it in step 2"}${c&&!c.okLen?" (too short, read the whole sentence)":""}</li><li class="${CE.consent.voice_consent?"yes":"no"}">${CE.consent.voice_consent?"✓":"✗"} Permission ticked</li></ul>
+          <button class="btn-sm primary" id="ceClone" type="button" ${busy||!ok?"disabled":""}>${busy==="voice"?"Cloning voice… (up to a minute)":"✦ Create cloned voice"}</button>`; })()}
         ${CE.kind==="influencer"?`<p class="hint">For an AI influencer, clone only the voice of a real person who agreed (for example a team member who voices her).</p>`:""}`:""}
     </div>
+    ${CE.msg?`<div class="cemsg ${CE.msg.bad?"bad":""}" role="status">${esc(CE.msg.t)}${CE.sampleAudio&&!CE.msg.bad?` <button class="btn-sm" type="button" id="ceSampleAudio" data-pkey="sa" data-plabel="▶ Hear Google's sample">▶ Hear Google's sample</button>`:""}</div>`:""}
     <div class="btns" style="margin-top:16px;justify-content:space-between"><span class="small muted">Saved for the whole team.</span><span class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn" id="ceSave" ${busy?"disabled":""}>Save person</button></span></div>`);
   m.querySelector(".modal-card").classList.add("wide");
-  m.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>{ stopRec(); CE=null; closeModal(); });
+  m.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>{ stopRec(); stopPlay(); CE=null; closeModal(); });
   const q=s=>m.querySelector(s);
   q("#ceName").oninput=e=>CE.name=e.target.value;
   if(q("#ceOutfit")) q("#ceOutfit").oninput=e=>CE.outfit=e.target.value;
@@ -1991,11 +1998,11 @@ function renderCE(){
   if(q("#ceRel")) q("#ceRel").onchange=e=>{ CE.consent.relation=e.target.value;  };
   if(q("#cePerson")) q("#cePerson").oninput=e=>CE.consent.person=e.target.value;
   if(q("#ceOk")) q("#ceOk").onchange=e=>CE.consent.confirmed=e.target.checked;
-  if(q("#ceVok")) q("#ceVok").onchange=e=>CE.consent.voice_consent=e.target.checked;
+  if(q("#ceVok")) q("#ceVok").onchange=e=>{ CE.consent.voice_consent=e.target.checked; renderCE(); };
   if(q("#cePhotos")) q("#cePhotos").onchange=async e=>{ const files=[...e.target.files].slice(0,5-CE.photos.length); for(const f of files){ try{ CE.photos.push(await toJpegB64(f,1024,0.88)); }catch(err){ toast("Couldn't read "+f.name); } } renderCE(); };
   m.querySelectorAll("[data-rmph]").forEach(b=>b.onclick=()=>{ CE.photos.splice(+b.dataset.rmph,1); renderCE(); });
   m.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{ CE.look_drive_id=b.dataset.pick; renderCE(); });
-  m.querySelectorAll("[data-vtab]").forEach(b=>b.onclick=()=>{ stopRec(); CE.tab=b.dataset.vtab; renderCE(); });
+  m.querySelectorAll("[data-vtab]").forEach(b=>b.onclick=()=>{ stopRec(); CE.tab=b.dataset.vtab; CE.msg=null; renderCE(); });
   if(q("#ceStudio")) q("#ceStudio").onchange=e=>CE.studio=e.target.value;
   if(q("#ceUseStudio")) q("#ceUseStudio").onclick=()=>{ CE.voice_id=CE.studio; CE.voice_kind="studio"; CE.voice_desc=""; renderCE(); };
   m.querySelectorAll("[data-varch]").forEach(b=>b.onclick=()=>{ const v=VOICE_ARCH[+b.dataset.varch]; CE.voice_desc=v[2]; CE.gender=v[1]; renderCE(); });
@@ -2008,7 +2015,9 @@ function renderCE(){
   if(q("#ceClone")) q("#ceClone").onclick=cloneVoice;
   m.querySelectorAll("[data-rec]").forEach(b=>b.onclick=()=>recordInto(b.dataset.rec, b));
   m.querySelectorAll("[data-recfile]").forEach(inp=>inp.onchange=async()=>{ const f=inp.files[0]; if(f) await setRecording(inp.dataset.recfile, f); });
-  m.querySelectorAll("[data-recplay]").forEach(b=>b.onclick=()=>{ const r=CE.rec[b.dataset.recplay]; if(r){ const a=new Audio(r.url); a.play(); } });
+  m.querySelectorAll("[data-recplay]").forEach(b=>b.onclick=()=>{ const r=CE.rec[b.dataset.recplay]; if(r) togglePlay(b.dataset.pkey, playUrlFn(r.url)); });
+  if(q("#ceSampleAudio")) q("#ceSampleAudio").onclick=()=>{ if(CE.sampleAudio) togglePlay("sa", playBufFn(()=>b64AudioBuf(CE.sampleAudio))); };
+  refreshPlayBtns();
   q("#ceSave").onclick=saveCast;
   lazyLooks(m);
 }
@@ -2016,7 +2025,7 @@ function recBtns(slot){
   const r=CE.rec[slot], on=CE.rec.slot===slot;
   return `<button class="btn-sm ${on?"primary":""}" type="button" data-rec="${slot}">${on?"■ Stop recording":"● Record"}</button>
     <label class="btn-sm" style="cursor:pointer">Upload audio<input type="file" class="sr" accept="audio/*,video/*" data-recfile="${slot}"></label>
-    ${r?`<button class="btn-sm" type="button" data-recplay="${slot}">▶ ${r.dur.toFixed(1)} s</button><span class="pill ${r.okLen?"ok":"bad"}">${r.okLen?"OK":slot==="sample"?"needs 10–30 s":"too short"}</span>`:""}`;
+    ${r?`<button class="btn-sm" type="button" data-recplay="${slot}" data-pkey="rec:${slot}" data-plabel="▶ Play ${r.dur.toFixed(1)} s">▶ Play ${r.dur.toFixed(1)} s</button><span class="pill ${r.okLen?"ok":"bad"}">${r.okLen?"OK":slot==="sample"?"needs 10–30 s":"too short"}</span>`:""}`;
 }
 async function recordInto(slot, btn){
   if(CE.rec.active){ const was=CE.rec.slot; stopRec(); if(was===slot) return; }
@@ -2047,17 +2056,30 @@ async function toWav24k(blob, maxSec){
   const wav=new Blob([pcmToWav(pcm,24000)],{type:"audio/wav"});
   return { dur, blob:wav, url:URL.createObjectURL(wav) };
 }
+// one shared player: tap ▶ to play, tap again (■ Stop) to stop; starting another sound stops the previous one
+const PLAY={ key:null, stop:null, n:0 };
+function refreshPlayBtns(){ document.querySelectorAll("[data-pkey]").forEach(b=>{ const on=b.dataset.pkey===PLAY.key; b.textContent=on?"■ Stop":b.dataset.plabel; b.classList.toggle("primary",on); }); }
+function stopPlay(){ const f=PLAY.stop; PLAY.key=null; PLAY.stop=null; PLAY.n++; if(f) try{ f(); }catch(e){} refreshPlayBtns(); }
+async function togglePlay(key, start){
+  if(PLAY.key===key){ stopPlay(); return; }
+  stopPlay(); const my=++PLAY.n; PLAY.key=key; refreshPlayBtns();
+  const done=()=>{ if(PLAY.n===my){ PLAY.key=null; PLAY.stop=null; refreshPlayBtns(); } };
+  try{ const stop=await start(done); if(PLAY.n!==my){ try{ stop&&stop(); }catch(e){} return; } PLAY.stop=stop; }
+  catch(e){ done(); toast(e.message||"Couldn't play"); }
+}
+function playUrlFn(url){ return async onEnd=>{ const a=new Audio(url); a.onended=onEnd; a.onerror=onEnd; await a.play(); return ()=>{ a.pause(); a.currentTime=0; }; }; }
+function playBufFn(getBuf){ return async onEnd=>{ const buf=await getBuf(); const ctx=audioCtx(); await Promise.race([ctx.resume(),sleep(1500)]); const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); s.onended=onEnd; s.start(); return ()=>s.stop(); }; }
+function b64AudioBuf(b64){ const bin=Uint8Array.from(atob(b64),c=>c.charCodeAt(0)); let bytes=bin.buffer; if(!(bin[0]===0x52&&bin[1]===0x49)) bytes=pcmToWav(bin,24000); return audioCtx().decodeAudioData(bytes.slice(0)); }
+function ceMsg(t,bad){ if(CE){ CE.msg={t,bad:!!bad}; renderCE(); } else toast(t); }
 async function playB64Audio(b64){
   try{ const bin=Uint8Array.from(atob(b64),c=>c.charCodeAt(0)); let bytes=bin.buffer; if(!(bin[0]===0x52&&bin[1]===0x49)) bytes=pcmToWav(bin,24000);
     const ctx=audioCtx(); await Promise.race([ctx.resume(),sleep(1500)]); const buf=await ctx.decodeAudioData(bytes.slice(0)); const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); s.start(); }catch(e){}
 }
-async function testVoice(voiceId, btn){
+function testVoice(voiceId, btn){
   if(!voiceId) return;
-  const t=btn&&btn.textContent; if(btn){ btn.disabled=true; btn.textContent="Loading…"; }
-  try{ const line=(S.job&&S.job.scenes&&S.job.scenes[0]&&S.job.scenes[0].narration) || "Namaste! Welcome to Odisha. Let's explore it together with NegoTrip.";
-    const buf=await getVoice(line.slice(0,300), null, voiceId); const ctx=audioCtx(); await Promise.race([ctx.resume(),sleep(1500)]); const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); s.start(); }
-  catch(e){ toast(e.message); }
-  if(btn){ btn.disabled=false; btn.textContent=t; }
+  const line=(S.job&&S.job.scenes&&S.job.scenes[0]&&S.job.scenes[0].narration) || "Namaste! Welcome to Odisha. Let's explore it together with NegoTrip.";
+  if(btn && PLAY.key!==btn.dataset.pkey) btn.textContent="Loading…";
+  togglePlay(btn?btn.dataset.pkey:"test:"+voiceId, playBufFn(()=>getVoice(line.slice(0,300), null, voiceId)));
 }
 async function createLooks(){
   const av=CE.kind==="avatar";
@@ -2083,21 +2105,23 @@ async function designVoice(){
   CE.busy="voice"; renderCE();
   try{ const r=await api("voice_create",{mode:"prompted", name:CE.name||"NegoTrip voice", description:CE.voice_desc, gender:CE.gender, language_code:CE.lang});
     if(!r.ok) throw new Error(r.error||"Couldn't create the voice");
-    CE.voice_id=r.voice_id; CE.voice_kind="designed"; if(r.sample_audio) playB64Audio(r.sample_audio); toast("Voice created. Press ▶ Test to hear it read your script."); }
-  catch(e){ toast(e.message); }
-  if(!CE) return; CE.busy=false; renderCE();
+    if(!CE) return; CE.voice_id=r.voice_id; CE.voice_kind="designed"; CE.sampleAudio=r.sample_audio||""; CE.busy=false; ceMsg("✓ Voice created. Press ▶ Test to hear it read your script, then Save person."); return; }
+  catch(e){ if(!CE) return; CE.busy=false; ceMsg("Couldn't create the voice: "+e.message, true); }
 }
 async function cloneVoice(){
   const a=CE.rec.sample, c=CE.rec.consent;
-  if(!a||!a.okLen){ toast("Record a 10–30 second voice sample first."); return; }
-  if(!c||!c.okLen){ toast("Record the consent sentence first."); return; }
-  if(!CE.consent.voice_consent){ toast("Tick the voice permission box first."); return; }
-  CE.busy="voice"; renderCE();
+  if(!a||!a.okLen){ ceMsg("Record or upload a 10–30 second voice sample first (step 1).",true); return; }
+  if(!c||!c.okLen){ ceMsg("Record or upload the consent sentence first (step 2).",true); return; }
+  if(!CE.consent.voice_consent){ ceMsg("Tick the voice permission box first.",true); return; }
+  CE.busy="voice"; CE.msg={t:"Sending both recordings to Google… this can take up to a minute."}; renderCE();
+  let msg, bad=false;
   try{ const r=await api("voice_create",{mode:"replicated", name:CE.name||"NegoTrip voice", consent:true, source_audio:await blobToBase64(a.blob), consent_audio:await blobToBase64(c.blob)});
     if(!r.ok) throw new Error(r.error||"Couldn't clone the voice");
-    CE.voice_id=r.voice_id; CE.voice_kind="cloned"; CE.voice_desc="Cloned from "+(CE.consent.person||CE.name||"recording"); if(r.sample_audio) playB64Audio(r.sample_audio); toast("Voice cloned. Press ▶ Test to hear it."); }
-  catch(e){ toast(e.message); }
-  if(!CE) return; CE.busy=false; renderCE();
+    if(!CE) return;
+    CE.voice_id=r.voice_id; CE.voice_kind="cloned"; CE.voice_desc="Cloned from "+(CE.consent.person||CE.name||"recording"); CE.sampleAudio=r.sample_audio||"";
+    msg="✓ Voice cloned. Press ▶ Test (top of Voice) to hear it read your script, then Save person."; }
+  catch(e){ msg="Cloning failed: "+e.message; bad=true; }
+  if(!CE) return; CE.busy=false; ceMsg(msg,bad);
 }
 async function saveCast(){
   if(!CE.name.trim()){ toast("Give this person a name."); $("#ceName").focus(); return; }
