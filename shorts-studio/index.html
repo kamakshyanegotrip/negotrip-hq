@@ -336,7 +336,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261021173509";
+const BUILD = "20261021181225";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -619,7 +619,7 @@ function renderJob(){
           <div class="field"><label for="rLogo">Logo <span class="muted">(PNG)</span></label><input type="file" id="rLogo" accept="image/png,image/svg+xml,image/webp"><div class="hint" id="logoHint"></div></div>
           <div class="field"><label for="rMusic">Music <span class="muted">(free library or your own file)</span></label><div class="btns" style="margin-bottom:6px"><button class="btn-sm primary" id="findMusic" type="button">🎵 Find free music</button></div><input type="file" id="rMusic" accept="audio/*"><div class="hint" id="musicHint"></div></div>
         </div>
-        <div class="btns"><button class="btn" id="prepBtn">1 · Prepare preview</button><button class="btn ghost" id="playBtn" disabled>▶ Play preview</button><button class="btn" id="recBtn" disabled>2 · Record &amp; download MP4</button><button class="btn ghost" id="dlLast" hidden>⬇ Download video</button></div>
+        <div class="btns"><button class="btn" id="prepBtn">1 · Prepare preview</button><button class="btn ghost" id="playBtn" disabled>▶ Play preview</button><button class="btn" id="recBtn" disabled>2 · Record &amp; download MP4</button><button class="btn ghost" id="dlLast" hidden>⬇ Download video</button><button class="btn ghost" id="ytLast" hidden>▶ Publish to YouTube</button></div>
         <p class="small muted" id="dlHelp" style="margin:6px 0 0">Steps: <b>1 · Prepare preview</b> → (edit) → <b>2 · Record &amp; download MP4</b>. Recording plays the whole video once; the MP4 then saves to your Downloads folder and a download button appears here.</p>
         <div class="bar"><i id="barFill"></i></div>
         <div class="log" id="log">Prepare downloads the approved footage and creates the voiceover (about a minute).</div>
@@ -1675,10 +1675,11 @@ function showResult(blob, mime, original, convFailed){
     ${convFailed?`<div class="notice small" style="margin:0 0 8px"><b>Couldn't convert this to a phone-friendly MP4 in this browser.</b> The file below may not open on phones or WhatsApp. Update Chrome or Edge to the latest version on a Windows or Mac computer and record again.</div>`:""}
     <p class="small" style="margin:0 0 8px">It has been saved to your <b>Downloads</b> folder as <b>${esc(name)}</b>. If your browser blocked it, use the button below.</p>
     <div class="stage" style="max-width:220px;margin:0 0 10px"><video src="${url}" controls playsinline></video></div>
-    <div class="btns"><a class="btn" id="dlBtn" href="${url}" download="${esc(name)}">⬇ Download ${ext.toUpperCase()} (${mb} MB)</a></div>
+    <div class="btns"><a class="btn" id="dlBtn" href="${url}" download="${esc(name)}">⬇ Download ${ext.toUpperCase()} (${mb} MB)</a>${convFailed?"":`<button class="btn ghost" type="button" id="ytNow">▶ Publish to YouTube</button>`}</div>
+    ${S.job&&S.job.youtube?`<p class="small" style="margin:6px 0 0">On YouTube: <a href="${esc(S.job.youtube.url)}" target="_blank" rel="noopener">${esc(S.job.youtube.url)}</a> (${esc(S.job.youtube.privacy)})</p>`:""}
     ${origLink?`<p class="small muted">Also available: ${origLink} (unconverted, for troubleshooting).</p>`:""}
     <p class="small muted">Tick off the checks above before you post.</p></div>`;
-  showDlLast();
+  showDlLast(); const yn=$("#ytNow"); if(yn) yn.onclick=()=>openYouTube();
   try{ saveBlob(blob, name); }catch(e){}
   setTimeout(()=>{ const r=$("#resultBox"); if(r) r.scrollIntoView({behavior:"smooth",block:"center"}); },150);
   toast("Video saved to your Downloads folder");
@@ -1688,6 +1689,83 @@ function showResult(blob, mime, original, convFailed){
 function showDlLast(){
   const b=$("#dlLast"); if(!b) return; const r=S.lastResult;
   if(r && r.jobId===S.jobId){ b.hidden=false; b.onclick=()=>saveBlob(r.blob, r.name); } else b.hidden=true;
+  const y=$("#ytLast"); if(y){ y.hidden=!(r && r.jobId===S.jobId); y.onclick=()=>openYouTube(); if(S.job&&S.job.youtube) y.textContent="▶ YouTube ✓ (publish again)"; }
+}
+
+
+// ================================================================ PUBLISH TO YOUTUBE (straight from the browser: Google sign-in + resumable upload, no file-size limit)
+const YT_DEFAULT_CLIENT_ID = "";   // OAuth "Web application" client ID from the NegoTrip Google Cloud project
+function ytClientId(){ return store.get("ytClientId","") || YT_DEFAULT_CLIENT_ID; }
+const YT={ token:null, exp:0, channel:null, busy:false, xhr:null };
+function ytDefaults(){
+  const j=S.job, tags=(j.hashtags||[]).map(h=>String(h).replace(/^#/,"")).filter(Boolean);
+  let title=(j._name||j.title||((j.request||{}).destination||"Travel")+" travel guide").slice(0,90); if(!/#shorts/i.test(title)) title=(title+" #Shorts").slice(0,100);
+  const cap=$("#caption")?$("#caption").value:captionText(), cr=creditsText();
+  return { title, description:(cap+(cr?"\n\n"+cr:"")).slice(0,4900), tags:[...new Set(["Odisha","travel","NegoTrip",...tags])].slice(0,15).join(", "), privacy:"private", synthetic:typeof hasAiPeople==="function"&&hasAiPeople() };
+}
+function openYouTube(){
+  const r=S.lastResult; if(!r||r.jobId!==S.jobId){ toast("Make the video first (2 · Record & download MP4)."); return; }
+  const d=Object.assign(ytDefaults(), S.job.ytDraft||{}), cid=ytClientId();
+  const m=modal(`<div class="mhead"><b>▶ Publish to YouTube</b><button class="btn-sm" data-close>Close</button></div>
+    ${!cid?`<div class="notice small"><b>One-time setup needed.</b> YouTube uploads need a Google sign-in “Client ID” from your Google Cloud project (YouTube Data API v3 enabled, OAuth client of type Web application, authorised JavaScript origin <code>https://kamakshyanegotrip.github.io</code>). Paste it here once:
+      <div class="searchrow" style="margin-top:6px"><input type="text" id="ytCid" placeholder="xxxxxxxx.apps.googleusercontent.com"><button class="btn-sm primary" type="button" id="ytCidSave">Save</button></div></div>`:""}
+    <div class="field"><label for="ytTitle">Title <span class="muted">(max 100)</span></label><input type="text" id="ytTitle" maxlength="100" value="${esc(d.title)}"></div>
+    <div class="field"><label for="ytDesc">Description</label><textarea id="ytDesc" maxlength="4900" style="min-height:140px">${esc(d.description)}</textarea></div>
+    <div class="field"><label for="ytTags">Tags <span class="muted">(comma-separated)</span></label><input type="text" id="ytTags" maxlength="480" value="${esc(d.tags)}"></div>
+    <div class="row2"><div class="field"><label for="ytPriv">Visibility</label><select id="ytPriv">${[["private","Private (only you)"],["unlisted","Unlisted (anyone with the link)"],["public","Public"]].map(([k,t])=>`<option value="${k}" ${d.privacy===k?"selected":""}>${t}</option>`).join("")}</select></div>
+      <div class="field"><label>&nbsp;</label><label class="small chk"><input type="checkbox" id="ytSyn" ${d.synthetic?"checked":""}> Contains realistic AI-generated people (YouTube's “altered or synthetic content” label)</label></div></div>
+    <p class="small muted" style="margin:0 0 8px">Category: Travel &amp; Events · Not made for kids · Vertical video under 3 minutes, so YouTube shows it as a Short. ${(S.lastResult.blob.size/1048576).toFixed(1)} MB.</p>
+    ${YT.channel?`<p class="small">Uploading to channel <b>${esc(YT.channel)}</b> · <button class="linkish" type="button" id="ytSwitch">use another account</button></p>`:""}
+    <div class="btns"><button class="btn" type="button" id="ytGo" ${cid?"":"disabled"}>${S.job.youtube?"Upload again":"Sign in with Google & upload"}</button><span class="log" id="ytLog"></span></div>
+    <div class="bar" id="ytBar" hidden><i id="ytFill"></i></div>
+    ${S.job.youtube?`<p class="small">Already on YouTube: <a href="${esc(S.job.youtube.url)}" target="_blank" rel="noopener">${esc(S.job.youtube.url)}</a> (${esc(S.job.youtube.privacy)}, ${esc(ago(S.job.youtube.at))})</p>`:""}`);
+  const q=x=>m.querySelector(x);
+  m.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>{ if(YT.busy&&!confirmLeave()) return; closeModal(); });
+  const keepDraft=()=>{ S.job.ytDraft={title:q("#ytTitle").value, description:q("#ytDesc").value, tags:q("#ytTags").value, privacy:q("#ytPriv").value, synthetic:q("#ytSyn").checked}; saveLocal(); };
+  ["#ytTitle","#ytDesc","#ytTags"].forEach(id=>q(id).oninput=keepDraft); q("#ytPriv").onchange=keepDraft; q("#ytSyn").onchange=keepDraft;
+  if(q("#ytCidSave")) q("#ytCidSave").onclick=()=>{ const v=q("#ytCid").value.trim(); if(!/\.apps\.googleusercontent\.com$/.test(v)){ toast("That doesn't look like a Google Client ID"); return; } store.set("ytClientId",v); keepDraft(); openYouTube(); };
+  if(q("#ytSwitch")) q("#ytSwitch").onclick=()=>{ YT.token=null; YT.channel=null; keepDraft(); openYouTube(); };
+  q("#ytGo").onclick=()=>{ keepDraft(); ytPublish(m).catch(e=>{ YT.busy=false; const l=q("#ytLog"); if(l) l.textContent=""; toast(e.message||String(e)); const g=q("#ytGo"); if(g) g.disabled=false; }); };
+}
+function confirmLeave(){ toast("Upload in progress: keep this window open until it finishes."); return false; }
+function ytToken(){
+  return new Promise(async(res,rej)=>{
+    if(YT.token && Date.now()<YT.exp-60000) return res(YT.token);
+    try{ await loadScript("https://accounts.google.com/gsi/client"); }catch(e){ return rej(new Error("Couldn't load Google sign-in. Check your connection.")); }
+    const tc=google.accounts.oauth2.initTokenClient({ client_id:ytClientId(), scope:"https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+      callback:(r)=>{ if(r.error) return rej(new Error("Google sign-in: "+(r.error_description||r.error))); YT.token=r.access_token; YT.exp=Date.now()+(+r.expires_in||3600)*1000; res(YT.token); },
+      error_callback:(e)=>rej(new Error(e&&e.type==="popup_closed"?"Sign-in window was closed.":"Google sign-in failed: "+(e&&e.message||e&&e.type||""))) });
+    tc.requestAccessToken({prompt: YT.channel?"":"select_account"});
+  });
+}
+async function ytPublish(m){
+  const q=x=>m.querySelector(x), log=t=>{ const l=q("#ytLog"); if(l) l.textContent=t; }, go=q("#ytGo");
+  const r=S.lastResult; if(!r||!r.blob) throw new Error("The video file isn't available. Record it again.");
+  const d=S.job.ytDraft||ytDefaults(); if(!String(d.title||"").trim()) throw new Error("Give the video a title.");
+  go.disabled=true; YT.busy=true; log("Signing in to Google…");
+  const tok=await ytToken();
+  if(!YT.channel){ try{ const c=await (await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",{headers:{Authorization:"Bearer "+tok}})).json(); YT.channel=(c.items&&c.items[0]&&c.items[0].snippet.title)||"your channel"; }catch(e){ YT.channel="your channel"; } }
+  log(`Uploading to ${YT.channel}…`);
+  const meta={ snippet:{ title:String(d.title).slice(0,100), description:String(d.description||"").replace(/[<>]/g,"").slice(0,4900), tags:String(d.tags||"").split(",").map(x=>x.trim().replace(/[<>]/g,"")).filter(Boolean).slice(0,30), categoryId:"19", defaultLanguage:(scriptLang()||"en").split("-")[0] },
+    status:{ privacyStatus:d.privacy||"private", selfDeclaredMadeForKids:false, containsSyntheticMedia:!!d.synthetic, embeddable:true } };
+  const init=await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",{ method:"POST",
+    headers:{ Authorization:"Bearer "+tok, "Content-Type":"application/json; charset=UTF-8", "X-Upload-Content-Length":String(r.blob.size), "X-Upload-Content-Type":"video/mp4" }, body:JSON.stringify(meta) });
+  if(!init.ok){ let msg=""; try{ const e=await init.json(); msg=(e.error&&e.error.message)||""; }catch(e){} if(init.status===401) YT.token=null;
+    throw new Error(/quota/i.test(msg)?"YouTube's daily upload quota is used up. Try again tomorrow.":/youtubeSignupRequired|channel/i.test(msg)?"This Google account has no YouTube channel. Create one first, or choose another account.":"YouTube refused the upload: "+(msg||init.status)); }
+  const loc=init.headers.get("Location"); if(!loc) throw new Error("YouTube didn't return an upload address.");
+  const bar=q("#ytBar"), fill=q("#ytFill"); if(bar) bar.hidden=false;
+  const res=await new Promise((ok,bad)=>{ const x=new XMLHttpRequest(); YT.xhr=x; x.open("PUT",loc); x.setRequestHeader("Content-Type","video/mp4");
+    x.upload.onprogress=e=>{ if(e.lengthComputable){ const f=e.loaded/e.total; if(fill) fill.style.width=Math.round(f*100)+"%"; log(`Uploading… ${Math.round(f*100)}%`); } };
+    x.onload=()=>{ if(x.status>=200&&x.status<300){ try{ ok(JSON.parse(x.responseText)); }catch(e){ bad(new Error("Unexpected reply from YouTube")); } } else bad(new Error("Upload failed ("+x.status+"): "+String(x.responseText||"").slice(0,160))); };
+    x.onerror=()=>bad(new Error("Network error during upload. Check your connection and try again.")); x.send(r.blob); });
+  YT.busy=false;
+  const url="https://youtube.com/shorts/"+res.id;
+  S.job.youtube={ id:res.id, url, privacy:(res.status&&res.status.privacyStatus)||d.privacy, at:new Date().toISOString(), channel:YT.channel, by:S.email }; saveLocal();
+  log(""); if(bar) bar.hidden=true;
+  const body=m.querySelector(".modal-card");
+  body.insertAdjacentHTML("beforeend",`<div class="notice small" style="background:color-mix(in srgb,var(--ok) 16%,transparent)"><b>Uploaded ✓</b> <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a> · ${esc(S.job.youtube.privacy)}. YouTube is processing it; it can take a few minutes to appear. Manage it in <a href="https://studio.youtube.com/video/${esc(res.id)}/edit" target="_blank" rel="noopener">YouTube Studio</a>.
+    ${S.job.youtube.privacy!=="public"?`<br>Note: Google keeps uploads from new, unaudited apps private until the app passes YouTube's API check; you can still make it public yourself in YouTube Studio.`:""}</div>`);
+  showDlLast(); toast("Uploaded to YouTube");
 }
 
 // ================================================================ TEXT, COLOURS & BRAND (one schema drives the controls, the renderer and the AI)
