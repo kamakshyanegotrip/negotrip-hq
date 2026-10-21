@@ -277,6 +277,23 @@ div.look{cursor:default}
 .gatelist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .gaterow{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface);border-radius:10px;padding:8px 10px}
 .scene.flash{outline:3px solid var(--accent);outline-offset:2px}
+.scene{position:relative}
+.sctools{position:absolute;top:8px;right:8px;display:flex;gap:4px;z-index:2}
+.sctool{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font-size:14px;line-height:1;display:grid;place-items:center}
+.sctool:disabled{opacity:.35;cursor:default}
+.sctool.x:hover{background:var(--danger);color:#fff;border-color:var(--danger)}
+.sctool.grip{cursor:grab}
+.scene .meta{padding-right:140px}
+.scene.dragging{opacity:.45}
+.scene.dropover{outline:2px dashed var(--accent);outline-offset:2px}
+.undobar{border-radius:10px;padding:8px 12px;background:color-mix(in srgb,var(--warn) 16%,transparent);font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.textpanel{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:10px;margin:8px 0}
+.tpgrid{display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px}
+@media (max-width:560px){.tpgrid{grid-template-columns:1fr}.tpcv{max-width:200px;margin:0 auto;display:block}}
+.tpcv{width:100%;aspect-ratio:9/16;border-radius:10px;background:#000;display:block}
+.tpsec{border-bottom:1px dashed var(--line);padding-bottom:8px;margin-bottom:8px;display:flex;flex-direction:column;gap:6px}
+.tpsec .field{margin:0}.tpsec .rng{margin:0}
+.chk{display:flex;gap:6px;align-items:center}
 .presbar{border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:12px;padding:12px;background:color-mix(in srgb,var(--accent) 6%,var(--bg));margin-bottom:12px}
 .presbar .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .presbar select{width:auto;min-width:160px;height:38px}
@@ -624,7 +641,8 @@ function renderJob(){
 function renderScenes(){
   const box=$("#sceneList"); if(!box) return;
   if(typeof bkOrder==="function") bkOrder();
-  box.innerHTML = S.job.scenes.map((sc,i)=>sceneHtml(sc,i)).join("");
+  box.innerHTML = (SCENE_UNDO?`<div class="undobar">Scene “${esc(SCENE_UNDO.sc.location||"")}” removed. <button class="btn-sm" type="button" id="undoRm">Undo</button> <button class="linkish" type="button" id="undoX">Dismiss</button></div>`:"") + S.job.scenes.map((sc,i)=>sceneHtml(sc,i)).join("");
+  const ub=$("#undoRm"); if(ub) ub.onclick=undoRemove; const ux=$("#undoX"); if(ux) ux.onclick=()=>{ SCENE_UNDO=null; renderScenes(); };
   bindScenes();
   updateGate();
   if(typeof renderBookends==="function") renderBookends();
@@ -637,7 +655,9 @@ function sceneHtml(sc,i){
   const open = !!S.openAlts[i];
   const cands = (sc.candidates||[]).filter(x=>!x._rejected);
   const shown = open ? cands : [];
-  return `<div class="scene" data-scene="${i}">
+  const nS=S.job.scenes.length;
+  return `<div class="scene" data-scene="${i}" ${sc.role?"":`draggable="true"`}>
+    <div class="sctools">${sc.role?"":`<button type="button" class="sctool grip" title="Drag to move" aria-hidden="true">⠿</button><button type="button" class="sctool" data-mv="${i}:-1" ${i===0||S.job.scenes[i-1].role?"disabled":""} title="Move up" aria-label="Move scene ${i+1} up">↑</button><button type="button" class="sctool" data-mv="${i}:1" ${i===nS-1||S.job.scenes[i+1].role?"disabled":""} title="Move down" aria-label="Move scene ${i+1} down">↓</button>`}<button type="button" class="sctool x" data-rm="${i}" title="Remove this block" aria-label="Remove scene ${i+1}">✕</button></div>
     <div><button class="thumbbtn" data-preview="${i}:sel" ${c?"":"disabled"} aria-label="Preview selected footage">${thumbHtml(c,"thumb")}${c&&c.kind==="video"?'<span class="play">▶</span>':""}</button></div>
     <div>
       <div class="meta"><span class="loc">${i+1}. ${esc(sc.location||"")}</span>${sc.role?`<span class="pill acc">${sc.role==="intro"?"Opening":"Closing"}</span>`:""}<span class="pill ${sc.type==="anchor"?"acc":""}">${sc.type==="anchor"?"Presenter":"B-roll"}</span>${status}${m&&!sc.card?`<span class="pill ${m[1]}">${m[0]}</span>`:""}</div>
@@ -648,7 +668,9 @@ function sceneHtml(sc,i){
         ${c&&!sc.card?`<button class="btn-sm" data-reject="${i}">✗ Reject</button>`:""}
         <button class="btn-sm" data-toggle="${i}">${open?"Hide choices":`Choose footage (${cands.length})`}</button>
         <button class="btn-sm" data-people="${i}">👤 People in this scene</button>
+        <button class="btn-sm" data-text="${i}" aria-expanded="${!!TEXT_OPEN[i]}">Aa Text, size &amp; position</button>
       </div>
+      ${TEXT_OPEN[i]?`<div data-tphost="${i}">${textPanelHtml(i)}</div>`:""}
       ${open?`<div class="picker">
         <div class="alts">${shown.map((x,k)=>`<button class="alt" data-preview="${i}:${esc(x.cid)}" aria-pressed="${!!(c&&c.cid===x.cid)}" title="${esc(x.desc||"")}">${thumbHtml(x,"")}<span class="tag">${x.verified?"✓ ":""}${esc(SRC_SHORT[x.source]||x.source)}${x.kind==="photo"?" · photo":""}</span>${x.ai_ok===false?'<span class="tag dim">not checked</span>':""}</button>`).join("")||'<span class="small muted">No choices yet. Search or upload below.</span>'}</div>
         <form class="searchrow" data-search="${i}"><input type="text" value="${esc(sc._q||sc.location||"")}" aria-label="Search footage" placeholder="Search all sources, e.g. Konark wheel"><button class="btn-sm">Search</button></form>
@@ -666,6 +688,18 @@ function sceneHtml(sc,i){
 function bindScenes(){
   const w=$("#sceneList");
   w.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("input",()=>{ const [i,f]=el.dataset.edit.split(":"); S.job.scenes[i][f] = f==="duration_sec" ? Math.max(2,Math.min(20,+el.value||3)) : el.value; if(R.prepared && f!=="narration"){ relayout(); scrubTo(R.scrub||0); } else invalidate(); saveLocal(); }));
+  w.querySelectorAll("[data-mv]").forEach(b=>b.addEventListener("click",()=>{ const [i,d]=b.dataset.mv.split(":").map(Number); moveScene(i,i+d); }));
+  w.querySelectorAll("[data-rm]").forEach(b=>b.addEventListener("click",()=>removeScene(+b.dataset.rm)));
+  w.querySelectorAll("[data-text]").forEach(b=>b.addEventListener("click",()=>{ const i=+b.dataset.text; TEXT_OPEN[i]=!TEXT_OPEN[i]; renderScenes(); }));
+  w.querySelectorAll("[data-tphost]").forEach(h=>bindTextPanel(h,+h.dataset.tphost));
+  let dragFrom=null;
+  w.querySelectorAll(".scene[draggable]").forEach(el=>{
+    el.addEventListener("dragstart",ev=>{ const t=ev.target; if(t.closest&&t.closest("input,textarea,select,canvas")){ ev.preventDefault(); return; } dragFrom=+el.dataset.scene; el.classList.add("dragging"); ev.dataTransfer.effectAllowed="move"; try{ ev.dataTransfer.setData("text/plain",String(dragFrom)); }catch(e){} });
+    el.addEventListener("dragend",()=>{ el.classList.remove("dragging"); w.querySelectorAll(".dropover").forEach(x=>x.classList.remove("dropover")); });
+    el.addEventListener("dragover",ev=>{ if(dragFrom==null) return; ev.preventDefault(); el.classList.add("dropover"); });
+    el.addEventListener("dragleave",()=>el.classList.remove("dropover"));
+    el.addEventListener("drop",ev=>{ ev.preventDefault(); const to=+el.dataset.scene; const f=dragFrom; dragFrom=null; if(f!=null&&f!==to) moveScene(f,to); });
+  });
   w.querySelectorAll("[data-presone]").forEach(c=>c.addEventListener("change",()=>{ const sc=S.job.scenes.find(x=>String(x.id)===c.dataset.presone); if(sc){ presSetScene(sc,c.checked); invalidate(); saveLocal(); renderScenes(); } }));
   w.querySelectorAll("[data-people]").forEach(b=>b.addEventListener("click",()=>openShot(+b.dataset.people)));
   w.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click",()=>{ const i=b.dataset.toggle; S.openAlts[i]=!S.openAlts[i]; renderScenes(); }));
@@ -863,7 +897,7 @@ async function initRenderPanel(){
   $("#prepBtn").addEventListener("click",prepare);
   $("#playBtn").addEventListener("click",()=>R.playing?stopPlayback():play(false));
   $("#recBtn").addEventListener("click",()=>play(true));
-  showDlLast();
+  showDlLast(); enableMainDrag();
   if(!R.logo){ const f=await idb.get("logo"); if(f) try{ R.logo=await loadImage(f); R.logoName=f.name; }catch(e){} }
   if(!R.music){ const f=await idb.get("music"); if(f){ R.music=f; R.musicMeta=(await idb.get("musicMeta"))||{source:"own",title:f.name||"saved track"}; } }
   updateCredits();
@@ -954,7 +988,7 @@ function wordTimes(text, start, end){
 // ---------------------------------------------------------------- edit settings (saved with the job)
 const ASSETS = new Map();   // scene id -> {voice, bounds, video, image, defOffset, myVoice}
 function ed(sc){
-  const d = {start:null, speed:1, zoom:1, panX:0, panY:0, motion:"auto", bright:1, contrast:1, sat:1, warmth:0, transition:"dip", titlePos:"top", titleSize:1, hideTitle:false, voiceVol:1, delivery:"", titleColor:"", titleBg:"", titleFont:"", sceneTint:"", sceneTintOpacity:0.25};
+  const d = {start:null, speed:1, zoom:1, panX:0, panY:0, motion:"auto", bright:1, contrast:1, sat:1, warmth:0, transition:"dip", titlePos:"top", titleSize:1, hideTitle:false, voiceVol:1, delivery:"", titleColor:"", titleBg:"", titleFont:"", sceneTint:"", sceneTintOpacity:0.25, titleX:null, titleY:null, cardText:"", cardY:0.42, cardSize:1, cardColor:"", cardFont:"", cardHide:false};
   if(!sc.edit) sc.edit={};
   for(const k in d) if(!(k in sc.edit)) sc.edit[k]=d[k];
   return sc.edit;
@@ -1182,6 +1216,125 @@ async function recordVoice(i){
 }
 
 // ---------------------------------------------------------------- drawing
+
+// ---------------------------------------------------------------- text on a scene: drag to position, size/font/colour (before or after Prepare)
+const HIT={ title:null, card:null };
+function cardTextOf(sc,e){ if(e&&e.cardText) return e.cardText; if(sc&&sc.role) return (typeof bkDest==="function"?bkDest():"")||sc.location||""; return (sc&&sc.location)||""; }
+function titleYOf(e){ return e.titleY!=null?e.titleY : e.titlePos==="middle"?0.42 : e.titlePos==="bottom"?0.80 : 0.156; }
+const LAYOUT={ i:null, img:new Map() };
+async function layoutImage(sc){
+  const c=sc.card?null:sc.footage; if(!c) return null;
+  const a=typeof ASSETS!=="undefined"&&ASSETS.get(sc.id); if(a&&(a.image||a.video)) return a.image||a.video;
+  if(LAYOUT.img.has(c.cid)) return LAYOUT.img.get(c.cid);
+  let url=c.local_url||null;
+  if(!url && c.drive_id){ try{ url=await driveUrl(c.drive_id); }catch(e){} }
+  if(!url) url=c.thumbnail||(c.kind==="photo"?c.preview_url:"")||"";
+  let img=null; if(url){ try{ img=await loadImg(url); }catch(e){ img=null; } }
+  LAYOUT.img.set(c.cid,img); return img;
+}
+function layoutP(sc, img, W, H){
+  const j=S.job, isLast=j.scenes.indexOf(sc)===j.scenes.length-1;
+  return { scenes:[{ sc, e:ed(sc), image:img, video:null, voice:null, words:[], t0:0, t1:4, dur:4, aStart:0, isLast }], total:4, W, H,
+    cta:j.cta||{}, website:(j.branding&&j.branding.website)||"", keyword:(j.request&&j.request.cta_keyword)||"" };
+}
+async function drawLayout(i, cv){
+  const sc=S.job.scenes[i]; if(!sc||!cv) return; const img=await layoutImage(sc);
+  await loadStyleFonts().catch(()=>{});
+  drawFrame(1.2, layoutP(sc, img, cv.width, cv.height), cv);
+}
+function canvasPoint(cv, ev){ const r=cv.getBoundingClientRect(); return { x:(ev.clientX-r.left)*cv.width/r.width, y:(ev.clientY-r.top)*cv.height/r.height }; }
+// drag the title or the title-card text on a canvas; redraw() repaints, sceneOf() names the scene under the pointer
+function enableTextDrag(cv, sceneOf, redraw, done){
+  if(!cv || cv._drag) return; cv._drag=true; cv.style.touchAction="none";
+  let drag=null;
+  const inBox=(b,p)=>b&&p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h;
+  cv.addEventListener("pointerdown",ev=>{
+    const sc=sceneOf(); if(!sc) return; redraw(true); const p=canvasPoint(cv,ev);
+    const what = HIT.cv===cv && inBox(HIT.title,p) ? "title" : HIT.cv===cv && inBox(HIT.card,p) ? "card" : null; if(!what) return;
+    const e=ed(sc); drag={what, sc, e, sx:p.x, sy:p.y, ox:e.titleX!=null?e.titleX:0.5, oy:what==="title"?titleYOf(e):(e.cardY==null?0.42:e.cardY)};
+    cv.setPointerCapture(ev.pointerId); ev.preventDefault();
+  });
+  cv.addEventListener("pointermove",ev=>{
+    const p=canvasPoint(cv,ev);
+    if(!drag){ const over=HIT.cv===cv&&(inBox(HIT.title,p)||inBox(HIT.card,p)); cv.style.cursor=over?"grab":""; return; }
+    const dy=(p.y-drag.sy)/cv.height, dx=(p.x-drag.sx)/cv.width;
+    if(drag.what==="title"){ drag.e.titleY=Math.max(0.06,Math.min(0.94,drag.oy+dy)); drag.e.titleX=Math.max(0.15,Math.min(0.85,drag.ox+dx)); if(Math.abs(drag.e.titleX-0.5)<0.03) drag.e.titleX=0.5; }
+    else drag.e.cardY=Math.max(0.08,Math.min(0.92,drag.oy+dy));
+    cv.style.cursor="grabbing"; redraw(false);
+  });
+  const end=()=>{ if(!drag) return; const d=drag; drag=null; cv.style.cursor=""; saveLocal(); if(done) done(d); };
+  cv.addEventListener("pointerup",end); cv.addEventListener("pointercancel",end);
+}
+const TEXT_OPEN={};
+function textPanelHtml(i){
+  const sc=S.job.scenes[i], e=ed(sc), G=st();
+  const fontOpts=(v)=>`<option value="">Same as video (${esc(G.titleFont)})</option>`+FONTS.map(f=>`<option ${v===f?"selected":""} style="font-family:'${esc(f)}'">${esc(f)}</option>`).join("");
+  const col=(k,v,def)=>`<div class="cn"><input type="color" data-tp="${k}" value="${esc(toHex(v)||toHex(def)||"#ffffff")}"><label class="small"><input type="checkbox" data-tpoff="${k}" ${v?"":"checked"}> same as video</label></div>`;
+  return `<div class="textpanel">
+    <div class="tpgrid">
+      <div><canvas class="tpcv" width="360" height="640" data-tpcv="${i}" aria-label="Text layout preview"></canvas><div class="hint" style="text-align:center">Drag the text to move it</div></div>
+      <div>
+        <div class="tpsec"><b class="small">Top title</b> <span class="small muted">(the on-screen text above)</span>
+          <label class="small chk"><input type="checkbox" data-tp="hideTitle" ${e.hideTitle?"checked":""}> Hide title in this scene</label>
+          <div class="rng"><label>Size <output>${(+e.titleSize).toFixed(2)}</output></label><input type="range" data-tp="titleSize" min="0.4" max="2.5" step="0.05" value="${e.titleSize}"></div>
+          <div class="field"><label class="small">Font</label><select data-tp="titleFont">${fontOpts(e.titleFont)}</select></div>
+          <div class="field"><label class="small">Colour</label>${col("titleColor",e.titleColor,G.titleColor)}</div>
+          <div class="field"><label class="small">Box behind</label>${col("titleBg",e.titleBg,G.titleBg||"#000000")}</div>
+          <div class="btns"><span class="small muted">Position:</span>${[["top","Top"],["middle","Middle"],["bottom","Bottom"]].map(([k,t])=>`<button type="button" class="btn-sm" data-tppos="${k}">${t}</button>`).join("")}</div>
+        </div>
+        ${sc.card?`<div class="tpsec"><b class="small">Title-card text</b> <span class="small muted">(the big middle line)</span>
+          <div class="field"><label class="small">Text</label><input type="text" data-tp="cardText" maxlength="60" value="${esc(e.cardText||"")}" placeholder="${esc(cardTextOf(sc,{}))}"></div>
+          <label class="small chk"><input type="checkbox" data-tp="cardHide" ${e.cardHide?"checked":""}> Hide this line</label>
+          <div class="rng"><label>Size <output>${(+e.cardSize||1).toFixed(2)}</output></label><input type="range" data-tp="cardSize" min="0.4" max="2.5" step="0.05" value="${e.cardSize||1}"></div>
+          <div class="field"><label class="small">Font</label><select data-tp="cardFont">${fontOpts(e.cardFont)}</select></div>
+          <div class="field"><label class="small">Colour</label>${col("cardColor",e.cardColor,G.cardText)}</div>
+        </div>`:""}
+        <div class="btns"><button type="button" class="btn-sm" data-tpreset="1">Reset positions</button><button type="button" class="btn-sm" data-tpall="1">Use this look on every scene</button></div>
+      </div>
+    </div></div>`;
+}
+function bindTextPanel(host, i){
+  const sc=S.job.scenes[i], e=ed(sc), cv=host.querySelector("[data-tpcv]");
+  let pend=false; const redraw=()=>{ if(pend) return; pend=true; requestAnimationFrame(()=>{ pend=false; drawLayout(i,cv); }); };
+  const changed=(big)=>{ saveLocal(); redraw(); if(R.prepared){ if(big) loadStyleFonts().then(()=>scrubTo(R.scrub||0)); else drawFrame(R.scrub||0); } };
+  host.querySelectorAll("[data-tp]").forEach(el=>{
+    const k=el.dataset.tp, ev=el.type==="range"||el.type==="color"||el.type==="text"?"input":"change";
+    el.addEventListener(ev,()=>{ let v=el.type==="checkbox"?el.checked:el.type==="range"?+el.value:el.value;
+      e[k]=v; const off=host.querySelector(`[data-tpoff="${k}"]`); if(off&&el.type==="color") off.checked=false;
+      const o=el.parentElement.querySelector("output"); if(o) o.textContent=(+v).toFixed(2); changed(/Font$/.test(k)); });
+  });
+  host.querySelectorAll("[data-tpoff]").forEach(cb=>cb.addEventListener("change",()=>{ const k=cb.dataset.tpoff; if(cb.checked) e[k]=""; else { const c=host.querySelector(`input[type=color][data-tp="${k}"]`); e[k]=c?c.value:""; } changed(false); }));
+  host.querySelectorAll("[data-tppos]").forEach(b=>b.onclick=()=>{ e.titlePos=b.dataset.tppos; e.titleY=null; e.titleX=null; changed(false); });
+  host.querySelector("[data-tpreset]").onclick=()=>{ e.titleY=null; e.titleX=null; e.cardY=0.42; changed(false); };
+  host.querySelector("[data-tpall]").onclick=()=>{ const keys=["titleSize","titleFont","titleColor","titleBg","titlePos","titleX","titleY","cardSize","cardFont","cardColor","cardY"]; S.job.scenes.forEach(o=>{ if(o===sc) return; const oe=ed(o); keys.forEach(k=>oe[k]=e[k]); }); changed(true); toast("Applied to every scene"); };
+  enableTextDrag(cv, ()=>sc, (sync)=>{ if(sync){ return; } redraw(); }, ()=>{ changed(false); });
+  drawLayout(i,cv);
+}
+// main preview canvas: drag after Prepare too
+function enableMainDrag(){
+  const cv=$("#cv"); if(!cv) return;
+  enableTextDrag(cv, ()=>{ if(!R.prepared) return null; const P=R.prepared, t=R.scrub||0; const s=P.scenes.find(x=>t>=x.t0&&t<x.t1)||P.scenes[P.scenes.length-1]; return s&&s.sc; },
+    (sync)=>{ if(R.prepared) drawFrame(R.scrub||0); }, (d)=>{ const i=S.job.scenes.indexOf(d.sc); const h=document.querySelector(`[data-tphost="${i}"]`); if(h&&TEXT_OPEN[i]) drawLayout(i,h.querySelector("[data-tpcv]")); if(typeof renderEditor==="function"&&R.prepared){ /* keep editor values in sync */ } });
+}
+
+// ---------------------------------------------------------------- scene blocks: move up/down, drag to reorder, remove (with undo)
+let SCENE_UNDO=null;
+function moveScene(i, to){
+  const sc=S.job.scenes; if(to<0||to>=sc.length||i===to) return;
+  if(sc[i].role||sc[to].role){ toast("The introduction stays first and the conclusion last."); return; }
+  const [x]=sc.splice(i,1); sc.splice(to,0,x); S.openAlts={}; Object.keys(TEXT_OPEN).forEach(k=>delete TEXT_OPEN[k]);
+  invalidate(); saveLocal(); renderScenes(); updateCredits();
+}
+function removeScene(i){
+  const sc=S.job.scenes[i]; if(!sc) return;
+  if(sc.role){ BK()[sc.role].on=false; bkSync(sc.role); invalidate(); saveLocal(); renderScenes(); updateCredits(); toast((sc.role==="intro"?"Introduction":"Conclusion")+" removed. Tick it again in Introduction & conclusion to bring it back."); return; }
+  if(S.job.scenes.filter(s=>!s.role).length<=1){ toast("A video needs at least one scene."); return; }
+  SCENE_UNDO={sc, i}; S.job.scenes.splice(i,1); S.openAlts={}; Object.keys(TEXT_OPEN).forEach(k=>delete TEXT_OPEN[k]);
+  if(S.job.presenter&&Array.isArray(S.job.presenter.scenes)) S.job.presenter.scenes=S.job.presenter.scenes.filter(x=>x!==String(sc.id));
+  invalidate(); saveLocal(); renderScenes(); updateCredits();
+}
+function undoRemove(){ if(!SCENE_UNDO) return; const {sc,i}=SCENE_UNDO; SCENE_UNDO=null; S.job.scenes.splice(Math.min(i,S.job.scenes.length),0,sc); if(typeof bkOrder==="function") bkOrder(); invalidate(); saveLocal(); renderScenes(); updateCredits(); }
+
 function drawPoster(){
   const cv=$("#cv"); if(!cv) return; const g=cv.getContext("2d"), W=cv.width, H=cv.height;
   const gr=g.createLinearGradient(0,0,0,H); gr.addColorStop(0,"#1B1F3A"); gr.addColorStop(1,"#A8321E"); g.fillStyle=gr; g.fillRect(0,0,W,H);
@@ -1197,8 +1350,14 @@ function drawMedia(g,s,idx,p,W,H,k){
   const src = s.image || ((s.video && s.video.readyState>=2 && s.video.videoWidth) ? s.video : null);
   if(!src){
     const G=st(); const gr=g.createLinearGradient(0,0,W,H); gr.addColorStop(0,G.cardBg1); gr.addColorStop(1,G.cardBg2); g.fillStyle=gr; g.fillRect(0,0,W,H);
-    g.fillStyle=G.cardText; g.textAlign="center"; g.textBaseline="middle"; g.font=`${e.titleFont?G.titleWeight:G.titleWeight} ${88*k}px ${fontStack(e.titleFont||G.titleFont)}`;
-    wrap(g,(s.sc.location||"").toUpperCase(),W-160*k).forEach((ln,i,a)=>g.fillText(ln,W/2,H*0.42+(i-(a.length-1)/2)*100*k));
+    const ctext=cardTextOf(s.sc,e);
+    if(ctext && !e.cardHide){
+      const fs=88*k*(e.cardSize||1), lh=fs*1.14, cy=H*(e.cardY==null?0.42:e.cardY);
+      g.fillStyle=e.cardColor||G.cardText; g.textAlign="center"; g.textBaseline="middle"; g.font=`${G.titleWeight} ${fs}px ${fontStack(e.cardFont||e.titleFont||G.titleFont)}`;
+      const lines=wrap(g,ctext.toUpperCase(),W-160*k); let mw=0;
+      lines.forEach((ln,i,a)=>{ mw=Math.max(mw,g.measureText(ln).width); g.fillText(ln,W/2,cy+(i-(a.length-1)/2)*lh); });
+      const hh=lines.length*lh; HIT.card={x:W/2-mw/2-20*k,y:cy-hh/2-10*k,w:mw+40*k,h:hh+20*k};
+    } else HIT.card=null;
     g.textBaseline="alphabetic"; return;
   }
   const sw=src.naturalWidth||src.videoWidth, sh=src.naturalHeight||src.videoHeight;
@@ -1216,11 +1375,12 @@ function drawMedia(g,s,idx,p,W,H,k){
   const G=st(), tc=e.sceneTint||(G.tintOpacity>0?G.tintColor:""), to=e.sceneTint?e.sceneTintOpacity:G.tintOpacity;
   if(tc && to>0){ g.save(); g.fillStyle=rgba(tc,to); g.fillRect(0,0,W,H); g.restore(); }
 }
-function drawFrame(t){
-  const P=R.prepared; if(!P||!P.scenes.length) return;
-  const cv=$("#cv"), g=cv.getContext("2d"), W=P.W, H=P.H, k=W/1080, G=st();
+function drawFrame(t, P0, cv0){
+  const P=P0||R.prepared; if(!P||!P.scenes.length) return;
+  const cv=cv0||$("#cv"), g=cv.getContext("2d"), W=P.W, H=P.H, k=W/1080, G=st();
+  HIT.title=null; HIT.card=null; HIT.W=W; HIT.H=H; HIT.cv=cv;
   const scenes=P.scenes; P.website=G.website; let idx=scenes.findIndex(s=>t>=s.t0 && t<s.t1); if(idx<0) idx = t<0?0:scenes.length-1;
-  const s=scenes[idx], p=Math.max(0,Math.min(1,(t-s.t0)/s.dur)), last=idx===scenes.length-1, e=s.e, into=t-s.t0;
+  const s=scenes[idx], p=Math.max(0,Math.min(1,(t-s.t0)/s.dur)), last=s.isLast!=null?s.isLast:idx===scenes.length-1, e=s.e, into=t-s.t0; HIT.sc=s.sc;
   g.fillStyle="#000"; g.fillRect(0,0,W,H);
   if(e.transition==="fade" && idx>0 && into<0.5){
     const pv=scenes[idx-1]; drawMedia(g,pv,idx-1,1,W,H,k);
@@ -1238,11 +1398,12 @@ function drawFrame(t){
   if(title && !last && !e.hideTitle){
     const a=Math.min(1,into/0.25, (s.t1-t)/0.2); g.globalAlpha=Math.max(0,a);
     const fs=86*k*e.titleSize*G.titleSizeAll; g.font=`${G.titleWeight} ${fs}px ${fontStack(e.titleFont||G.titleFont)}`;
-    g.textAlign=G.titleAlign; const tx=alignX(G.titleAlign);
+    const free=e.titleX!=null; g.textAlign=free?"center":G.titleAlign; const tx=free?W*e.titleX:alignX(G.titleAlign);
     const lines=wrap(g,title,W-150*k); const lh=fs*1.12;
-    const y0 = e.titlePos==="middle" ? H*0.42-(lines.length-1)*lh/2 : e.titlePos==="bottom" ? H*0.80-(lines.length-1)*lh : 300*k;
+    const y0 = e.titleY!=null ? H*e.titleY-(lines.length-1)*lh/2 : e.titlePos==="middle" ? H*0.42-(lines.length-1)*lh/2 : e.titlePos==="bottom" ? H*0.80-(lines.length-1)*lh : 300*k;
+    { const mw=Math.max(...lines.map(l=>g.measureText(l).width)); const al=g.textAlign; const bx= al==="left"?tx : al==="right"?tx-mw : tx-mw/2; HIT.title={x:bx-20*k,y:y0-fs-10*k,w:mw+40*k,h:lh*(lines.length-1)+fs*1.25+20*k}; }
     const bg=e.titleBg||G.titleBg;
-    if(bg){ const mw=Math.max(...lines.map(l=>g.measureText(l).width)), pad=26*k; const bx = G.titleAlign==="left"?tx-pad : G.titleAlign==="right"?tx-mw-pad : tx-mw/2-pad;
+    if(bg){ const mw=Math.max(...lines.map(l=>g.measureText(l).width)), pad=26*k, al=g.textAlign; const bx = al==="left"?tx-pad : al==="right"?tx-mw-pad : tx-mw/2-pad;
       g.fillStyle=rgba(bg,G.titleBgOpacity); roundRect(g,bx,y0-fs*0.92-pad*0.5,mw+pad*2,lh*(lines.length-1)+fs*1.2+pad,20*k); g.fill(); }
     g.fillStyle=e.titleColor||G.titleColor;
     lines.forEach((ln,i)=>{ const y=y0+i*lh; if(G.titleOutline){ g.lineJoin="round"; g.lineWidth=12*k*e.titleSize*G.titleSizeAll; g.strokeStyle=rgba(G.titleOutlineColor,0.85); g.strokeText(ln,tx,y); } g.fillText(ln,tx,y); });
@@ -1445,7 +1606,7 @@ function ensureFont(name){
 }
 async function loadStyleFonts(){
   if(!S.job) return; const G=st(); const names=new Set([G.titleFont,G.capFont,G.ctaFont,G.webFont]);
-  S.job.scenes.forEach(sc=>{ const e=ed(sc); if(e.titleFont) names.add(e.titleFont); });
+  S.job.scenes.forEach(sc=>{ const e=ed(sc); if(e.titleFont) names.add(e.titleFont); if(e.cardFont) names.add(e.cardFont); });
   const lang=(typeof scriptLang==="function"?scriptLang():"en");
   if(/^(hi|mr|ne)/.test(lang)) names.add("Noto Sans Devanagari"); if(/^or/.test(lang)) names.add("Noto Sans Oriya"); if(/^(bn|as)/.test(lang)) names.add("Noto Sans Bengali");
   if(/^ta/.test(lang)) names.add("Noto Sans Tamil"); if(/^te/.test(lang)) names.add("Noto Sans Telugu");
@@ -1493,14 +1654,16 @@ const STYLE_DEFAULTS = { titleFont:"Bricolage Grotesque", titleWeight:"800", tit
 const BRAND_KEYS = Object.keys(STYLE_DEFAULTS).filter(k=>k!=="ctaText");
 const SCENE_TEXT_SCHEMA = [
   ["titleColor","Title colour for this scene (none = same as video)","colorNone"],["titleBg","Title background box for this scene (none = same as video)","colorNone"],
-  ["titleFont","Title font for this scene","fontOrNone"],["sceneTint","Colour wash for this scene","colorNone"],["sceneTintOpacity","Scene colour wash strength","number",{min:0,max:0.7,step:0.02}]
+  ["titleFont","Title font for this scene","fontOrNone"],
+  ["cardText","Title-card main text (title cards only; empty = automatic)","text",{max:60}],["cardSize","Title-card text size","number",{min:0.4,max:2.5,step:0.05}],
+  ["cardColor","Title-card text colour (none = same as video)","colorNone"],["cardFont","Title-card text font","fontOrNone"],["cardY","Title-card text height (0 top to 1 bottom)","number",{min:0.08,max:0.92,step:0.01}],["titleY","Title height on screen (0 top to 1 bottom)","number",{min:0.06,max:0.94,step:0.01}],["sceneTint","Colour wash for this scene","colorNone"],["sceneTintOpacity","Scene colour wash strength","number",{min:0,max:0.7,step:0.02}]
 ];
 function schemaField(def, obj, prefixLabel){
   const [key,label,type,x={}] = def;
   const t = type==="font"||type==="fontOrNone" ? "select" : type;
   const opts = type==="font" ? FONTS : type==="fontOrNone" ? ["", ...FONTS] : x.options;
   return Object.assign({key, label:(prefixLabel||"")+label+(type==="color"?" (#hex or colour name)":type==="colorNone"?" (#hex, colour name, or none)":""), type:t, rawType:type, options:opts, min:x.min, max:x.max, step:x.step,
-    get:()=>obj()[key], set:v=>{ obj()[key]=v; if(type==="font"||type==="fontOrNone") S._fontsDirty=true; }}, {});
+    get:()=>key==="titleY"?titleYOf(obj()):obj()[key], set:v=>{ obj()[key]=v; if(type==="font"||type==="fontOrNone") S._fontsDirty=true; }}, {});
 }
 function globalStyleFields(){ return STYLE_SCHEMA.flatMap(g=>g.items.map(d=>schemaField(d, st))); }
 function sceneStyleFields(i){ return SCENE_TEXT_SCHEMA.map(d=>schemaField(d, ()=>ed(S.job.scenes[i]))); }
