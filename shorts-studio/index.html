@@ -336,7 +336,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261021054752";
+const BUILD = "20261021165447";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -1081,7 +1081,8 @@ function relayout(){
     s.representative = !sc.card && (s.video||s.image) && sc.match==="representative" && sc.footage && sc.footage.source!=="Your library";
     if(s.video){ const len=s.video.duration||0; const def = len > s.dur*e.speed+1.5 ? Math.min(1, len-s.dur*e.speed) : 0; s.offset = e.start!=null ? Math.max(0,Math.min(e.start, Math.max(0,len-0.2))) : def; s.clipLen=len; }
     s.spd=e.speed; s.hold=!!(s.video && sc.footage && sc.footage.source==="AI avatar");
-    if(s.video){ s.video.loop=!s.hold; if(s.hold){ const len=s.clipLen||s.video.duration||0; if(e.start==null) s.offset=0; if(e.speed===1 && len>0.5 && len-s.offset < s.dur) s.spd=Math.max(0.6,(len-s.offset)/s.dur); } }
+    if(s.video && s.hold && e.fill==="loop") s.hold=false;
+    if(s.video){ s.video.loop=!s.hold; if(s.hold){ const len=s.clipLen||s.video.duration||0; if(e.start==null) s.offset=0; if((e.fill||"slow")==="slow" && e.speed===1 && len>0.5 && len-s.offset < s.dur) s.spd=Math.max(0.35,(len-s.offset)/s.dur); } }
     else s.offset=0;
     return s;
   });
@@ -2457,7 +2458,15 @@ async function saveCast(){
 
 // ---------------------------------------------------------------- people inside a scene
 const SHOT = { i:null, reopen:null };
-function scAv(sc){ return sc.avatar || (sc.avatar={cast_ids:[], action:"", props:[], framing:"medium", bg:"footage", bg_cid:"", setting:"", extra:"", camera:"", speak:true, pending:null, outfit_mode:"same", outfit:"", outfit_color:"", motion:"", talk:false, autoAnim:true, animSecs:4}); }
+// how many seconds the clip needs so the action lasts until the narration ends
+function sceneNeedSecs(sc){
+  let d=+sc.duration_sec||4;
+  if(R.prepared){ const ps=R.prepared.scenes.find(x=>x.sc===sc); if(ps) d=ps.dur; }
+  else { const a=ASSETS.get(sc.id); if(a&&a.voice&&a.bounds) d=Math.max(d,0.12+a.bounds.end+0.35); else { const w=String(sc.narration||"").trim().split(/\s+/).filter(Boolean).length; d=Math.max(d, w/2.4+0.8); } }
+  return Math.max(4, Math.min(10, Math.ceil(d)));
+}
+function animSecsFor(sc){ const av=sc.avatar||{}; return (!av.animSecs||av.animSecs==="fit") ? sceneNeedSecs(sc) : +av.animSecs; }
+function scAv(sc){ return sc.avatar || (sc.avatar={cast_ids:[], action:"", props:[], framing:"medium", bg:"footage", bg_cid:"", setting:"", extra:"", camera:"", speak:true, pending:null, outfit_mode:"same", outfit:"", outfit_color:"", motion:"", talk:false, autoAnim:true, animSecs:"fit"}); }
 const OUTFIT_IDEAS=["white linen shirt and beige chinos","light blue denim jacket over a white t-shirt, jeans","red Sambalpuri silk saree with gold border","cotton kurta with churidar and dupatta","floral summer dress with a straw hat","trekking jacket, cargo pants and boots","traditional white dhoti and kurta","black t-shirt, shorts and sneakers"];
 const MOTION_IDEAS=["Walks slowly towards the camera, smiling","Turns to look at the landmark, then back at the camera","Waves at the camera and points at the temple","Talks to the camera with natural hand gestures","Takes a photo with the camera, then lowers it and smiles","Laughs and spins around once","Sips the drink and looks at the view","Joins hands in Namaste and bows slightly"];
 function avNames(av){ return (av.cast_ids||[]).map(id=>(castById(id)||{}).name).filter(Boolean); }
@@ -2499,14 +2508,16 @@ function openShot(i){
       <div class="chips" style="margin-top:6px">${MOTION_IDEAS.map((o,k)=>`<button class="aihint" type="button" data-motidea="${k}">${esc(o)}</button>`).join("")}</div>
       <div class="btns" style="margin-top:6px"><label class="small chk"><input type="checkbox" id="shTalk" ${av.talk?"checked":""}> Talking to camera (mouth moves; not exact lip-sync)</label>
       <label class="small chk"><input type="checkbox" id="shAuto" ${av.autoAnim!==false?"checked":""}> Make it move automatically after the photo</label>
-      <select id="shSecs" style="width:auto;height:32px;font-size:13px">${[4,6,8].map(x=>`<option value="${x}" ${(av.animSecs||4)===x?"selected":""}>${x} s (~${rupees(x*COST.videoPerSec)})</option>`).join("")}</select></div></div>
+      <select id="shSecs" style="width:auto;height:32px;font-size:13px"><option value="fit" ${(!av.animSecs||av.animSecs==="fit")?"selected":""}>Match the scene: ${sceneNeedSecs(sc)} s (~${rupees(sceneNeedSecs(sc)*COST.videoPerSec)})</option>${[4,5,6,7,8,9,10].map(x=>`<option value="${x}" ${+av.animSecs===x?"selected":""}>${x} s (~${rupees(x*COST.videoPerSec)})</option>`).join("")}</select></div></div>
     <div class="field"><label for="shFinish">Look & finish</label><select id="shFinish">${SHOT_FINISH.map(([k,t])=>`<option value="${k}" ${(av.finish||"natural")===k?"selected":""}>${esc(t)}</option>`).join("")}</select></div>
     <div class="field"><label for="shExtra">Anything else? <span class="muted">(optional)</span></label><input type="text" id="shExtra" maxlength="400" value="${esc(av.extra)}" placeholder="e.g. wearing a red saree, golden-hour light, looking at the camera"></div>
     <label class="small" style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><input type="checkbox" id="shSpeak" ${av.speak?"checked":""}> The first person speaks this scene's narration in their own voice</label>
-    <div class="btns"><button class="btn" id="shGo" type="button" ${SHOT.busy?"disabled":""}>${SHOT.busy==="img"?"Creating shot… (about 20 s)":av.autoAnim!==false?`✦ Create moving shot (~${rupees(COST.image+(av.animSecs||4)*COST.videoPerSec)})`:`✦ Create still photo (~${rupees(COST.image)})`}</button><span class="small muted" id="shSpend">${esc(spendText())}</span></div>
+    <div class="btns"><button class="btn" id="shGo" type="button" ${SHOT.busy?"disabled":""}>${SHOT.busy==="img"?"Creating shot… (about 20 s)":av.autoAnim!==false?`✦ Create moving shot, ${animSecsFor(sc)} s (~${rupees(COST.image+animSecsFor(sc)*COST.videoPerSec)})`:`✦ Create still photo (~${rupees(COST.image)})`}</button><span class="small muted" id="shSpend">${esc(spendText())}</span></div>
     ${shots.length?`<div class="sec"><h3>Shots for this scene</h3><div class="shots">${shots.map(c=>`<div class="shot ${sc.footage&&sc.footage.cid===c.cid?"on":""}"><button type="button" class="alt" data-shview="${esc(c.cid)}" aria-pressed="${!!(sc.footage&&sc.footage.cid===c.cid)}">${thumbHtml(c,"")}<span class="tag">${c.kind==="video"?"▶ "+(c.duration||"")+" s video":"photo"}${sc.footage&&sc.footage.cid===c.cid&&sc.approved?" · ✓":""}</span></button>
         <div class="btns">${sc.footage&&sc.footage.cid===c.cid&&sc.approved?`<span class="pill ok">In use ✓</span>`:`<button class="btn-sm primary" type="button" data-shuse="${esc(c.cid)}">✓ Approve & use</button>`}
-        ${c.kind==="photo"?(av.pending?`<span class="pill warn">Animating… 1–3 min</span>`:[4,6,8].map(s=>`<button class="btn-sm" type="button" data-anim="${esc(c.cid)}:${s}">Animate ${s}s · ${rupees(s*COST.videoPerSec)}</button>`).join("")):""}</div></div>`).join("")}</div>
+        ${c.kind==="photo"?(av.pending?`<span class="pill warn">Animating… 1–3 min</span>`:`<button class="btn-sm" type="button" data-anim="${esc(c.cid)}:${animSecsFor(sc)}">▶ Animate ${animSecsFor(sc)} s (fits the scene) · ${rupees(animSecsFor(sc)*COST.videoPerSec)}</button>`):""}
+        ${c.kind==="video"&&!av.pending&&(+c.duration||0)<sceneNeedSecs(sc)?(()=>{ const still=c.from||((sc.candidates||[]).find(x=>x.source==="AI avatar"&&x.kind==="photo")||{}).cid; return still?`<button class="btn-sm" type="button" data-refit="${esc(still)}:${sceneNeedSecs(sc)}">↻ Re-make at ${sceneNeedSecs(sc)} s to last the whole scene · ${rupees(sceneNeedSecs(sc)*COST.videoPerSec)}</button>`:""; })():""}</div></div>`).join("")}</div>
+      <div class="field" style="margin-top:8px"><label class="small" for="shFill">If a moving clip is shorter than the scene</label><select id="shFill" style="width:auto;height:34px;font-size:13px">${[["slow","Slow it down to last the whole scene (free)"],["hold","Freeze on the last frame"],["loop","Repeat it"]].map(([k,t])=>`<option value="${k}" ${(ed(sc).fill||"slow")===k?"selected":""}>${t}</option>`).join("")}</select></div>
       <p class="hint">Animation keeps the face and place, adds natural movement and props in use; the AI's own sound is muted and your voiceover plays. Instagram and YouTube ask you to switch on their “AI-generated” label for realistic AI people.</p></div>`:""}`);
   m.querySelector(".modal-card").classList.add("wide");
   const q=s=>m.querySelector(s);
@@ -2536,7 +2547,9 @@ function openShot(i){
   m.querySelectorAll("[data-motidea]").forEach(b=>b.onclick=()=>{ av.motion=MOTION_IDEAS[+b.dataset.motidea]; if(/Talks/.test(av.motion)) av.talk=true; keep(); q("#shMotion").value=av.motion; q("#shTalk").checked=!!av.talk; });
   q("#shTalk").onchange=e=>{ av.talk=e.target.checked; keep(); };
   q("#shAuto").onchange=e=>{ av.autoAnim=e.target.checked; keep(); openShot(i); };
-  q("#shSecs").onchange=e=>{ av.animSecs=+e.target.value; keep(); openShot(i); };
+  q("#shSecs").onchange=e=>{ av.animSecs=e.target.value==="fit"?"fit":+e.target.value; keep(); openShot(i); };
+  if(q("#shFill")) q("#shFill").onchange=e=>{ ed(sc).fill=e.target.value; keep(); if(R.prepared){ relayout(); drawFrame(R.scrub||0); } };
+  m.querySelectorAll("[data-refit]").forEach(b=>b.onclick=()=>{ const [cid,sx]=[b.dataset.refit.slice(0,b.dataset.refit.lastIndexOf(":")), +b.dataset.refit.slice(b.dataset.refit.lastIndexOf(":")+1)]; animateShot(i,cid,sx); });
   q("#shGo").onclick=()=>createShot(i);
   m.querySelectorAll("[data-shview]").forEach(b=>b.onclick=()=>{ const c=sc.candidates.find(x=>x.cid===b.dataset.shview); if(c) openPreview(i,c); });
   m.querySelectorAll("[data-shuse]").forEach(b=>b.onclick=()=>{ const c=sc.candidates.find(x=>x.cid===b.dataset.shuse); if(c){ approve(i,c); openShot(i); } });
@@ -2575,7 +2588,7 @@ async function createShot(i){
     sc.candidates=[c, ...(sc.candidates||[])]; sc.footage=c; sc.approved=false; sc.card=false;
     aiSpend().images++; invalidate(); saveLocal(); updateCredits();
     SHOT.busy=false;
-    if(av.autoAnim!==false){ toast("Photo created. Now making it move (1–3 minutes); you can keep working."); await animateShot(i, c.cid, av.animSecs||4, true); return; }
+    if(av.autoAnim!==false){ toast("Photo created. Now making it move (1–3 minutes); you can keep working."); await animateShot(i, c.cid, animSecsFor(sc), true); return; }
     toast("Shot created. Check it, then Approve & use, or Animate it.");
   }catch(e){ toast(e.message); }
   SHOT.busy=false; if(SHOT.i===i) openShot(i); else renderScenes();
@@ -2606,7 +2619,7 @@ async function pollShot(scId){
       const p=av.pending; av.pending=null;
       if(r.ok && r.drive_id){
         const still=(sc.candidates||[]).find(x=>x.cid===p.from)||{};
-        const v={ cid:"avatar:"+r.drive_id, source:"AI avatar", kind:"video", drive_id:r.drive_id, duration:p.seconds, desc:(still.desc||"AI video").replace(/^AI shot/,"AI video").slice(0,240),
+        const v={ cid:"avatar:"+r.drive_id, source:"AI avatar", kind:"video", drive_id:r.drive_id, duration:p.seconds, from:p.from, desc:(still.desc||"AI video").replace(/^AI shot/,"AI video").slice(0,240),
           licence:"AI-generated (Google Gemini)", credit:"", ai_ok:true, thumbnail:still.thumbnail||"", cast_ids:still.cast_ids||[], made_by:S.email };
         sc.candidates=[v, ...(sc.candidates||[])]; sc.footage=v; sc.approved=false; sc.card=false;
         aiSpend().video_sec+=p.seconds; invalidate(); saveLocal(); renderScenes(); updateCredits();
@@ -2668,9 +2681,9 @@ function renderPresBar(){
       <span class="btns"><button class="btn-sm" type="button" data-presq="anchor">Presenter scenes</button><button class="btn-sm" type="button" data-presq="all">All</button><button class="btn-sm" type="button" data-presq="none">None</button></span></div>
     <div class="row" style="margin-top:8px"><span class="small muted">Outfit:</span><select id="presOut" style="width:auto;height:34px;font-size:13px"><option value="same" ${P.outfit_mode!=="custom"?"selected":""}>Same as their look</option><option value="custom" ${P.outfit_mode==="custom"?"selected":""}>Change to…</option></select>
       ${P.outfit_mode==="custom"?`<input type="text" id="presOutfit" maxlength="300" value="${esc(P.outfit||"")}" placeholder="e.g. red Sambalpuri silk saree with gold border" style="flex:1;min-width:200px;height:34px;font-size:13px">`:""}
-      <label class="small chk"><input type="checkbox" id="presMove" ${P.move!==false?"checked":""}> natural movement (4 s video, ~${rupees(4*COST.videoPerSec)} each)</label></div>
+      <label class="small chk"><input type="checkbox" id="presMove" ${P.move!==false?"checked":""}> natural movement (each clip as long as its scene, ~${rupees(COST.videoPerSec)}/s)</label></div>
     <div class="row" style="margin-top:8px"><button class="btn-sm primary" id="presMake" type="button" ${todo.length&&!SHOT.batch?"":"disabled"}>${SHOT.batch?esc(SHOT.batch):todo.length?`✦ Create ${todo.length} ${P.move!==false?"moving ":""}shot${todo.length===1?"":"s"} (~${rupees(todo.length*(COST.image+(P.move!==false?4*COST.videoPerSec:0)))})`:scenes.length?"✓ Shots created":"Tick some clips first"}</button>
-      ${presAnimTargets().length&&!SHOT.batch?`<button class="btn-sm" id="presAnim" type="button">▶ Make ${presAnimTargets().length} still shot${presAnimTargets().length===1?"":"s"} move (~${rupees(presAnimTargets().length*4*COST.videoPerSec)})</button>`:""}
+      ${presAnimTargets().length&&!SHOT.batch?`<button class="btn-sm" id="presAnim" type="button">▶ Make ${presAnimTargets().length} shot${presAnimTargets().length===1?"":"s"} move to the end of their scene (~${rupees(presAnimTargets().length*4*COST.videoPerSec)})</button>`:""}
       <span class="small muted">${esc(cur.name)} appears in ${scenes.length} clip${scenes.length===1?"":"s"}. ✓ = shot made. Each shot then needs ✓ Approve; use 👤 People in this scene to change the action or props, or to animate it.</span></div>`:`<div class="small muted" style="margin-top:6px">Choose who presents this video, then tick the clips they appear in.</div>`}`;
   $("#presWho").onchange=()=>{ const id=$("#presWho").value; if(id){ const n=applyPresenter(id, P.id?presIds():null, $("#presSpeak").checked); toast(`${castById(id).name}: ${n} clip${n===1?"":"s"}`); } };
   $("#presSpeak").onchange=()=>{ if(P.id) applyPresenter(P.id, presIds(), $("#presSpeak").checked); };
@@ -2718,10 +2731,10 @@ function renderNarr(){
 function hasAiPeople(){ return !!(S.job && S.job.scenes.some(sc=>!sc.card && sc.approved && sc.footage && sc.footage.source==="AI avatar")); }
 
 // ---------------------------------------------------------------- AI co-editor fields (no spending: they set up the shot; a person presses Create)
-function presAnimTargets(){ const ids=presIds(); return S.job.scenes.map((sc,i)=>({sc,i})).filter(({sc})=>ids.includes(String(sc.id)) && sc.footage && sc.footage.source==="AI avatar" && sc.footage.kind==="photo" && !(sc.avatar&&sc.avatar.pending)); }
+function presAnimTargets(){ const ids=presIds(); return S.job.scenes.map((sc,i)=>({sc,i})).filter(({sc})=>ids.includes(String(sc.id)) && sc.footage && sc.footage.source==="AI avatar" && !(sc.avatar&&sc.avatar.pending) && (sc.footage.kind==="photo" || ((+sc.footage.duration||0)<sceneNeedSecs(sc) && (sc.footage.from||(sc.candidates||[]).some(x=>x.source==="AI avatar"&&x.kind==="photo"))))); }
 async function animatePresenter(list){
   if(SHOT.batch) return; SHOT.batch="Starting animations…"; renderPresBar(); let n=0;
-  for(const {sc,i} of list){ SHOT.batch=`Starting animation ${++n} of ${list.length}…`; renderPresBar(); await animateShot(i, sc.footage.cid, (sc.avatar&&sc.avatar.animSecs)||4, true); }
+  for(const {sc,i} of list){ SHOT.batch=`Starting animation ${++n} of ${list.length}…`; renderPresBar(); const still = sc.footage.kind==="photo" ? sc.footage.cid : (sc.footage.from||((sc.candidates||[]).find(x=>x.source==="AI avatar"&&x.kind==="photo")||{}).cid); await animateShot(i, still, animSecsFor(sc), true); }
   SHOT.batch=null; renderPresBar(); toast(`${list.length} animation${list.length===1?"":"s"} running. They appear in each scene in 1–3 minutes; then press ✓ Approve.`);
 }
 function avatarFields(i){
@@ -2737,6 +2750,8 @@ function avatarFields(i){
     fld("avatar_outfit_mode","Outfit: 'same' keeps the exact clothes from their look, 'custom' uses avatar_outfit","select",()=>av().outfit_mode||"same",v=>{ scAv(sc()).outfit_mode=v; },{options:["same","custom"]}),
     fld("avatar_outfit","Exact outfit when changing it (garments, colours, accessories)","text",()=>av().outfit||"",v=>{ scAv(sc()).outfit=v; if(v) scAv(sc()).outfit_mode="custom"; },{max:300}),
     fld("avatar_motion","How the person moves when animated (natural human movement)","text",()=>av().motion||"",v=>{ scAv(sc()).motion=v; },{max:400}),
+    fld("avatar_clip_fill","If the person's moving clip is shorter than the scene: slow = stretch it to last until the narration ends (free), hold = freeze on the last frame, loop = repeat","select",()=>ed(sc()).fill||"slow",v=>{ ed(sc()).fill=v; },{options:["slow","hold","loop"]}),
+    fld("avatar_anim_secs","Length of the next animation in seconds: 'fit' = as long as the scene, or 4-10 (the user presses Animate / Re-make, it costs money)","text",()=>String(av().animSecs||"fit"),v=>{ const n=parseInt(v); scAv(sc()).animSecs = /fit/i.test(String(v))||!n ? "fit" : Math.max(4,Math.min(10,n)); },{max:6}),
     fld("avatar_talk","Person talks to the camera in the animation (true/false)","bool",()=>!!av().talk,v=>{ scAv(sc()).talk=!!v; }),
     fld("avatar_extra","Extra look instructions for the AI shot (clothes, light, expression)","text",()=>av().extra||"",v=>{ scAv(sc()).extra=v; },{max:400}),
     fld("avatar_speaks","The first person speaks this scene's narration in their own voice","bool",()=>!!av().speak,v=>{ scAv(sc()).speak=!!v; })
@@ -3125,7 +3140,7 @@ function sceneDef(i){
       avatarFields(i).forEach(f=>out.push(f));
       contactChatFields().forEach(f=>out.push(Object.assign({},f,{label:"Whole video: "+f.label})));
       return out; },
-    context:()=>{ const s=sc(); return Object.assign(editDef(0,i).context(), { cast:castBrief(), people_in_scene:s.avatar?{people:avNames(s.avatar), action:s.avatar.action, props:s.avatar.props, framing:s.avatar.framing, note:"Setting avatar_* fields only prepares the AI shot; a person then presses Create shot (about ₹3) in 👤 People in this scene."}:"none", this_scene_review:{ stage:s.aida_stage, match:s.match, match_reason:s.match_reason, approved:!!s.approved, prepared:!!R.prepared },
+    context:()=>{ const s=sc(); return Object.assign(editDef(0,i).context(), { cast:castBrief(), people_in_scene:s.avatar?{people:avNames(s.avatar), action:s.avatar.action, props:s.avatar.props, framing:s.avatar.framing, note:"Setting avatar_* fields only prepares the AI shot; a person then presses Create shot (about ₹3) in 👤 People in this scene. If the person's movement stops before the narration ends, set avatar_clip_fill='slow' (free, stretches the clip to the end) and/or avatar_anim_secs='fit' and tell the user to press ↻ Re-make in 👤 People in this scene.", clip_seconds:(s.footage&&s.footage.source==="AI avatar"&&s.footage.kind==="video")?(+s.footage.duration||null):null, scene_seconds_needed:sceneNeedSecs(s)}:"none", this_scene_review:{ stage:s.aida_stage, match:s.match, match_reason:s.match_reason, approved:!!s.approved, prepared:!!R.prepared },
       note:"Labelled FRAME/PREVIEW/CANDIDATE images (when the video is prepared) show this scene's real clip, its current rendered look and other footage choices.",
       candidates:(s.candidates||[]).filter(x=>!x._rejected).slice(0,30).map(x=>({cid:x.cid, source:x.source, kind:x.kind, desc:String(x.desc||"").slice(0,140), verified:!!x.verified, ai_checked:x.ai_ok!==false, licence:x.licence})) }); },
     after:(keys)=>{
