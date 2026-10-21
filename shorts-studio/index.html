@@ -336,7 +336,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261021181225";
+const BUILD = "20261021183133";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -1694,7 +1694,7 @@ function showDlLast(){
 
 
 // ================================================================ PUBLISH TO YOUTUBE (straight from the browser: Google sign-in + resumable upload, no file-size limit)
-const YT_DEFAULT_CLIENT_ID = "";   // OAuth "Web application" client ID from the NegoTrip Google Cloud project
+const YT_DEFAULT_CLIENT_ID = "437012493188-1p4spic2vt88g8ec2ckc8qgp1pql2n3l.apps.googleusercontent.com";   // OAuth "Web application" client ID from the NegoTrip Google Cloud project
 function ytClientId(){ return store.get("ytClientId","") || YT_DEFAULT_CLIENT_ID; }
 const YT={ token:null, exp:0, channel:null, busy:false, xhr:null };
 function ytDefaults(){
