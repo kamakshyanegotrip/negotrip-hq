@@ -2100,7 +2100,7 @@ async function getVideo(id){ try{ return await idb.get("video."+id); }catch(e){ 
 // ================================================================ CAST: avatars from photos, AI influencers, their voices, and AI shots of them inside a scene
 // Cheapest path: one still image per shot (~₹3, Nano Banana) and, only if wanted, a 4–8 s animation of it (Veo Lite, ~₹4.4/s).
 // The person's own (cloned or designed) voice speaks the narration through the normal voiceover.
-const COST = { image:3, videoPerSec:4.4 };
+const COST = { image:3, videoPerSec:8.8 }; // Gemini Omni Flash 720p ≈ $0.10/s
 const CAST = { list:[], loaded:false, err:"", polling:new Set(), tmp:{} };
 const VOICE_KIND = { studio:"Studio voice", cloned:"Cloned voice", designed:"Designed voice" };
 const FEMALE_V = ["Kore","Aoede","Leda","Zephyr","Callirrhoe","Autonoe","Despina","Erinome","Laomedeia","Achernar","Gacrux","Pulcherrima","Vindemiatrix","Sulafat"];
@@ -2583,6 +2583,11 @@ async function pollShot(scId){
         sc.candidates=[v, ...(sc.candidates||[])]; sc.footage=v; sc.approved=false; sc.card=false;
         aiSpend().video_sec+=p.seconds; invalidate(); saveLocal(); renderScenes(); updateCredits();
         toast(`Scene ${S.job.scenes.indexOf(sc)+1}: the animated shot is ready. Check it and approve it.`);
+      } else if(/input blocked|could not be processed|rephras/i.test((r&&r.error)||"") && !p.retried){
+        // Google's filter sometimes rejects a detailed movement; retry once with a plain one
+        const i2=S.job.scenes.indexOf(sc); const keep=av.motion; av.motion="Smiles and moves naturally, looking at the camera"; saveLocal();
+        toast("Google rejected that movement wording, trying a simpler movement…");
+        await animateShot(i2, p.from, p.seconds, true); if(sc.avatar&&sc.avatar.pending) sc.avatar.pending.retried=true; av.motion=keep; saveLocal(); setTimeout(()=>pollShot(sc.id),200); return;
       } else { saveLocal(); renderScenes(); toast("Animation failed: "+((r&&r.error)||"unknown error")); }
       const i=S.job.scenes.indexOf(sc); if(SHOT.i===i) openShot(i);
       return;
