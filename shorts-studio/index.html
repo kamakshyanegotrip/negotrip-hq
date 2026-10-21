@@ -277,6 +277,11 @@ div.look{cursor:default}
 .gatelist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .gaterow{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface);border-radius:10px;padding:8px 10px}
 .scene.flash{outline:3px solid var(--accent);outline-offset:2px}
+.layoutsec{border:2px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:14px;padding:10px 12px;margin-bottom:14px;background:color-mix(in srgb,var(--accent) 5%,var(--surface))}
+.layoutsec summary{cursor:pointer;font-weight:800;font-family:var(--display);font-size:16px}
+.laygrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.laygrp{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--surface);display:flex;flex-direction:column;gap:6px}
+.laygrp .field{margin:0}.laygrp .rng{margin:0}
 .scene{position:relative}
 .sctools{position:absolute;top:8px;right:8px;display:flex;gap:4px;z-index:2}
 .sctool{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font-size:14px;line-height:1;display:grid;place-items:center}
@@ -598,6 +603,7 @@ function renderJob(){
     <div class="notice" id="gateNote" hidden></div>
     <div class="render">
       <div>
+        <div id="layoutHost"></div>
         <div class="row2">
           <div class="field"><label for="vOpen">Voice & language</label><input type="hidden" id="rVoice" value="${esc(VC().voice||"Kore")}"><div class="vsum" id="voiceSummary">${voiceSummary()}</div></div>
           <div class="field"><label for="rQual">Quality</label><select id="rQual"><option value="1080" ${store.get("quality","1080")==="1080"?"selected":""}>1080 × 1920 (best)</option><option value="720" ${store.get("quality","1080")==="720"?"selected":""}>720 × 1280 (faster)</option></select></div>
@@ -647,6 +653,8 @@ function renderScenes(){
   updateGate();
   if(typeof renderBookends==="function") renderBookends();
   if(typeof renderPresBar==="function") renderPresBar();
+  if(typeof renderLayoutSec==="function" && $("#layoutHost") && !document.activeElement?.closest?.("#layoutSec")) renderLayoutSec();
+  if(!R.prepared && typeof drawPoster==="function" && $("#cv")) drawPoster();
 }
 function sceneHtml(sc,i){
   const c = sc.card ? null : sc.footage;
@@ -891,18 +899,18 @@ async function initRenderPanel(){
   $("#rQual").addEventListener("change",e=>{ store.set("quality",e.target.value); invalidate(); });
   $("#hearVoice").addEventListener("click",hearVoice);
   $("#vOpen").addEventListener("click",openVoice);
-  $("#rLogo").addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return; await idb.set("logo",f); R.logo=await loadImage(f); showAssetHints(); invalidate(); });
+  $("#rLogo").addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return; await idb.set("logo",f); R.logo=await loadImage(f); showAssetHints(); invalidate(); renderLayoutSec(); drawPoster(); });
   $("#rMusic").addEventListener("change",async e=>{ const f=e.target.files[0]; if(!f) return; await idb.set("music",f); R.music=f; R.musicMeta={source:"own", title:f.name}; await idb.set("musicMeta",R.musicMeta); if(S.job){ S.job.music=R.musicMeta; saveLocal(); } showAssetHints(); updateCredits(); invalidate(); });
   $("#findMusic").addEventListener("click",openMusic);
   $("#prepBtn").addEventListener("click",prepare);
   $("#playBtn").addEventListener("click",()=>R.playing?stopPlayback():play(false));
   $("#recBtn").addEventListener("click",()=>play(true));
-  showDlLast(); enableMainDrag();
+  showDlLast(); enableMainDrag(); renderLayoutSec();
   if(!R.logo){ const f=await idb.get("logo"); if(f) try{ R.logo=await loadImage(f); R.logoName=f.name; }catch(e){} }
   if(!R.music){ const f=await idb.get("music"); if(f){ R.music=f; R.musicMeta=(await idb.get("musicMeta"))||{source:"own",title:f.name||"saved track"}; } }
   updateCredits();
   showAssetHints();
-  drawPoster();
+  renderLayoutSec(); drawPoster();
 }
 function showAssetHints(){
   const lh=$("#logoHint"), mh=$("#musicHint");
@@ -988,9 +996,10 @@ function wordTimes(text, start, end){
 // ---------------------------------------------------------------- edit settings (saved with the job)
 const ASSETS = new Map();   // scene id -> {voice, bounds, video, image, defOffset, myVoice}
 function ed(sc){
-  const d = {start:null, speed:1, zoom:1, panX:0, panY:0, motion:"auto", bright:1, contrast:1, sat:1, warmth:0, transition:"dip", titlePos:"top", titleSize:1, hideTitle:false, voiceVol:1, delivery:"", titleColor:"", titleBg:"", titleFont:"", sceneTint:"", sceneTintOpacity:0.25, titleX:null, titleY:null, cardText:"", cardY:0.42, cardSize:1, cardColor:"", cardFont:"", cardHide:false};
+  const d = {start:null, speed:1, zoom:1, panX:0, panY:0, motion:"auto", bright:1, contrast:1, sat:1, warmth:0, transition:"dip", titlePos:"top", titleSize:1, hideTitle:false, voiceVol:1, delivery:"", titleColor:"", titleBg:"", titleFont:"", sceneTint:"", sceneTintOpacity:0.25, titleX:null, titleY:null, cardText:"", cardY:null, cardSize:1, cardColor:"", cardFont:"", cardHide:false};
   if(!sc.edit) sc.edit={};
   for(const k in d) if(!(k in sc.edit)) sc.edit[k]=d[k];
+  if(sc.edit.cardY===0.42) sc.edit.cardY=null;
   return sc.edit;
 }
 function st(){
@@ -1218,9 +1227,10 @@ async function recordVoice(i){
 // ---------------------------------------------------------------- drawing
 
 // ---------------------------------------------------------------- text on a scene: drag to position, size/font/colour (before or after Prepare)
-const HIT={ title:null, card:null };
+let HIT={ title:null, card:null }; const HITS=new WeakMap();
 function cardTextOf(sc,e){ if(e&&e.cardText) return e.cardText; if(sc&&sc.role) return (typeof bkDest==="function"?bkDest():"")||sc.location||""; return (sc&&sc.location)||""; }
-function titleYOf(e){ return e.titleY!=null?e.titleY : e.titlePos==="middle"?0.42 : e.titlePos==="bottom"?0.80 : 0.156; }
+function titleYOf(e){ return e.titleY!=null?e.titleY : e.titlePos==="middle"?0.42 : e.titlePos==="bottom"?0.80 : (S.job?(+st().titleY||0.156):0.156); }
+function cardYOf(e){ if(e.cardY!=null) return e.cardY; const G=st(); return Math.max(0.08,Math.min(0.92,titleYOf(e)+(G.cardGap==null?0.27:+G.cardGap))); }
 const LAYOUT={ i:null, img:new Map() };
 async function layoutImage(sc){
   const c=sc.card?null:sc.footage; if(!c) return null;
@@ -1249,14 +1259,14 @@ function enableTextDrag(cv, sceneOf, redraw, done){
   let drag=null;
   const inBox=(b,p)=>b&&p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h;
   cv.addEventListener("pointerdown",ev=>{
-    const sc=sceneOf(); if(!sc) return; redraw(true); const p=canvasPoint(cv,ev);
-    const what = HIT.cv===cv && inBox(HIT.title,p) ? "title" : HIT.cv===cv && inBox(HIT.card,p) ? "card" : null; if(!what) return;
-    const e=ed(sc); drag={what, sc, e, sx:p.x, sy:p.y, ox:e.titleX!=null?e.titleX:0.5, oy:what==="title"?titleYOf(e):(e.cardY==null?0.42:e.cardY)};
+    const sc=sceneOf(); if(!sc) return; redraw(true); const p=canvasPoint(cv,ev); const h=HITS.get(cv)||{};
+    const what = inBox(h.title,p) ? "title" : inBox(h.card,p) ? "card" : null; if(!what) return;
+    const e=ed(sc); drag={what, sc, e, sx:p.x, sy:p.y, ox:e.titleX!=null?e.titleX:0.5, oy:what==="title"?titleYOf(e):cardYOf(e)};
     cv.setPointerCapture(ev.pointerId); ev.preventDefault();
   });
   cv.addEventListener("pointermove",ev=>{
     const p=canvasPoint(cv,ev);
-    if(!drag){ const over=HIT.cv===cv&&(inBox(HIT.title,p)||inBox(HIT.card,p)); cv.style.cursor=over?"grab":""; return; }
+    if(!drag){ const h=HITS.get(cv)||{}; const over=inBox(h.title,p)||inBox(h.card,p); cv.style.cursor=over?"grab":""; return; }
     const dy=(p.y-drag.sy)/cv.height, dx=(p.x-drag.sx)/cv.width;
     if(drag.what==="title"){ drag.e.titleY=Math.max(0.06,Math.min(0.94,drag.oy+dy)); drag.e.titleX=Math.max(0.15,Math.min(0.85,drag.ox+dx)); if(Math.abs(drag.e.titleX-0.5)<0.03) drag.e.titleX=0.5; }
     else drag.e.cardY=Math.max(0.08,Math.min(0.92,drag.oy+dy));
@@ -1305,7 +1315,7 @@ function bindTextPanel(host, i){
   });
   host.querySelectorAll("[data-tpoff]").forEach(cb=>cb.addEventListener("change",()=>{ const k=cb.dataset.tpoff; if(cb.checked) e[k]=""; else { const c=host.querySelector(`input[type=color][data-tp="${k}"]`); e[k]=c?c.value:""; } changed(false); }));
   host.querySelectorAll("[data-tppos]").forEach(b=>b.onclick=()=>{ e.titlePos=b.dataset.tppos; e.titleY=null; e.titleX=null; changed(false); });
-  host.querySelector("[data-tpreset]").onclick=()=>{ e.titleY=null; e.titleX=null; e.cardY=0.42; changed(false); };
+  host.querySelector("[data-tpreset]").onclick=()=>{ e.titleY=null; e.titleX=null; e.cardY=null; e.titlePos="top"; changed(false); };
   host.querySelector("[data-tpall]").onclick=()=>{ const keys=["titleSize","titleFont","titleColor","titleBg","titlePos","titleX","titleY","cardSize","cardFont","cardColor","cardY"]; S.job.scenes.forEach(o=>{ if(o===sc) return; const oe=ed(o); keys.forEach(k=>oe[k]=e[k]); }); changed(true); toast("Applied to every scene"); };
   enableTextDrag(cv, ()=>sc, (sync)=>{ if(sync){ return; } redraw(); }, ()=>{ changed(false); });
   drawLayout(i,cv);
@@ -1313,8 +1323,8 @@ function bindTextPanel(host, i){
 // main preview canvas: drag after Prepare too
 function enableMainDrag(){
   const cv=$("#cv"); if(!cv) return;
-  enableTextDrag(cv, ()=>{ if(!R.prepared) return null; const P=R.prepared, t=R.scrub||0; const s=P.scenes.find(x=>t>=x.t0&&t<x.t1)||P.scenes[P.scenes.length-1]; return s&&s.sc; },
-    (sync)=>{ if(R.prepared) drawFrame(R.scrub||0); }, (d)=>{ const i=S.job.scenes.indexOf(d.sc); const h=document.querySelector(`[data-tphost="${i}"]`); if(h&&TEXT_OPEN[i]) drawLayout(i,h.querySelector("[data-tpcv]")); if(typeof renderEditor==="function"&&R.prepared){ /* keep editor values in sync */ } });
+  enableTextDrag(cv, ()=>{ if(!R.prepared) return S.job&&S.job.scenes[Math.min(LAYOUT.main||0,S.job.scenes.length-1)]; const P=R.prepared, t=R.scrub||0; const s=P.scenes.find(x=>t>=x.t0&&t<x.t1)||P.scenes[P.scenes.length-1]; return s&&s.sc; },
+    (sync)=>{ if(R.prepared) drawFrame(R.scrub||0); else drawPoster(); }, (d)=>{ const i=S.job.scenes.indexOf(d.sc); const h=document.querySelector(`[data-tphost="${i}"]`); if(h&&TEXT_OPEN[i]) drawLayout(i,h.querySelector("[data-tpcv]")); if(typeof renderEditor==="function"&&R.prepared){ /* keep editor values in sync */ } });
 }
 
 // ---------------------------------------------------------------- scene blocks: move up/down, drag to reorder, remove (with undo)
@@ -1337,8 +1347,37 @@ function undoRemove(){ if(!SCENE_UNDO) return; const {sc,i}=SCENE_UNDO; SCENE_UN
 // order/removal changes don't need a new Prepare: the timeline is rebuilt from what's already loaded
 function afterSceneListChange(){ saveLocal(); if(R.prepared && S.job.scenes.every(sc=>ASSETS.has(sc.id))){ relayout(); S.editSel=Math.min(S.editSel||0,S.job.scenes.length-1); renderEditor(); scrubTo(Math.min(R.scrub||0,R.prepared.total-0.01)); } else invalidate(); renderScenes(); updateCredits(); }
 
+
+// ---------------------------------------------------------------- Logo & text layout (one place for logo, title, description and the gap between them)
+function styleFieldByKey(k){ for(const g of STYLE_SCHEMA){ const d=g.items.find(x=>x[0]===k); if(d) return schemaField(d, st); } return null; }
+const LAYOUT_GROUPS=[
+  ["🖼 Logo",["logoSize","logoPos","logoOpacity"]],
+  ["Title (top line)",["titleSizeAll","titleFont","titleColor","titleY","titleBg"]],
+  ["Description (main line on title cards)",["cardSizeAll","cardFont","cardText","cardGap"]]
+];
+const LAYOUT_LABEL={ logoSize:"Size", logoPos:"Position", logoOpacity:"Opacity", titleSizeAll:"Size", titleFont:"Font", titleColor:"Colour", titleY:"Height on screen", titleBg:"Box behind",
+  cardSizeAll:"Size", cardFont:"Font (empty = same as title)", cardText:"Colour", cardGap:"Gap below the title" };
+function layoutSectionHtml(){
+  const opts=S.job.scenes.map((sc,i)=>`<option value="${i}" ${(LAYOUT.main||0)===i?"selected":""}>${i+1}. ${esc(sc.location||"")}${sc.card?" (title card)":""}</option>`).join("");
+  return `<details class="layoutsec" id="layoutSec" ${store.get("layoutOpen",true)?"open":""}><summary>🎨 Logo &amp; text layout <span class="small muted">(all scenes; preview on the right)</span></summary>
+    <div class="field" style="margin:8px 0"><label class="small" for="layScene">Preview scene</label><select id="layScene">${opts}</select><div class="hint">Drag the title or description on the preview to move them. Per-scene changes: “Aa Text, size &amp; position” on each scene.</div></div>
+    <div class="laygrid">${LAYOUT_GROUPS.map(([t,keys])=>`<div class="laygrp"><b class="small">${t}</b>${keys.map(k=>{ const f=styleFieldByKey(k); if(!f) return ""; f.label=LAYOUT_LABEL[k]||f.label; return styleControl(f,"lay_"); }).join("")}</div>`).join("")}</div>
+    <div class="btns" style="margin-top:8px"><button class="btn-sm" type="button" id="layReset">Reset layout</button><button class="btn-sm" type="button" id="layBrand">Save as my default style</button>${R.logo?"":`<span class="small muted">Add your logo file below to see it.</span>`}</div>
+  </details>`;
+}
+function renderLayoutSec(){
+  const h=$("#layoutHost"); if(!h||!S.job) return; h.innerHTML=layoutSectionHtml();
+  const box=$("#layoutSec"); box.addEventListener("toggle",()=>store.set("layoutOpen",box.open));
+  const fields=LAYOUT_GROUPS.flatMap(g=>g[1]).map(styleFieldByKey).filter(Boolean);
+  bindStyleControls(box, fields, async(k)=>{ saveLocal(); if(/Font$/.test(k)) await loadStyleFonts(); if(R.prepared) drawFrame(R.scrub||0); else drawPoster(); });
+  $("#layScene").onchange=e=>{ LAYOUT.main=+e.target.value; if(R.prepared){ const s=R.prepared.scenes[LAYOUT.main]; if(s) scrubTo(Math.min(s.t0+Math.min(1.2,s.dur/2),R.prepared.total-0.01)); } else drawPoster(); };
+  $("#layReset").onclick=()=>{ const G=st(); Object.assign(G,{logoPos:"top-right",logoSize:1,logoOpacity:1,titleY:0.156,cardSizeAll:1,cardFont:"",cardGap:0.27,titleSizeAll:1}); S.job.scenes.forEach(sc=>{ const e=ed(sc); e.titleY=null; e.titleX=null; e.cardY=null; }); saveLocal(); renderLayoutSec(); if(R.prepared) drawFrame(R.scrub||0); else drawPoster(); };
+  $("#layBrand").onclick=()=>{ const G=st(), b={}; BRAND_KEYS.forEach(k=>b[k]=G[k]); store.set("brandStyle",b); toast("Saved as your default style for new videos"); };
+}
+
 function drawPoster(){
-  const cv=$("#cv"); if(!cv) return; const g=cv.getContext("2d"), W=cv.width, H=cv.height;
+  const cv=$("#cv"); if(!cv) return;
+  if(S.job && S.job.scenes && S.job.scenes.length && !R.prepared){ const i=Math.min(LAYOUT.main||0,S.job.scenes.length-1); drawLayout(i,cv); return; } const g=cv.getContext("2d"), W=cv.width, H=cv.height;
   const gr=g.createLinearGradient(0,0,0,H); gr.addColorStop(0,"#1B1F3A"); gr.addColorStop(1,"#A8321E"); g.fillStyle=gr; g.fillRect(0,0,W,H);
   g.fillStyle="rgba(255,255,255,.85)"; g.textAlign="center"; g.font=`800 ${W*0.07}px "Bricolage Grotesque", sans-serif`; g.fillText("Preview appears here", W/2, H/2);
 }
@@ -1354,8 +1393,8 @@ function drawMedia(g,s,idx,p,W,H,k){
     const G=st(); const gr=g.createLinearGradient(0,0,W,H); gr.addColorStop(0,G.cardBg1); gr.addColorStop(1,G.cardBg2); g.fillStyle=gr; g.fillRect(0,0,W,H);
     const ctext=cardTextOf(s.sc,e);
     if(ctext && !e.cardHide){
-      const fs=88*k*(e.cardSize||1), lh=fs*1.14, cy=H*(e.cardY==null?0.42:e.cardY);
-      g.fillStyle=e.cardColor||G.cardText; g.textAlign="center"; g.textBaseline="middle"; g.font=`${G.titleWeight} ${fs}px ${fontStack(e.cardFont||e.titleFont||G.titleFont)}`;
+      const fs=88*k*(e.cardSize||1)*(+G.cardSizeAll||1), lh=fs*1.14, cy=H*cardYOf(e);
+      g.fillStyle=e.cardColor||G.cardText; g.textAlign="center"; g.textBaseline="middle"; g.font=`${G.titleWeight} ${fs}px ${fontStack(e.cardFont||G.cardFont||e.titleFont||G.titleFont)}`;
       const lines=wrap(g,ctext.toUpperCase(),W-160*k); let mw=0;
       lines.forEach((ln,i,a)=>{ mw=Math.max(mw,g.measureText(ln).width); g.fillText(ln,W/2,cy+(i-(a.length-1)/2)*lh); });
       const hh=lines.length*lh; HIT.card={x:W/2-mw/2-20*k,y:cy-hh/2-10*k,w:mw+40*k,h:hh+20*k};
@@ -1380,7 +1419,7 @@ function drawMedia(g,s,idx,p,W,H,k){
 function drawFrame(t, P0, cv0){
   const P=P0||R.prepared; if(!P||!P.scenes.length) return;
   const cv=cv0||$("#cv"), g=cv.getContext("2d"), W=P.W, H=P.H, k=W/1080, G=st();
-  HIT.title=null; HIT.card=null; HIT.W=W; HIT.H=H; HIT.cv=cv;
+  HIT={title:null, card:null, W, H, cv}; HITS.set(cv,HIT);
   const scenes=P.scenes; P.website=G.website; let idx=scenes.findIndex(s=>t>=s.t0 && t<s.t1); if(idx<0) idx = t<0?0:scenes.length-1;
   const s=scenes[idx], p=Math.max(0,Math.min(1,(t-s.t0)/s.dur)), last=s.isLast!=null?s.isLast:idx===scenes.length-1, e=s.e, into=t-s.t0; HIT.sc=s.sc;
   g.fillStyle="#000"; g.fillRect(0,0,W,H);
@@ -1402,7 +1441,7 @@ function drawFrame(t, P0, cv0){
     const fs=86*k*e.titleSize*G.titleSizeAll; g.font=`${G.titleWeight} ${fs}px ${fontStack(e.titleFont||G.titleFont)}`;
     const free=e.titleX!=null; g.textAlign=free?"center":G.titleAlign; const tx=free?W*e.titleX:alignX(G.titleAlign);
     const lines=wrap(g,title,W-150*k); const lh=fs*1.12;
-    const y0 = e.titleY!=null ? H*e.titleY-(lines.length-1)*lh/2 : e.titlePos==="middle" ? H*0.42-(lines.length-1)*lh/2 : e.titlePos==="bottom" ? H*0.80-(lines.length-1)*lh : 300*k;
+    const y0 = e.titleY!=null ? H*e.titleY-(lines.length-1)*lh/2 : e.titlePos==="middle" ? H*0.42-(lines.length-1)*lh/2 : e.titlePos==="bottom" ? H*0.80-(lines.length-1)*lh : H*titleYOf(e);
     { const mw=Math.max(...lines.map(l=>g.measureText(l).width)); const al=g.textAlign; const bx= al==="left"?tx : al==="right"?tx-mw : tx-mw/2; HIT.title={x:bx-20*k,y:y0-fs-10*k,w:mw+40*k,h:lh*(lines.length-1)+fs*1.25+20*k}; }
     const bg=e.titleBg||G.titleBg;
     if(bg){ const mw=Math.max(...lines.map(l=>g.measureText(l).width)), pad=26*k, al=g.textAlign; const bx = al==="left"?tx-pad : al==="right"?tx-mw-pad : tx-mw/2-pad;
@@ -1444,8 +1483,8 @@ function drawFrame(t, P0, cv0){
       wy+=wfs*1.6; } }
     g.globalAlpha=1;
   }
-  if(R.logo && G.logoPos!=="hidden"){ const lw=190*k*G.logoSize, lh=lw*(R.logo.naturalHeight/R.logo.naturalWidth||1), m=44*k;
-    const lx=/left/.test(G.logoPos)?m:W-lw-m, ly=/bottom/.test(G.logoPos)?H-lh-90*k:56*k; g.drawImage(R.logo,lx,ly,lw,lh); }
+  if(R.logo && G.logoPos!=="hidden"){ g.globalAlpha=Math.max(0.2,Math.min(1,G.logoOpacity==null?1:+G.logoOpacity)); const lw=190*k*G.logoSize, lh=lw*(R.logo.naturalHeight/R.logo.naturalWidth||1), m=44*k;
+    const lx=/left/.test(G.logoPos)?m:W-lw-m, ly=/bottom/.test(G.logoPos)?H-lh-90*k:56*k; g.drawImage(R.logo,lx,ly,lw,lh); g.globalAlpha=1; }
   // transitions
   if(idx>0 && into<0.15){
     if(e.transition==="dip"){ g.fillStyle=`rgba(0,0,0,${(1-into/0.15)*0.65})`; g.fillRect(0,0,W,H); }
@@ -1607,7 +1646,7 @@ function ensureFont(name){
   return new Promise(res=>{ l.onload=()=>document.fonts.load(`700 40px "${name}"`).then(res,res); l.onerror=res; setTimeout(res,4000); });
 }
 async function loadStyleFonts(){
-  if(!S.job) return; const G=st(); const names=new Set([G.titleFont,G.capFont,G.ctaFont,G.webFont]);
+  if(!S.job) return; const G=st(); const names=new Set([G.titleFont,G.capFont,G.ctaFont,G.webFont,G.cardFont]);
   S.job.scenes.forEach(sc=>{ const e=ed(sc); if(e.titleFont) names.add(e.titleFont); if(e.cardFont) names.add(e.cardFont); });
   const lang=(typeof scriptLang==="function"?scriptLang():"en");
   if(/^(hi|mr|ne)/.test(lang)) names.add("Noto Sans Devanagari"); if(/^or/.test(lang)) names.add("Noto Sans Oriya"); if(/^(bn|as)/.test(lang)) names.add("Noto Sans Bengali");
@@ -1643,8 +1682,11 @@ const STYLE_SCHEMA = [
     ["tintColor","Colour wash over all footage","color"],["tintOpacity","Colour wash strength","number",{min:0,max:0.7,step:0.02}],
     ["shade","Dark shading behind text (0 none – 1.5 strong)","number",{min:0,max:1.5,step:0.05}],
     ["cardBg1","Title-card background (top colour)","color"],["cardBg2","Title-card background (bottom colour)","color"],["cardText","Title-card text colour","color"]]},
-  {g:"Logo & labels", items:[
-    ["logoPos","Logo position","select",{options:["top-right","top-left","bottom-right","bottom-left","hidden"]}],["logoSize","Logo size","number",{min:0.4,max:2,step:0.05}],
+  {g:"Logo & text layout", items:[
+    ["logoPos","Logo position","select",{options:["top-right","top-left","bottom-right","bottom-left","hidden"]}],["logoSize","Logo size","number",{min:0.3,max:3,step:0.05}],["logoOpacity","Logo opacity","number",{min:0.2,max:1,step:0.05}],
+    ["titleY","Title height on screen, all scenes (0.05 top – 0.6)","number",{min:0.05,max:0.6,step:0.01}],
+    ["cardSizeAll","Description (title-card main line) size","number",{min:0.4,max:2.5,step:0.05}],["cardFont","Description font (empty = title font)","fontOrNone"],
+    ["cardGap","Gap between title and description","number",{min:0.06,max:0.7,step:0.01}],
     ["showRep","Show 'Representative visuals' label","bool"]]}
 ];
 const STYLE_DEFAULTS = { titleFont:"Bricolage Grotesque", titleWeight:"800", titleSizeAll:1, titleColor:"#ffffff", titleCase:"upper", titleAlign:"center", titleOutline:true, titleOutlineColor:"#000000", titleBg:"", titleBgOpacity:0.75,
@@ -1652,7 +1694,7 @@ const STYLE_DEFAULTS = { titleFont:"Bricolage Grotesque", titleWeight:"800", tit
   ctaText:"", ctaFont:"Bricolage Grotesque", ctaWeight:"800", ctaSize:1, ctaColor:"#ffffff", accent:"#A8321E", ctaBgOpacity:1, ctaShape:"rounded", ctaPos:0.74, ctaCase:"upper",
   website:"", extraLine:"", showWebsite:true, webFont:"Figtree", webSize:1, webColor:"#ffffff", webBg:"",
   tintColor:"#ff9a3c", tintOpacity:0, shade:1, cardBg1:"#1B1F3A", cardBg2:"#A8321E", cardText:"#ffffff",
-  logoPos:"top-right", logoSize:1, showRep:true };
+  logoPos:"top-right", logoSize:1, logoOpacity:1, titleY:0.156, cardSizeAll:1, cardFont:"", cardGap:0.27, showRep:true };
 const BRAND_KEYS = Object.keys(STYLE_DEFAULTS).filter(k=>k!=="ctaText");
 const SCENE_TEXT_SCHEMA = [
   ["titleColor","Title colour for this scene (none = same as video)","colorNone"],["titleBg","Title background box for this scene (none = same as video)","colorNone"],
