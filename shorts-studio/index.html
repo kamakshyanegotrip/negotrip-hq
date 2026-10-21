@@ -336,7 +336,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261021172415";
+const BUILD = "20261021173509";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -1083,7 +1083,10 @@ function relayout(){
     if(s.video){ const len=s.video.duration||0; const def = len > s.dur*e.speed+1.5 ? Math.min(1, len-s.dur*e.speed) : 0; s.offset = e.start!=null ? Math.max(0,Math.min(e.start, Math.max(0,len-0.2))) : def; s.clipLen=len; }
     s.spd=e.speed; s.hold=!!(s.video && sc.footage && sc.footage.source==="AI avatar");
     if(s.video && s.hold && e.fill==="loop") s.hold=false;
-    if(s.video){ s.video.loop=!s.hold; if(s.hold){ const len=s.clipLen||s.video.duration||0; if(e.start==null) s.offset=0; if((e.fill||"slow")==="slow" && e.speed===1 && len>0.5 && len-s.offset < s.dur){ s.spd=Math.max(0.6,(len-s.offset)/s.dur); const pass=(len-s.offset-0.05)/s.spd; if(pass+0.05 < s.dur && s.video2 && pass>1.2) s.xloop={pass, X:Math.min(0.7,pass/3)}; } } }
+    if(s.video){ s.video.loop=!s.hold; if(s.hold){ const len=s.clipLen||s.video.duration||0; if(e.start==null) s.offset=0; const fm=e.fill||"slow";
+      if((fm==="slow"||fm==="smooth") && e.speed===1 && len>0.5 && len-s.offset < s.dur){
+        if(fm==="slow") s.spd=Math.max(0.2,(len-s.offset-0.05)/s.dur);
+        else { s.spd=Math.max(0.6,(len-s.offset)/s.dur); const pass=(len-s.offset-0.05)/s.spd; if(pass+0.05 < s.dur && s.video2 && pass>1.2) s.xloop={pass, X:Math.min(0.7,pass/3)}; } } } }
     else s.offset=0;
     return s;
   });
@@ -2538,7 +2541,8 @@ function openShot(i){
         <div class="btns">${sc.footage&&sc.footage.cid===c.cid&&sc.approved?`<span class="pill ok">In use ✓</span>`:`<button class="btn-sm primary" type="button" data-shuse="${esc(c.cid)}">✓ Approve & use</button>`}
         ${c.kind==="photo"?(av.pending?`<span class="pill warn">Animating… 1–3 min</span>`:`<button class="btn-sm" type="button" data-anim="${esc(c.cid)}:${animSecsFor(sc)}">▶ Animate ${animSecsFor(sc)} s (fits the scene) · ${rupees(animSecsFor(sc)*COST.videoPerSec)}</button>`):""}
         ${c.kind==="video"&&!av.pending&&(+c.duration||0)<sceneNeedSecs(sc)?(()=>{ const still=c.from||((sc.candidates||[]).find(x=>x.source==="AI avatar"&&x.kind==="photo")||{}).cid; return still?`<button class="btn-sm" type="button" data-refit="${esc(still)}:${sceneNeedSecs(sc)}">↻ Re-make at ${sceneNeedSecs(sc)} s to last the whole scene · ${rupees(sceneNeedSecs(sc)*COST.videoPerSec)}</button>`:""; })():""}</div></div>`).join("")}</div>
-      <div class="field" style="margin-top:8px"><label class="small" for="shFill">If a moving clip is shorter than the scene</label><select id="shFill" style="width:auto;height:34px;font-size:13px">${[["slow","Keep moving to the end: slow down a little, then repeat smoothly (free)"],["hold","Freeze on the last frame"],["loop","Repeat it (hard cut)"]].map(([k,t])=>`<option value="${k}" ${(ed(sc).fill||"slow")===k?"selected":""}>${t}</option>`).join("")}</select></div>
+      ${(()=>{ const c=sc.footage; if(!(c&&c.source==="AI avatar"&&c.kind==="video")) return ""; const need=R.prepared?((R.prepared.scenes.find(x=>x.sc===sc)||{}).dur||sceneNeedSecs(sc)):sceneNeedSecs(sc); const len=+c.duration||4; return len<need-0.5?`<p class="notice small">This clip is ${len} s but the narration lasts about ${Math.round(need)} s, so slowing it down makes it ${Math.round(len/need*100)}% speed. For natural movement, use ↻ Re-make (up to 10 s), or shorten the narration.</p>`:""; })()}
+      <div class="field" style="margin-top:8px"><label class="small" for="shFill">If a moving clip is shorter than the scene</label><select id="shFill" style="width:auto;height:34px;font-size:13px">${[["slow","Slow it down so it lasts until the narration ends (free)"],["smooth","Normal speed, repeat smoothly with a blend (free)"],["hold","Freeze on the last frame"],["loop","Repeat it (hard cut)"]].map(([k,t])=>`<option value="${k}" ${(ed(sc).fill||"slow")===k?"selected":""}>${t}</option>`).join("")}</select></div>
       <p class="hint">Animation keeps the face and place, adds natural movement and props in use; the AI's own sound is muted and your voiceover plays. Instagram and YouTube ask you to switch on their “AI-generated” label for realistic AI people.</p></div>`:""}`);
   m.querySelector(".modal-card").classList.add("wide");
   const q=s=>m.querySelector(s);
@@ -2771,7 +2775,7 @@ function avatarFields(i){
     fld("avatar_outfit_mode","Outfit: 'same' keeps the exact clothes from their look, 'custom' uses avatar_outfit","select",()=>av().outfit_mode||"same",v=>{ scAv(sc()).outfit_mode=v; },{options:["same","custom"]}),
     fld("avatar_outfit","Exact outfit when changing it (garments, colours, accessories)","text",()=>av().outfit||"",v=>{ scAv(sc()).outfit=v; if(v) scAv(sc()).outfit_mode="custom"; },{max:300}),
     fld("avatar_motion","How the person moves when animated (natural human movement)","text",()=>av().motion||"",v=>{ scAv(sc()).motion=v; },{max:400}),
-    fld("avatar_clip_fill","If the person's moving clip is shorter than the scene: slow = stretch it to last until the narration ends (free), hold = freeze on the last frame, loop = repeat","select",()=>ed(sc()).fill||"slow",v=>{ ed(sc()).fill=v; },{options:["slow","hold","loop"]}),
+    fld("avatar_clip_fill","If the person's moving clip is shorter than the scene: slow = stretch it to last until the narration ends (free), smooth = normal speed repeated with a blend, hold = freeze on the last frame, loop = repeat with a cut","select",()=>ed(sc()).fill||"slow",v=>{ ed(sc()).fill=v; },{options:["slow","smooth","hold","loop"]}),
     fld("avatar_anim_secs","Length of the next animation in seconds: 'fit' = as long as the scene, or 4-10 (the user presses Animate / Re-make, it costs money)","text",()=>String(av().animSecs||"fit"),v=>{ const n=parseInt(v); scAv(sc()).animSecs = /fit/i.test(String(v))||!n ? "fit" : Math.max(4,Math.min(10,n)); },{max:6}),
     fld("avatar_talk","Person talks to the camera in the animation (true/false)","bool",()=>!!av().talk,v=>{ scAv(sc()).talk=!!v; }),
     fld("avatar_extra","Extra look instructions for the AI shot (clothes, light, expression)","text",()=>av().extra||"",v=>{ scAv(sc()).extra=v; },{max:400}),
