@@ -657,7 +657,7 @@ function sceneHtml(sc,i){
   const shown = open ? cands : [];
   const nS=S.job.scenes.length;
   return `<div class="scene" data-scene="${i}" ${sc.role?"":`draggable="true"`}>
-    <div class="sctools">${sc.role?"":`<button type="button" class="sctool grip" title="Drag to move" aria-hidden="true">⠿</button><button type="button" class="sctool" data-mv="${i}:-1" ${i===0||S.job.scenes[i-1].role?"disabled":""} title="Move up" aria-label="Move scene ${i+1} up">↑</button><button type="button" class="sctool" data-mv="${i}:1" ${i===nS-1||S.job.scenes[i+1].role?"disabled":""} title="Move down" aria-label="Move scene ${i+1} down">↓</button>`}<button type="button" class="sctool x" data-rm="${i}" title="Remove this block" aria-label="Remove scene ${i+1}">✕</button></div>
+    <div class="sctools">${sc.role?"":`<button type="button" class="sctool grip" title="Drag to move" aria-hidden="true">⠿</button><button type="button" class="sctool" data-scmv="${i}:-1" ${i===0||S.job.scenes[i-1].role?"disabled":""} title="Move up" aria-label="Move scene ${i+1} up">↑</button><button type="button" class="sctool" data-scmv="${i}:1" ${i===nS-1||S.job.scenes[i+1].role?"disabled":""} title="Move down" aria-label="Move scene ${i+1} down">↓</button>`}<button type="button" class="sctool x" data-rm="${i}" title="Remove this block" aria-label="Remove scene ${i+1}">✕</button></div>
     <div><button class="thumbbtn" data-preview="${i}:sel" ${c?"":"disabled"} aria-label="Preview selected footage">${thumbHtml(c,"thumb")}${c&&c.kind==="video"?'<span class="play">▶</span>':""}</button></div>
     <div>
       <div class="meta"><span class="loc">${i+1}. ${esc(sc.location||"")}</span>${sc.role?`<span class="pill acc">${sc.role==="intro"?"Opening":"Closing"}</span>`:""}<span class="pill ${sc.type==="anchor"?"acc":""}">${sc.type==="anchor"?"Presenter":"B-roll"}</span>${status}${m&&!sc.card?`<span class="pill ${m[1]}">${m[0]}</span>`:""}</div>
@@ -688,7 +688,7 @@ function sceneHtml(sc,i){
 function bindScenes(){
   const w=$("#sceneList");
   w.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("input",()=>{ const [i,f]=el.dataset.edit.split(":"); S.job.scenes[i][f] = f==="duration_sec" ? Math.max(2,Math.min(20,+el.value||3)) : el.value; if(R.prepared && f!=="narration"){ relayout(); scrubTo(R.scrub||0); } else invalidate(); saveLocal(); }));
-  w.querySelectorAll("[data-mv]").forEach(b=>b.addEventListener("click",()=>{ const [i,d]=b.dataset.mv.split(":").map(Number); moveScene(i,i+d); }));
+  w.querySelectorAll("[data-scmv]").forEach(b=>b.addEventListener("click",()=>{ const [i,d]=b.dataset.scmv.split(":").map(Number); moveScene(i,i+d); }));
   w.querySelectorAll("[data-rm]").forEach(b=>b.addEventListener("click",()=>removeScene(+b.dataset.rm)));
   w.querySelectorAll("[data-text]").forEach(b=>b.addEventListener("click",()=>{ const i=+b.dataset.text; TEXT_OPEN[i]=!TEXT_OPEN[i]; renderScenes(); }));
   w.querySelectorAll("[data-tphost]").forEach(h=>bindTextPanel(h,+h.dataset.tphost));
@@ -1323,7 +1323,7 @@ function moveScene(i, to){
   const sc=S.job.scenes; if(to<0||to>=sc.length||i===to) return;
   if(sc[i].role||sc[to].role){ toast("The introduction stays first and the conclusion last."); return; }
   const [x]=sc.splice(i,1); sc.splice(to,0,x); S.openAlts={}; Object.keys(TEXT_OPEN).forEach(k=>delete TEXT_OPEN[k]);
-  invalidate(); saveLocal(); renderScenes(); updateCredits();
+  afterSceneListChange();
 }
 function removeScene(i){
   const sc=S.job.scenes[i]; if(!sc) return;
@@ -1331,9 +1331,11 @@ function removeScene(i){
   if(S.job.scenes.filter(s=>!s.role).length<=1){ toast("A video needs at least one scene."); return; }
   SCENE_UNDO={sc, i}; S.job.scenes.splice(i,1); S.openAlts={}; Object.keys(TEXT_OPEN).forEach(k=>delete TEXT_OPEN[k]);
   if(S.job.presenter&&Array.isArray(S.job.presenter.scenes)) S.job.presenter.scenes=S.job.presenter.scenes.filter(x=>x!==String(sc.id));
-  invalidate(); saveLocal(); renderScenes(); updateCredits();
+  afterSceneListChange();
 }
-function undoRemove(){ if(!SCENE_UNDO) return; const {sc,i}=SCENE_UNDO; SCENE_UNDO=null; S.job.scenes.splice(Math.min(i,S.job.scenes.length),0,sc); if(typeof bkOrder==="function") bkOrder(); invalidate(); saveLocal(); renderScenes(); updateCredits(); }
+function undoRemove(){ if(!SCENE_UNDO) return; const {sc,i}=SCENE_UNDO; SCENE_UNDO=null; S.job.scenes.splice(Math.min(i,S.job.scenes.length),0,sc); if(typeof bkOrder==="function") bkOrder(); afterSceneListChange(); }
+// order/removal changes don't need a new Prepare: the timeline is rebuilt from what's already loaded
+function afterSceneListChange(){ saveLocal(); if(R.prepared && S.job.scenes.every(sc=>ASSETS.has(sc.id))){ relayout(); S.editSel=Math.min(S.editSel||0,S.job.scenes.length-1); renderEditor(); scrubTo(Math.min(R.scrub||0,R.prepared.total-0.01)); } else invalidate(); renderScenes(); updateCredits(); }
 
 function drawPoster(){
   const cv=$("#cv"); if(!cv) return; const g=cv.getContext("2d"), W=cv.width, H=cv.height;
