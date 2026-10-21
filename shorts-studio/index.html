@@ -336,7 +336,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261021165447";
+const BUILD = "20261021172415";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -1043,8 +1043,9 @@ async function prepare(){
     await waitVisible();
     for(let i=0;i<n;i++){
       const sc=job.scenes[i], a=ASSETS.get(sc.id)||{};
-      a.video=null; a.image=null;
+      a.video=null; a.image=null; a.video2=null;
       if(urls[i]) try{ if(sc.footage && sc.footage.kind==="photo") a.image=await loadImg(urls[i]); else a.video=await loadVideo(urls[i]); }catch(e){ toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
+      if(a.video && sc.footage && sc.footage.source==="AI avatar"){ try{ a.video2=await loadVideo(urls[i]); a.video2.loop=false; }catch(e){ a.video2=null; } }
       ASSETS.set(sc.id,a);
       setLog(`Opening footage ${i+1}/${n}`);
     }
@@ -1072,7 +1073,7 @@ function relayout(){
     const a=ASSETS.get(sc.id)||{}, e=ed(sc);
     const vb=a.voice||null, b=a.bounds||{start:0,end:0};
     const lead=0.12;
-    const s={sc, e, video:a.video||null, image:a.image||null, voice:vb};
+    const s={sc, e, video:a.video||null, video2:a.video2||null, image:a.image||null, voice:vb};
     s.t0=t; s.aStart=t+lead;
     s.dur=Math.max(+sc.duration_sec||3, vb ? lead+b.end+0.35 : 2.5);
     s.t1=t+s.dur; t+=s.dur;
@@ -1082,19 +1083,35 @@ function relayout(){
     if(s.video){ const len=s.video.duration||0; const def = len > s.dur*e.speed+1.5 ? Math.min(1, len-s.dur*e.speed) : 0; s.offset = e.start!=null ? Math.max(0,Math.min(e.start, Math.max(0,len-0.2))) : def; s.clipLen=len; }
     s.spd=e.speed; s.hold=!!(s.video && sc.footage && sc.footage.source==="AI avatar");
     if(s.video && s.hold && e.fill==="loop") s.hold=false;
-    if(s.video){ s.video.loop=!s.hold; if(s.hold){ const len=s.clipLen||s.video.duration||0; if(e.start==null) s.offset=0; if((e.fill||"slow")==="slow" && e.speed===1 && len>0.5 && len-s.offset < s.dur) s.spd=Math.max(0.35,(len-s.offset)/s.dur); } }
+    if(s.video){ s.video.loop=!s.hold; if(s.hold){ const len=s.clipLen||s.video.duration||0; if(e.start==null) s.offset=0; if((e.fill||"slow")==="slow" && e.speed===1 && len>0.5 && len-s.offset < s.dur){ s.spd=Math.max(0.6,(len-s.offset)/s.dur); const pass=(len-s.offset-0.05)/s.spd; if(pass+0.05 < s.dur && s.video2 && pass>1.2) s.xloop={pass, X:Math.min(0.7,pass/3)}; } } }
     else s.offset=0;
     return s;
   });
   P.total=t;
   const sl=$("#scrub"); if(sl){ sl.max=t.toFixed(2); }
 }
+
+// ---- seamless repeat for AI clips shorter than their scene: two copies of the clip, each pass cross-fades into the next
+function xloopState(s, tau){
+  const x=s.xloop, P=x.pass-x.X, k=Math.max(0,Math.floor(Math.max(0,tau)/P)), inP=Math.max(0,tau)-k*P, len=(s.clipLen||s.video.duration||1)-0.05;
+  const el=n=>n%2?s.video2:s.video, st={ main:el(k), mainTime:Math.min(len, s.offset+inP*s.spd), next:null, nextTime:0, alpha:0, idle:el(k+1) };
+  if(inP>P){ st.next=el(k+1); st.nextTime=Math.min(len, s.offset+(inP-P)*s.spd); st.alpha=Math.min(1,(inP-P)/x.X); st.idle=null; }
+  return st;
+}
+function syncXloop(s, t, playing){
+  const st=xloopState(s, t-s.t0), jobs=[];
+  for(const [v,tt] of [[st.main,st.mainTime],[st.next,st.nextTime]]){ if(!v) continue; v.playbackRate=s.spd;
+    if(playing){ if(v.paused){ v.currentTime=tt; v.play().catch(()=>{}); } else if(Math.abs(v.currentTime-tt)>0.3) v.currentTime=tt; }
+    else { v.pause(); jobs.push(seek(v,tt)); } }
+  if(st.idle && !st.idle.paused) st.idle.pause();
+  return Promise.all(jobs);
+}
 function clipTimeAt(s,t){ const len=s.clipLen||s.video.duration||1; let ct=s.offset+(t-s.t0)*(s.spd||s.e.speed); if(ct>=len-0.05) ct = s.hold ? Math.max(0,len-0.05) : len>0.2 ? (ct % (len-0.05)) : 0; return ct; }
 async function scrubTo(t){
   const P=R.prepared; if(!P) return;
   t=Math.max(0,Math.min(P.total-0.01,t)); R.scrub=t;
   const s=P.scenes.find(x=>t>=x.t0&&t<x.t1)||P.scenes[P.scenes.length-1];
-  if(s && s.video){ await seek(s.video, clipTimeAt(s,t)); }
+  if(s && s.video){ if(s.xloop) await syncXloop(s,t,false); else await seek(s.video, clipTimeAt(s,t)); }
   const prev=P.scenes[P.scenes.indexOf(s)-1];
   if(prev && prev.video && s.e.transition==="fade" && t-s.t0<0.5){ await seek(prev.video, clipTimeAt(prev, prev.t1-0.01)); }
   drawFrame(t);
@@ -1419,7 +1436,8 @@ function strokeText(g, text, x, y, lw){ g.lineJoin="round"; g.lineWidth=lw; g.st
 // Draw one scene's picture (footage with its reframe, motion and colour edits)
 function drawMedia(g,s,idx,p,W,H,k){
   const e=s.e;
-  const src = s.image || ((s.video && s.video.readyState>=2 && s.video.videoWidth) ? s.video : null);
+  let src = s.image || ((s.video && s.video.readyState>=2 && s.video.videoWidth) ? s.video : null), src2=null, a2=0;
+  if(s.xloop && !s.image){ const x=xloopState(s, p*s.dur); const ok=v=>v&&v.readyState>=2&&v.videoWidth; if(ok(x.main)) src=x.main; if(x.next&&ok(x.next)){ src2=x.next; a2=x.alpha; } }
   if(!src){
     const G=st(); const gr=g.createLinearGradient(0,0,W,H); gr.addColorStop(0,G.cardBg1); gr.addColorStop(1,G.cardBg2); g.fillStyle=gr; g.fillRect(0,0,W,H);
     const ctext=cardTextOf(s.sc,e);
@@ -1442,6 +1460,7 @@ function drawMedia(g,s,idx,p,W,H,k){
   g.save();
   g.filter=`brightness(${e.bright}) contrast(${e.contrast}) saturate(${e.sat})`;
   g.drawImage(src,x,y,dw,dh);
+  if(src2 && a2>0){ g.globalAlpha=a2; g.drawImage(src2,x,y,dw,dh); g.globalAlpha=1; }
   g.restore();
   if(e.warmth){ g.save(); g.globalCompositeOperation="soft-light"; g.fillStyle = e.warmth>0 ? `rgba(255,150,40,${0.45*e.warmth})` : `rgba(40,120,255,${-0.45*e.warmth})`; g.fillRect(0,0,W,H); g.restore(); }
   const G=st(), tc=e.sceneTint||(G.tintOpacity>0?G.tintColor:""), to=e.sceneTint?e.sceneTintOpacity:G.tintOpacity;
@@ -1539,7 +1558,7 @@ async function play(record, from, until){
   const playBtn=$("#playBtn"), recBtn=$("#recBtn"), prepBtn=$("#prepBtn");
   playBtn.textContent = "■ Stop"; recBtn.disabled=true; prepBtn.disabled=true; if(record) playBtn.disabled=false;
   // line every clip up at its in-point before starting
-  for(const s of P.scenes){ if(s.video){ s.video.pause(); s.video.playbackRate=s.spd||s.e.speed; await seek(s.video, clipTimeAt(s, Math.max(s.t0, Math.min(start, s.t1-0.01)))); } }
+  for(const s of P.scenes){ if(s.video2) s.video2.pause(); if(s.video){ s.video.pause(); s.video.playbackRate=s.spd||s.e.speed; await seek(s.video, clipTimeAt(s, Math.max(s.t0, Math.min(start, s.t1-0.01)))); } }
   const master=ctx.createGain(); master.gain.value=1;
   const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-16; comp.ratio.value=3; master.connect(comp);
   comp.connect(ctx.destination);
@@ -1576,7 +1595,7 @@ async function play(record, from, until){
     if(!R.playing) return; R.playing=false; cancelAnimationFrame(raf);
     document.removeEventListener("visibilitychange",onHide);
     sources.forEach(s=>{ try{ s.stop(); }catch(e){} });
-    P.scenes.forEach(s=>{ if(s.video){ s.video.pause(); } });
+    P.scenes.forEach(s=>{ if(s.video){ s.video.pause(); } if(s.video2) s.video2.pause(); });
     try{ master.disconnect(); comp.disconnect(); }catch(e){}
     playBtn.textContent="▶ Play preview"; recBtn.disabled=false; prepBtn.disabled=false;
     if(rec){
@@ -1592,10 +1611,12 @@ async function play(record, from, until){
     if(idx!==cur && idx>=0){
       const prev=P.scenes[cur], s=P.scenes[idx];
       if(prev&&prev.video){ if(s.e.transition==="fade"){ prevStop={v:prev.video, at:t+0.55}; } else prev.video.pause(); }
-      if(s.video){ s.video.playbackRate=s.spd||s.e.speed; if(!(s.hold && s.video.currentTime>=(s.clipLen||s.video.duration||1)-0.06)) s.video.play().catch(()=>{}); }
+      if(prev&&prev.video2) prev.video2.pause();
+      if(s.video && !s.xloop){ s.video.playbackRate=s.spd||s.e.speed; if(!(s.hold && s.video.currentTime>=(s.clipLen||s.video.duration||1)-0.06)) s.video.play().catch(()=>{}); }
       cur=idx;
     }
     if(prevStop && t>=prevStop.at){ prevStop.v.pause(); prevStop=null; }
+    { const cs=P.scenes[cur]; if(cs && cs.xloop) syncXloop(cs,t,true); }
     drawFrame(Math.max(start,t)); setBar(Math.max(0,t)/P.total);
     if(!record){ R.scrub=t; const sl=$("#scrub"); if(sl) sl.value=t; }
     raf=requestAnimationFrame(loop);
@@ -2517,7 +2538,7 @@ function openShot(i){
         <div class="btns">${sc.footage&&sc.footage.cid===c.cid&&sc.approved?`<span class="pill ok">In use ✓</span>`:`<button class="btn-sm primary" type="button" data-shuse="${esc(c.cid)}">✓ Approve & use</button>`}
         ${c.kind==="photo"?(av.pending?`<span class="pill warn">Animating… 1–3 min</span>`:`<button class="btn-sm" type="button" data-anim="${esc(c.cid)}:${animSecsFor(sc)}">▶ Animate ${animSecsFor(sc)} s (fits the scene) · ${rupees(animSecsFor(sc)*COST.videoPerSec)}</button>`):""}
         ${c.kind==="video"&&!av.pending&&(+c.duration||0)<sceneNeedSecs(sc)?(()=>{ const still=c.from||((sc.candidates||[]).find(x=>x.source==="AI avatar"&&x.kind==="photo")||{}).cid; return still?`<button class="btn-sm" type="button" data-refit="${esc(still)}:${sceneNeedSecs(sc)}">↻ Re-make at ${sceneNeedSecs(sc)} s to last the whole scene · ${rupees(sceneNeedSecs(sc)*COST.videoPerSec)}</button>`:""; })():""}</div></div>`).join("")}</div>
-      <div class="field" style="margin-top:8px"><label class="small" for="shFill">If a moving clip is shorter than the scene</label><select id="shFill" style="width:auto;height:34px;font-size:13px">${[["slow","Slow it down to last the whole scene (free)"],["hold","Freeze on the last frame"],["loop","Repeat it"]].map(([k,t])=>`<option value="${k}" ${(ed(sc).fill||"slow")===k?"selected":""}>${t}</option>`).join("")}</select></div>
+      <div class="field" style="margin-top:8px"><label class="small" for="shFill">If a moving clip is shorter than the scene</label><select id="shFill" style="width:auto;height:34px;font-size:13px">${[["slow","Keep moving to the end: slow down a little, then repeat smoothly (free)"],["hold","Freeze on the last frame"],["loop","Repeat it (hard cut)"]].map(([k,t])=>`<option value="${k}" ${(ed(sc).fill||"slow")===k?"selected":""}>${t}</option>`).join("")}</select></div>
       <p class="hint">Animation keeps the face and place, adds natural movement and props in use; the AI's own sound is muted and your voiceover plays. Instagram and YouTube ask you to switch on their “AI-generated” label for realistic AI people.</p></div>`:""}`);
   m.querySelector(".modal-card").classList.add("wide");
   const q=s=>m.querySelector(s);
