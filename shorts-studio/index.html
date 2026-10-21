@@ -277,6 +277,10 @@ div.look{cursor:default}
 .gatelist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .gaterow{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface);border-radius:10px;padding:8px 10px}
 .scene.flash{outline:3px solid var(--accent);outline-offset:2px}
+.stepwrap{display:flex;align-items:center;gap:6px}.stepwrap input[type=range]{flex:1;min-width:0}
+.stepbtn{width:30px;height:30px;flex:0 0 30px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:800;font-size:16px;cursor:pointer;line-height:1}
+.stepbtn:active{background:var(--accent);color:var(--accent-ink)}
+.verbar{position:fixed;left:50%;transform:translateX(-50%);top:12px;z-index:90;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:12px;display:flex;gap:10px;align-items:center;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.3)}
 .layoutsec{border:2px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:14px;padding:10px 12px;margin-bottom:14px;background:color-mix(in srgb,var(--accent) 5%,var(--surface))}
 .layoutsec summary{cursor:pointer;font-weight:800;font-family:var(--display);font-size:16px}
 .laygrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
@@ -332,6 +336,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
+const BUILD = "20261021023543";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -1311,12 +1316,13 @@ function bindTextPanel(host, i){
     const k=el.dataset.tp, ev=el.type==="range"||el.type==="color"||el.type==="text"?"input":"change";
     el.addEventListener(ev,()=>{ let v=el.type==="checkbox"?el.checked:el.type==="range"?+el.value:el.value;
       e[k]=v; const off=host.querySelector(`[data-tpoff="${k}"]`); if(off&&el.type==="color") off.checked=false;
-      const o=el.parentElement.querySelector("output"); if(o) o.textContent=(+v).toFixed(2); changed(/Font$/.test(k)); });
+      const o=(el.closest(".rng")||el.parentElement).querySelector("output"); if(o) o.textContent=(+v).toFixed(2); changed(/Font$/.test(k)); });
   });
   host.querySelectorAll("[data-tpoff]").forEach(cb=>cb.addEventListener("change",()=>{ const k=cb.dataset.tpoff; if(cb.checked) e[k]=""; else { const c=host.querySelector(`input[type=color][data-tp="${k}"]`); e[k]=c?c.value:""; } changed(false); }));
   host.querySelectorAll("[data-tppos]").forEach(b=>b.onclick=()=>{ e.titlePos=b.dataset.tppos; e.titleY=null; e.titleX=null; changed(false); });
   host.querySelector("[data-tpreset]").onclick=()=>{ e.titleY=null; e.titleX=null; e.cardY=null; e.titlePos="top"; changed(false); };
   host.querySelector("[data-tpall]").onclick=()=>{ const keys=["titleSize","titleFont","titleColor","titleBg","titlePos","titleX","titleY","cardSize","cardFont","cardColor","cardY"]; S.job.scenes.forEach(o=>{ if(o===sc) return; const oe=ed(o); keys.forEach(k=>oe[k]=e[k]); }); changed(true); toast("Applied to every scene"); };
+  addStepButtons(host);
   enableTextDrag(cv, ()=>sc, (sync)=>{ if(sync){ return; } redraw(); }, ()=>{ changed(false); });
   drawLayout(i,cv);
 }
@@ -1367,7 +1373,7 @@ function layoutSectionHtml(){
 }
 function renderLayoutSec(){
   const h=$("#layoutHost"); if(!h||!S.job) return; h.innerHTML=layoutSectionHtml();
-  const box=$("#layoutSec"); box.addEventListener("toggle",()=>store.set("layoutOpen",box.open));
+  const box=$("#layoutSec"); box.addEventListener("toggle",()=>store.set("layoutOpen",box.open)); addStepButtons(box);
   const fields=LAYOUT_GROUPS.flatMap(g=>g[1]).map(styleFieldByKey).filter(Boolean);
   bindStyleControls(box, fields, async(k)=>{ saveLocal(); if(/Font$/.test(k)) await loadStyleFonts(); if(R.prepared) drawFrame(R.scrub||0); else drawPoster(); });
   $("#layScene").onchange=e=>{ LAYOUT.main=+e.target.value; if(R.prepared){ const s=R.prepared.scenes[LAYOUT.main]; if(s) scrubTo(Math.min(s.t0+Math.min(1.2,s.dur/2),R.prepared.total-0.01)); } else drawPoster(); };
@@ -1729,7 +1735,7 @@ function bindStyleControls(box, fields, onChange){
     el.addEventListener(ev,()=>{
       let v = el.type==="checkbox" ? el.checked : el.type==="range" ? +el.value : el.value;
       if(f.rawType==="colorNone"){ const off=box.querySelector(`[data-skoff="${f.key}"]`); if(off) off.checked=false; }
-      f.set(v); const o=el.parentElement.querySelector("output"); if(o) o.textContent=(+v).toFixed(f.step>=1?0:2);
+      f.set(v); const o=(el.closest(".rng")||el.parentElement).querySelector("output"); if(o) o.textContent=(+v).toFixed(f.step>=1?0:2);
       onChange(f.key);
     });
   });
@@ -3258,7 +3264,31 @@ function mountDirector(){
   document.querySelectorAll('.aihost[data-key="director"]').forEach(h=>mountChat(h,"director",directorDef()));
 }
 
+// ---------------------------------------------------------------- new-version check (GitHub Pages caches pages for up to 10 minutes)
+async function checkVersion(){
+  try{ const t=await (await fetch(location.pathname+"?vc="+Date.now(),{cache:"no-store"})).text(); const m=t.match(/const BUILD = "(\d+)"/);
+    if(m && m[1]!==BUILD && !$("#verBar")){ const b=document.createElement("div"); b.id="verBar"; b.className="verbar"; b.innerHTML=`A newer version of Shorts Studio is ready. <button class="btn-sm primary" type="button" id="verGo">Update now</button>`; document.body.appendChild(b);
+      $("#verGo").onclick=async()=>{ try{ if(S.job && SAVE.dirty) await saveNow(); }catch(e){} location.replace(location.pathname+"?v="+m[1]+location.hash); }; } }catch(e){}
+}
+setInterval(checkVersion, 180000); document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") checkVersion(); });
+// − / + buttons beside every slider in a box, for small steps
+function addStepButtons(box){
+  if(!box) return;
+  box.querySelectorAll('input[type=range]').forEach(r=>{
+    if(r.dataset.steps) return; r.dataset.steps=1;
+    const wrap=document.createElement("div"); wrap.className="stepwrap"; r.parentNode.insertBefore(wrap,r);
+    const mk=(sign,label)=>{ const b=document.createElement("button"); b.type="button"; b.className="stepbtn"; b.textContent=label; b.setAttribute("aria-label",(sign<0?"Decrease ":"Increase ")+(r.closest(".rng")?.querySelector("label")?.firstChild?.textContent||"value").trim());
+      let timer=null; const step=()=>{ const st=+r.step||0.01, v=Math.max(+r.min,Math.min(+r.max, Math.round((+r.value+sign*st)/st)*st)); if(v!==+r.value){ r.value=v.toFixed(4); r.dispatchEvent(new Event("input",{bubbles:true})); r.dispatchEvent(new Event("change",{bubbles:true})); } };
+      b.addEventListener("click",step);
+      b.addEventListener("pointerdown",()=>{ timer=setTimeout(function rep(){ step(); timer=setTimeout(rep,90); },450); });
+      ["pointerup","pointerleave","pointercancel"].forEach(ev=>b.addEventListener(ev,()=>{ clearTimeout(timer); timer=null; }));
+      return b; };
+    wrap.appendChild(mk(-1,"−")); wrap.appendChild(r); wrap.appendChild(mk(1,"+"));
+  });
+}
+
 boot();
+checkVersion();
 </script>
 </body>
 </html>
