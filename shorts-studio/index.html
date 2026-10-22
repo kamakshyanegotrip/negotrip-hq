@@ -144,6 +144,8 @@ img.thumb{display:block;object-fit:cover;width:100%;aspect-ratio:9/16;height:aut
 .stage.wide{aspect-ratio:16/9;max-width:640px}
 .render.wide{grid-template-columns:1fr}.render.wide>div:last-child{order:-1}.render.wide .stage{position:relative!important;top:auto!important}
 .tpcv.wide{aspect-ratio:16/9}
+#talkPanel{border:1.5px solid var(--line,#ddd);border-radius:12px;padding:12px 14px;margin:0 0 14px;background:var(--surface-2,#faf7f2)}
+#langBar .on{border-color:var(--accent,#A8321E);box-shadow:inset 0 0 0 1px var(--accent,#A8321E)}
 #widePanel{border:1.5px solid var(--line,#ddd);border-radius:12px;padding:12px 14px;margin:0 0 14px;background:var(--surface-2,#faf7f2)}
 .wrow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line,#eee)}
 .wrow img,.wrow .ph{width:96px;aspect-ratio:16/9;object-fit:cover;border-radius:6px;background:#000;display:block}
@@ -345,7 +347,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261022061514";
+const BUILD = "20261022070756";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -585,6 +587,7 @@ function renderJob(){
         <div class="muted small">${esc(j._name?j.title:"")}${j._name?" · ":""}Planned length about ${total}s · ${j.scenes.length} scenes</div></div>
       <div class="btns"><span class="pill" id="saveState"></span><button class="btn-sm" id="saveBtn">💾 Save</button><span class="pill num" id="readyPill"></span><a class="btn" href="#make" id="toMake">Make the video ↓</a></div>
       <div class="fmtsw fmtmini" role="group" aria-label="Video size" data-fmthost="top"></div>
+      <div class="fmtsw fmtmini" role="group" aria-label="Language version" id="langBar"></div>
     </div>
     <div class="notice small" id="conflictBox" hidden></div>
     <div class="director"><div class="small muted" style="margin:12px 0 6px"><b style="color:var(--accent)">✦ AI director</b> · tell the AI what you want changed anywhere in the video: script, scenes, order, footage, framing, looks, titles, captions, voice, language, music, caption for posting. It proposes the exact changes; you apply them.</div><div class="aihost" data-key="director"></div></div>
@@ -618,6 +621,7 @@ function renderJob(){
     <div class="notice" id="gateNote" hidden></div>
     <div class="fmtsw" role="group" aria-label="Video size" id="fmtSw" data-fmthost="make"></div>
     <div id="widePanel" hidden></div>
+    <div id="talkPanel" hidden></div>
     <div class="render">
       <div>
         <div id="layoutHost"></div>
@@ -997,13 +1001,134 @@ async function pollWide(scId){
   } finally { WIDE_POLL.delete(scId); }
 }
 function resumeWidePolls(){ if(!S.job) return; S.job.scenes.forEach(sc=>{ if(sc.wide&&sc.wide.pending&&sc.wide.pending.operation) pollWide(sc.id); }); }
+// ---------------------------------------------------------------- speaking influencers: lip-sync + language versions
+function hashStr(t){ let h=5381; t=String(t); for(let i=0;i<t.length;i++) h=((h<<5)+h+t.charCodeAt(i))|0; return (h>>>0).toString(36); }
+function speaksHere(sc){ return !!(sc && !sc.card && sc.footage && sc.footage.source==="AI avatar" && sc.avatar && sc.avatar.speak!==false && String(sc.narration||"").trim() && !sc.talkOff); }
+function talkBase(sc){ const w=wideFoot(sc); if(w) return { cid:w.cid, drive_id:w.drive_id, dur:+(sc.wide&&sc.wide.duration)||0, still:sc.wide&&sc.wide.still_drive_id };
+  const f=sc.footage||{}, still=f.from&&(sc.candidates||[]).find(c=>c.cid===f.from&&c.drive_id); return { cid:f.cid, drive_id:f.drive_id, dur:+f.duration||0, still:still?still.drive_id:"" }; }
+function talkKey(sc){ const b=talkBase(sc); return [scriptLang(), isWide()?"w":"s", b.cid, hashStr(String(sc.narration||"").trim()+"|"+(sceneVoice(sc)||VC().voice)+"|"+voiceStyle(sc))].join("|"); }
+function talkOf(sc){ return sc && sc.talks && sc.talks[talkKey(sc)]; }
+function talkFoot(sc){ if(!speaksHere(sc)) return null; const t=talkOf(sc); if(!t||!t.drive_id||t.pending) return null; return { cid:"talk:"+t.drive_id, kind:"video", drive_id:t.drive_id, source:"AI avatar" }; }
+function talkSpeechSecs(sc){ const words=String(sc.narration||"").trim().split(/\s+/).length; return Math.max(2, Math.min(60, words/2.4+0.6)); }
+function talkPlan(sc, speechSecs){ const b=talkBase(sc), need=(speechSecs||talkSpeechSecs(sc))+0.15;
+  const mode = b.drive_id && b.dur>=2 && b.dur<=10.5 && b.dur>=need-0.2 ? "sync" : "avatar";
+  const cost = mode==="sync" ? Math.ceil(Math.max(2,b.dur)/5)*5*COST.lipPerSec : Math.ceil(need)*COST.avatarPerSec; return { mode, cost, need }; }
+async function voiceWavB64(buf, lead){
+  const rate=24000, len=Math.ceil((buf.duration+lead)*rate);
+  const oc=new OfflineAudioContext(1, len, rate); const src=oc.createBufferSource(); src.buffer=buf; src.connect(oc.destination); src.start(lead);
+  const out=await oc.startRendering(); const ch=out.getChannelData(0); const pcm=new Uint8Array(ch.length*2), dv=new DataView(pcm.buffer);
+  for(let i=0;i<ch.length;i++){ const v=Math.max(-1,Math.min(1,ch[i])); dv.setInt16(i*2, v<0?v*32768:v*32767, true); }
+  const bytes=new Uint8Array(pcmToWav(pcm,rate)); let bin=""; for(let i=0;i<bytes.length;i+=32768) bin+=String.fromCharCode.apply(null, bytes.subarray(i,i+32768));
+  return { mime:"audio/wav", data:btoa(bin), secs:out.duration };
+}
+const TALK_BUSY=new Set();
+async function lipsyncScene(i, quiet){
+  const sc=S.job.scenes[i]; if(!speaksHere(sc)||TALK_BUSY.has(sc.id)) return; const key=talkKey(sc); TALK_BUSY.add(sc.id); renderTalkPanel();
+  try{
+    const buf=await getVoice(String(sc.narration).trim(), sc); const audio=await voiceWavB64(buf, 0.12);
+    const plan=talkPlan(sc, audio.secs), b=talkBase(sc), av=sc.avatar||{};
+    const body={ mode:plan.mode, audio:{mime:audio.mime,data:audio.data}, seconds:Math.ceil(audio.secs) };
+    if(plan.mode==="sync") body.video_drive_id=b.drive_id;
+    else { body.image = b.still ? await toJpegB64(await driveUrl(b.still),1280,0.92) : await frameFull(await driveUrl(b.drive_id)); body.image={mime:body.image.mime,data:body.image.data};
+      body.prompt=`A real person talking naturally to the camera like a friendly travel vlogger${av.action?", "+av.action:""}; natural head movement, blinking and small hand gestures; keep the face, clothes and place exactly as in the photo.`; }
+    const r=await api("lipsync", body); if(!r||!r.ok||!r.operation) throw new Error((r&&r.error)||"Couldn't start the lip-sync");
+    sc.talks=sc.talks||{}; sc.talks[key]={ pending:{operation:r.operation, seconds:Math.ceil(audio.secs)}, mode:plan.mode, lang:scriptLang(), at:Date.now() };
+    saveLocal(); pollTalk(sc.id, key); if(!quiet) toast(`Scene ${i+1}: making the influencer speak the line (1–4 min). You can keep working.`);
+  }catch(e){ sc.talks=sc.talks||{}; sc.talks[key]={ error:e.message, lang:scriptLang(), at:Date.now() }; saveLocal(); toast(`Scene ${i+1}: ${e.message}`); }
+  finally{ TALK_BUSY.delete(sc.id); renderTalkPanel(); }
+}
+const TALK_POLL=new Set();
+async function pollTalk(scId, key){
+  const pk=scId+"|"+key; if(TALK_POLL.has(pk)) return; TALK_POLL.add(pk); const jobId=S.jobId;
+  try{ for(let k=0;k<90;k++){ await sleep(10000);
+    if(S.jobId!==jobId||!S.job) return; const sc=S.job.scenes.find(s=>s.id===scId), t=sc&&sc.talks&&sc.talks[key]; if(!t||!t.pending) return;
+    let r; try{ r=await api("shot_status",{operation:t.pending.operation}); }catch(e){ continue; }
+    if(!r||!r.done) continue;
+    const secs=t.pending.seconds; t.pending=null;
+    if(r.ok&&r.drive_id){ t.drive_id=r.drive_id; t.error=""; const sp=aiSpend(); sp.lip_inr=(sp.lip_inr||0)+(t.mode==="sync"?Math.ceil(Math.max(2,secs)/5)*5*COST.lipPerSec:secs*COST.avatarPerSec); invalidate(); toast(`Scene ${S.job.scenes.indexOf(sc)+1}: the influencer now speaks the line. Press 1 · Prepare preview.`); }
+    else { t.error=(r&&r.error)||"lip-sync failed"; toast(`Scene ${S.job.scenes.indexOf(sc)+1}: lip-sync failed: ${t.error}`); }
+    saveLocal(); updateCredits(); renderTalkPanel(); return; }
+  } finally { TALK_POLL.delete(pk); }
+}
+function resumeTalkPolls(){ if(!S.job) return; S.job.scenes.forEach(sc=>{ Object.entries(sc.talks||{}).forEach(([k,t])=>{ if(t&&t.pending&&t.pending.operation) pollTalk(sc.id,k); }); }); }
+function talkTodo(){ return S.job.scenes.map((sc,i)=>({sc,i})).filter(x=>speaksHere(x.sc) && !(talkOf(x.sc)&&(talkOf(x.sc).drive_id||talkOf(x.sc).pending)) && !TALK_BUSY.has(x.sc.id)); }
+function renderTalkPanel(){
+  const h=$("#talkPanel"); if(!h||!S.job) return;
+  const rows=S.job.scenes.map((sc,i)=>({sc,i})).filter(x=>!x.sc.card && x.sc.footage && x.sc.footage.source==="AI avatar" && x.sc.avatar && x.sc.avatar.speak!==false && String(x.sc.narration||"").trim());
+  if(!rows.length){ h.hidden=true; h.innerHTML=""; return; }
+  const todo=talkTodo(), total=todo.reduce((a,x)=>a+talkPlan(x.sc).cost,0);
+  const st=(x)=>{ if(x.sc.talkOff) return `<span class="pill">Off: voice-over only</span>`; if(TALK_BUSY.has(x.sc.id)) return `<span class="pill warn">Preparing the voice…</span>`; const t=talkOf(x.sc);
+    if(t&&t.pending) return `<span class="pill warn">👄 Lip-syncing… (1–4 min)</span>`; if(t&&t.drive_id) return `<span class="pill ok">👄 Speaks the line ✓</span>`; if(t&&t.error) return `<span class="pill bad">Failed: ${esc(String(t.error).slice(0,90))}</span>`;
+    return `<span class="pill warn">Not lip-synced in ${esc(langName(scriptLang()))}${isWide()?" (16:9)":""} yet</span>`; };
+  h.hidden=false;
+  h.innerHTML=`<b>👄 Influencers speaking the narration</b>
+    <p class="small muted" style="margin:4px 0 8px">The AI moves the influencer's lips to the exact voice-over, so they look like they are really saying it. Clips at least as long as the line keep their acting and only the mouth is re-synced (about ₹${COST.lipPerSec}/s); longer lines are re-made as a talking shot from the same picture (about ₹${COST.avatarPerSec}/s). Each language and each size (9:16 / 16:9) is synced separately.</p>
+    ${todo.length?`<div class="btns" style="margin-bottom:6px"><button class="btn-sm primary" id="talkAll" type="button">👄 Lip-sync ${todo.length} scene${todo.length===1?"":"s"} in ${esc(langName(scriptLang()))} (≈ ₹${Math.round(total)})</button></div>`:""}
+    ${rows.map(x=>{ const p=talkPlan(x.sc), t=talkOf(x.sc); return `<div class="wrow" style="grid-template-columns:minmax(0,1fr)"><div><div class="small"><b>Scene ${x.i+1}</b> · ${esc(avNames(x.sc.avatar).join(", ")||"influencer")} ${st(x)}</div>
+      <div class="small muted" style="margin:2px 0 4px">“${esc(String(x.sc.narration).slice(0,110))}${String(x.sc.narration).length>110?"…":""}”</div>
+      <div class="btns"><label class="small chk"><input type="checkbox" data-talkon="${x.i}" ${x.sc.talkOff?"":"checked"}> Speaks this line</label>
+      ${!x.sc.talkOff&&!TALK_BUSY.has(x.sc.id)&&!(t&&t.pending)?`<button class="btn-sm" type="button" data-talk="${x.i}">👄 ${t&&t.drive_id?"Re-do":"Lip-sync"} (${p.mode==="sync"?"mouth only":"talking shot"}, ≈ ₹${Math.round(p.cost)})</button>`:""}</div></div></div>`; }).join("")}`;
+  h.querySelectorAll("[data-talkon]").forEach(cb=>cb.onchange=()=>{ const sc=S.job.scenes[+cb.dataset.talkon]; sc.talkOff=!cb.checked; saveLocal(); invalidate(); renderTalkPanel(); });
+  h.querySelectorAll("[data-talk]").forEach(b=>b.onclick=()=>{ const i=+b.dataset.talk, sc=S.job.scenes[i]; if(!confirm(`Make the influencer in scene ${i+1} speak the line in ${langName(scriptLang())}? This uses AI lip-sync (fal.ai) and costs about ₹${Math.round(talkPlan(sc).cost)}.`)) return; lipsyncScene(i); });
+  const all=h.querySelector("#talkAll"); if(all) all.onclick=()=>{ if(!confirm(`Lip-sync ${todo.length} scene${todo.length===1?"":"s"} in ${langName(scriptLang())}? This uses AI lip-sync (fal.ai) and costs about ₹${Math.round(total)}.`)) return; lipsyncAll(); };
+}
+async function lipsyncAll(){ const todo=talkTodo(); for(const x of todo) await lipsyncScene(x.i, true); if(todo.length) toast(`Lip-sync started for ${todo.length} scene${todo.length===1?"":"s"} (1–4 min each). You can keep working.`); }
+
+// ---- language versions (dubbing)
+function langSnapshot(){ const j=S.job; return { at:Date.now(), vc:Object.assign({},VC()), cta:Object.assign({},j.cta||{}), caption:captionText(),
+  scenes:Object.fromEntries(j.scenes.map(sc=>[sc.id,{ narration:sc.narration||"", on_screen_text:sc.on_screen_text||"", cardText:ed(sc).cardText||"" }])) }; }
+function langApply(v){ const j=S.job; j.scenes.forEach(sc=>{ const x=v.scenes[sc.id]; if(!x) return; sc.narration=x.narration; sc.on_screen_text=x.on_screen_text; ed(sc).cardText=x.cardText||""; });
+  j.cta=Object.assign({},j.cta||{},v.cta||{}); if(v.caption!=null) j._caption=v.caption; }
+function renderLangBar(){
+  const h=$("#langBar"); if(!h||!S.job) return; const j=S.job, cur=scriptLang(); j.versions=j.versions||{};
+  const codes=[...new Set([cur, ...Object.keys(j.versions)])];
+  h.innerHTML=`<span class="small muted" style="align-self:center">Language:</span>`+codes.map(c=>`<button type="button" class="${c===cur?"on":""}" data-lv="${esc(c)}" aria-pressed="${c===cur}">${esc(langName(c))}${c===cur?" ✓":""}</button>`).join("")+`<button type="button" id="dubBtn">🌐 Dub into another language…</button>`;
+  h.querySelectorAll("[data-lv]").forEach(b=>b.onclick=()=>switchLang(b.dataset.lv));
+  h.querySelector("#dubBtn").onclick=openDub;
+}
+function switchLang(code){
+  const j=S.job, cur=scriptLang(); if(code===cur) return; j.versions=j.versions||{};
+  const v=j.versions[code]; if(!v){ openDub(code); return; }
+  j.versions[cur]=langSnapshot(); langApply(v); j.scriptLang=code; setVC(Object.assign({}, v.vc||{}, {lang:code}));
+  saveLocal(); invalidate(); renderScenes(); renderLangBar(); renderTalkPanel(); const c=$("#caption"); if(c) c.value=captionText();
+  toast(`Switched to the ${langName(code)} version. Press 1 · Prepare preview.`);
+}
+function openDub(pre){
+  const j=S.job, cur=scriptLang(), speak=S.job.scenes.filter(sc=>speaksHere(sc));
+  const opts=ALL_LANGS.filter(l=>l[0]!==cur).map(l=>`<option value="${esc(l[0])}" ${l[0]===pre?"selected":""}>${esc(l[1])}</option>`).join("");
+  const m=modal(`<div class="mhead"><b>🌐 Dub this video</b><button class="btn-sm" data-close>Close</button></div>
+    <p class="small muted">Translates the voice-over, titles, title cards, call-to-action and caption, and re-voices everything in the <b>same voice</b>. Footage, music and layout stay the same. The ${esc(langName(cur))} version is kept: switch back any time from <b>Language</b> at the top.</p>
+    <div class="field"><label for="dubLang">Dub into</label><select id="dubLang">${opts}</select></div>
+    ${speak.length?`<label class="small chk"><input type="checkbox" id="dubLip" checked> Make the influencer${speak.length===1?"":"s"} speak the new language (lip-sync ${speak.length} scene${speak.length===1?"":"s"}, ≈ ₹<span id="dubCost">${Math.round(speak.reduce((a,sc)=>a+talkPlan(sc).cost,0))}</span>)</label>`:""}
+    <p class="small muted">Translation and new voice-over cost only a few rupees.</p>
+    <div class="btns"><button class="btn" id="dubGo" type="button">🌐 Dub now</button></div><div class="small" id="dubMsg"></div>`);
+  m.querySelector("[data-close]").onclick=closeModal;
+  m.querySelector("#dubGo").onclick=async()=>{ const code=m.querySelector("#dubLang").value, lip=!!(m.querySelector("#dubLip")&&m.querySelector("#dubLip").checked); const b=m.querySelector("#dubGo"); b.disabled=true; b.textContent="Translating…";
+    try{ await dubTo(code); closeModal(); if(lip) await lipsyncAll(); else toast(`Dubbed into ${langName(code)}. Press 1 · Prepare preview.`); }
+    catch(e){ b.disabled=false; b.textContent="🌐 Dub now"; m.querySelector("#dubMsg").textContent=e.message; } };
+}
+async function dubTo(code){
+  const j=S.job, cur=scriptLang(); if(code===cur) return; j.versions=j.versions||{};
+  if(j.versions[code]){ switchLang(code); return; }
+  const snap=langSnapshot();
+  const texts=[{k:"caption",text:snap.caption}, ...j.scenes.filter(sc=>ed(sc).cardText).map(sc=>({k:"card:"+sc.id,text:ed(sc).cardText}))];
+  const r=await api("translate",{ language:langName(code), accent:"", keyword:(j.request||{}).cta_keyword||(j.cta||{}).keyword||"", brief:`${j.title||""}. ${(j.research||{}).one_line||""}`,
+    scenes:j.scenes.map((s,i)=>({n:i+1, seconds:s.duration_sec, narration:s.narration, on_screen_text:s.on_screen_text})), texts });
+  if(!r||r.error) throw new Error((r&&r.error)||"Translation failed");
+  j.versions[cur]=snap;
+  (r.scenes||[]).forEach(t=>{ const s=j.scenes[t.n-1]; if(s){ if(t.narration) s.narration=t.narration; if(t.on_screen_text) s.on_screen_text=t.on_screen_text; } });
+  if(r.cta_on_screen) j.cta=Object.assign({},j.cta||{},{on_screen:r.cta_on_screen});
+  (r.texts||[]).forEach(t=>{ if(t.k==="caption") j._caption=t.text; else if(t.k.startsWith("card:")){ const s=j.scenes.find(x=>x.id===t.k.slice(5)); if(s) ed(s).cardText=t.text; } });
+  j.scriptLang=code; setVC({lang:code, accent:""}); j.versions[code]=langSnapshot();
+  saveLocal(); invalidate(); renderScenes(); renderLangBar(); renderTalkPanel(); const c=$("#caption"); if(c) c.value=captionText();
+}
 function renderFmtSw(){
   const w=isWide();
   document.querySelectorAll("[data-fmthost]").forEach(h=>{ h.innerHTML=(h.dataset.fmthost==="top"?`<span class="small muted" style="align-self:center">Video size:</span>`:"")+`<button type="button" data-fmt="short" aria-pressed="${!w}"><i style="width:10px;height:18px"></i><span>Shorts / Reels<br><small>vertical 9:16</small></span></button><button type="button" data-fmt="wide" aria-pressed="${w}"><i style="width:22px;height:12px"></i><span>YouTube video<br><small>wide 16:9</small></span></button>`;
   h.querySelectorAll("[data-fmt]").forEach(b=>b.onclick=()=>setFormat(b.dataset.fmt)); });
 }
 function applyFormat(){
-  renderWidePanel(); const w=isWide(), cv=$("#cv"); if(cv){ const [W,H]=fmtDims(store.get("quality","1080")); if(!R.prepared||R.prepared.W!==W||R.prepared.H!==H){ cv.width=W; cv.height=H; } const st0=cv.parentElement; if(st0) st0.classList.toggle("wide",w); }
+  renderWidePanel(); if(typeof renderTalkPanel==='function') renderTalkPanel(); const w=isWide(), cv=$("#cv"); if(cv){ const [W,H]=fmtDims(store.get("quality","1080")); if(!R.prepared||R.prepared.W!==W||R.prepared.H!==H){ cv.width=W; cv.height=H; } const st0=cv.parentElement; if(st0) st0.classList.toggle("wide",w); }
   const r=document.querySelector("#make .render"); if(r) r.classList.toggle("wide",w);
   const q=$("#rQual"); if(q){ const [a,b]=w?["1920 × 1080","1280 × 720"]:["1080 × 1920","720 × 1280"]; q.options[0].text=a+" (best)"; q.options[1].text=b+" (faster)"; }
   document.querySelectorAll(".tpcv").forEach(c=>{ c.classList.toggle("wide",w); c.width=w?640:360; c.height=w?360:640; const i=+c.dataset.tpcv; if(S.job&&S.job.scenes[i]) drawLayout(i,c); });
@@ -1015,7 +1140,7 @@ function setFormat(f){
   toast(f==="wide" ? "YouTube size (16:9). Press 1 · Prepare preview to rebuild." : "Shorts size (9:16). Press 1 · Prepare preview to rebuild.");
 }
 async function initRenderPanel(){
-  renderFmtSw(); applyFormat();
+  renderFmtSw(); applyFormat(); renderLangBar(); renderTalkPanel();
   $("#rVoice").addEventListener("change",e=>{ store.set("voice",e.target.value); invalidate(); });
   $("#rQual").addEventListener("change",e=>{ store.set("quality",e.target.value); invalidate(); applyFormat(); drawPoster(); });
   $("#hearVoice").addEventListener("click",hearVoice);
@@ -1153,13 +1278,13 @@ async function prepare(){
     // footage, three at a time
     const urls=new Array(n); let nextClip=0, gotClips=0;
     async function clipWorker(){ while(nextClip<n){ const i=nextClip++;
-      try{ const wf=wideFoot(job.scenes[i]); urls[i]=await getClipUrl(wf?{footage:wf}:job.scenes[i], quality); }catch(e){ urls[i]=null; toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
+      try{ const tf=talkFoot(job.scenes[i]), wf=tf||wideFoot(job.scenes[i]); urls[i]=await getClipUrl(wf?{footage:wf}:job.scenes[i], quality); }catch(e){ urls[i]=null; toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
       gotClips++; tick(`Footage ${gotClips}/${n} downloaded`); } }
     await Promise.all([clipWorker(),clipWorker(),clipWorker()]);
     await waitVisible();
     for(let i=0;i<n;i++){
       const sc=job.scenes[i], a=ASSETS.get(sc.id)||{};
-      a.video=null; a.image=null; a.video2=null; const wf=wideFoot(sc); a.wideUsed=!!wf; const kindNow=wf?wf.kind:(sc.footage&&sc.footage.kind);
+      a.video=null; a.image=null; a.video2=null; const tf=talkFoot(sc), wf=tf||wideFoot(sc); a.wideUsed=!!wf; a.talkUsed=!!tf; const kindNow=wf?wf.kind:(sc.footage&&sc.footage.kind);
       if(urls[i]) try{ if(kindNow==="photo") a.image=await loadImg(urls[i]); else a.video=await loadVideo(urls[i]); }catch(e){ toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
       if(!wf && sc.footage && !sc.footage.width){ const m=a.video||a.image; if(m){ sc.footage.width=m.videoWidth||m.naturalWidth; sc.footage.height=m.videoHeight||m.naturalHeight; } }
       if(a.video && sc.footage && (sc.footage.source==="AI avatar"||wf)){ try{ a.video2=await loadVideo(urls[i]); a.video2.loop=false; }catch(e){ a.video2=null; } }
@@ -1200,9 +1325,10 @@ function relayout(){
     s.representative = !sc.card && (s.video||s.image) && sc.match==="representative" && sc.footage && sc.footage.source!=="Your library";
     if(s.video){ const len=s.video.duration||0; const def = len > s.dur*e.speed+1.5 ? Math.min(1, len-s.dur*e.speed) : 0; s.offset = e.start!=null ? Math.max(0,Math.min(e.start, Math.max(0,len-0.2))) : def; s.clipLen=len; }
     s.spd=e.speed; s.hold=!!(s.video && sc.footage && (sc.footage.source==="AI avatar"||a.wideUsed));
-    if(s.video && s.hold && e.fill==="loop") s.hold=false;
+    if(s.video && s.hold && e.fill==="loop" && !a.talkUsed) s.hold=false;
+    if(s.video && a.talkUsed){ s.hold=true; s.spd=1; s.offset=0; s.clipLen=s.video.duration||0; s.talk=true; }
     if(s.video){ s.video.loop=!s.hold; if(s.hold){ const len=s.clipLen||s.video.duration||0; if(e.start==null) s.offset=0; const fm=e.fill||"slow";
-      if((fm==="slow"||fm==="smooth") && e.speed===1 && len>0.5 && len-s.offset < s.dur){
+      if(!s.talk && (fm==="slow"||fm==="smooth") && e.speed===1 && len>0.5 && len-s.offset < s.dur){
         if(fm==="slow") s.spd=Math.max(0.2,(len-s.offset-0.05)/s.dur);
         else { s.spd=Math.max(0.6,(len-s.offset)/s.dur); const pass=(len-s.offset-0.05)/s.spd; if(pass+0.05 < s.dur && s.video2 && pass>1.2) s.xloop={pass, X:Math.min(0.7,pass/3)}; } } } }
     else s.offset=0;
@@ -2359,7 +2485,7 @@ async function getVideo(id){ try{ return await idb.get("video."+id); }catch(e){ 
 // ================================================================ CAST: avatars from photos, AI influencers, their voices, and AI shots of them inside a scene
 // Cheapest path: one still image per shot (~₹3, Nano Banana) and, only if wanted, a 4–8 s animation of it (Veo Lite, ~₹4.4/s).
 // The person's own (cloned or designed) voice speaks the narration through the normal voiceover.
-const COST = { image:3, videoPerSec:8.8 }; // Gemini Omni Flash 720p ≈ $0.10/s
+const COST = { image:3, videoPerSec:8.8, lipPerSec:1.25, avatarPerSec:5 }; // Gemini Omni Flash 720p ≈ $0.10/s
 const CAST = { list:[], loaded:false, err:"", polling:new Set(), tmp:{} };
 const VOICE_KIND = { studio:"Studio voice", cloned:"Cloned voice", designed:"Designed voice" };
 const FEMALE_V = ["Kore","Aoede","Leda","Zephyr","Callirrhoe","Autonoe","Despina","Erinome","Laomedeia","Achernar","Gacrux","Pulcherrima","Vindemiatrix","Sulafat"];
@@ -2414,7 +2540,7 @@ async function lazyLooks(root){
     try{ const u=await driveUrl(id); el.outerHTML=`<img class="${esc(el.className)}" src="${esc(u)}" alt="">`; }catch(e){} });
 }
 function aiSpend(){ const j=S.job; if(!j) return {images:0,video_sec:0}; return j.ai_spend || (j.ai_spend={images:0,video_sec:0}); }
-function spendText(){ const s=aiSpend(); const inr=s.images*COST.image+s.video_sec*COST.videoPerSec; return inr ? `AI people in this video so far: about ${rupees(inr)} (${s.images} image${s.images===1?"":"s"}${s.video_sec?`, ${s.video_sec} s of animation`:""})` : "Nothing spent on AI people in this video yet."; }
+function spendText(){ const s=aiSpend(); const inr=s.images*COST.image+s.video_sec*COST.videoPerSec+(s.lip_inr||0); return inr ? `AI people in this video so far: about ${rupees(inr)} (${s.images} image${s.images===1?"":"s"}${s.video_sec?`, ${s.video_sec} s of animation`:""}${s.lip_inr?`, ${rupees(s.lip_inr)} lip-sync`:""})` : "Nothing spent on AI people in this video yet."; }
 
 // ---------------------------------------------------------------- cast list (left column)
 async function loadCast(){
@@ -2867,7 +2993,7 @@ async function pollShot(scId){
     toast("The animation is taking unusually long. It will be checked again when you reopen this video.");
   } finally { CAST.polling.delete(scId); }
 }
-function resumeShotPolls(){ if(!S.job) return; resumeWidePolls(); S.job.scenes.forEach(sc=>{ if(sc.avatar && sc.avatar.pending){ if(sc.avatar.pending.operation) pollShot(sc.id); else sc.avatar.pending=null; } }); }
+function resumeShotPolls(){ if(!S.job) return; resumeWidePolls(); resumeTalkPolls(); S.job.scenes.forEach(sc=>{ if(sc.avatar && sc.avatar.pending){ if(sc.avatar.pending.operation) pollShot(sc.id); else sc.avatar.pending=null; } }); }
 
 
 // ---------------------------------------------------------------- presenter: choose exactly which clips the presenter appears in
