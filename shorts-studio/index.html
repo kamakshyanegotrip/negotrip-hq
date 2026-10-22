@@ -144,7 +144,9 @@ img.thumb{display:block;object-fit:cover;width:100%;aspect-ratio:9/16;height:aut
 /* Studio: preview on the left (sticky), all adjustments in tabs on the right */
 .studio{display:grid;grid-template-columns:auto minmax(0,1fr);gap:20px;align-items:start}
 .stleft{position:sticky;top:8px;width:min(320px,calc((100vh - 250px)*9/16));min-width:170px}
-.studio.wide .stleft{width:min(560px,46vw,calc((100vh - 250px)*16/9))}
+.studio.wide{grid-template-columns:minmax(0,1.15fr) minmax(300px,1fr)}
+.studio.wide .stleft{width:auto;min-width:0}
+.stright{min-width:0}
 .stleft .stage{max-width:none;width:100%}
 .studio.wide .stleft .stage{aspect-ratio:16/9}
 .ststrip{display:flex;gap:5px;overflow-x:auto;padding:6px 0 2px}
@@ -367,7 +369,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261022142619";
+const BUILD = "20261022144340";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
