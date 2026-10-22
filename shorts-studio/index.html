@@ -141,6 +141,26 @@ img.thumb{display:block;object-fit:cover;width:100%;aspect-ratio:9/16;height:aut
 @media (max-width:760px){.render{grid-template-columns:1fr}}
 .stage{position:relative;width:100%;max-width:300px;aspect-ratio:9/16;border-radius:14px;overflow:hidden;background:#000;margin-inline:auto}
 .stage canvas,.stage video{width:100%;height:100%;display:block}
+/* Studio: preview on the left (sticky), all adjustments in tabs on the right */
+.studio{display:grid;grid-template-columns:auto minmax(0,1fr);gap:20px;align-items:start}
+.stleft{position:sticky;top:8px;width:min(320px,calc((100vh - 250px)*9/16));min-width:170px}
+.studio.wide .stleft{width:min(560px,46vw,calc((100vh - 250px)*16/9))}
+.stleft .stage{max-width:none;width:100%}
+.studio.wide .stleft .stage{aspect-ratio:16/9}
+.ststrip{display:flex;gap:5px;overflow-x:auto;padding:6px 0 2px}
+.ststrip button{flex:0 0 auto;width:30px;border:2px solid transparent;border-radius:7px;padding:0;background:none;cursor:pointer;font-size:10px;color:inherit;text-align:center}
+.ststrip button.on{border-color:var(--accent)}
+.ststrip img,.ststrip .ph{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:5px;display:block;background:#222;font-size:0}
+.stleft .scrubrow{display:block}.stleft .scrubrow input{width:100%}.stleft .scrubrow .log{display:block;margin:0}
+.stbtns{margin:6px 0;gap:6px}.stbtns .btn{padding:0 10px;min-height:38px;font-size:14px}
+.sttabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1.5px solid var(--line,#ddd);margin:0 0 12px;position:sticky;top:0;background:var(--surface,#fff);z-index:3;padding-top:4px}
+.sttabs button{border:0;background:none;padding:8px 9px;font:inherit;font-weight:600;font-size:14px;color:var(--ink-2,#666);border-bottom:3px solid transparent;cursor:pointer;margin-bottom:-1.5px}
+.sttabs button[aria-selected=true]{color:var(--accent,#A8321E);border-bottom-color:var(--accent,#A8321E)}
+.stpane[hidden]{display:none}
+.stscene{display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+.stgrp{border:1px solid var(--line,#e5e5e5);border-radius:10px;padding:10px 12px;margin:0 0 10px}
+.stgrp>b{display:block;margin-bottom:6px}
+@media (max-width:860px){.studio{grid-template-columns:1fr}.stleft,.studio.wide .stleft{position:static;width:100%;max-width:420px;margin:0 auto}}
 .stage.wide{aspect-ratio:16/9;max-width:640px}
 .render.wide{grid-template-columns:1fr}.render.wide>div:last-child{order:-1}.render.wide .stage{position:relative!important;top:auto!important}
 .tpcv.wide{aspect-ratio:16/9}
@@ -347,7 +367,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261022125033";
+const BUILD = "20261022142619";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -586,11 +606,9 @@ function renderJob(){
         <input class="namein" id="jobName" maxlength="120" value="${esc(j._name||"")}" placeholder="${esc(j.title||"Name this video")}" aria-label="Video name">
         <div class="muted small">${esc(j._name?j.title:"")}${j._name?" · ":""}Planned length about ${total}s · ${j.scenes.length} scenes</div></div>
       <div class="btns"><span class="pill" id="saveState"></span><button class="btn-sm" id="saveBtn">💾 Save</button><span class="pill num" id="readyPill"></span><a class="btn" href="#make" id="toMake">Make the video ↓</a></div>
-      <div class="fmtsw fmtmini" role="group" aria-label="Video size" data-fmthost="top"></div>
-      <div class="fmtsw fmtmini" role="group" aria-label="Language version" id="langBar"></div>
     </div>
     <div class="notice small" id="conflictBox" hidden></div>
-    <div class="director"><div class="small muted" style="margin:12px 0 6px"><b style="color:var(--accent)">✦ AI director</b> · tell the AI what you want changed anywhere in the video: script, scenes, order, footage, framing, looks, titles, captions, voice, language, music, caption for posting. It proposes the exact changes; you apply them.</div><div class="aihost" data-key="director"></div></div>
+    <p class="small muted" style="margin:10px 0 0">Choose and approve footage below, then adjust everything (size, language, framing, text, voice, look and AI changes) in <a href="#make">🎬 Studio</a>.</p>
   </div>
 
   <div class="card">
@@ -603,7 +621,6 @@ function renderJob(){
   <div class="card">
     <h2>Scenes & footage</h2>
     <p class="small muted" style="margin:-4px 0 12px">Every scene needs footage that a person has <b>approved</b> before the video can be made, whatever its source. Tap a clip to preview it, then <b>Approve</b> or <b>Reject</b>. Approvals and rejections are remembered for that place, so next time the right footage comes first. Your own uploads go into the team library.</p>
-    <div class="aihost" data-key="script"></div>
     <div class="presbar" id="presBar"></div>
     <div class="scenes" id="sceneList"></div>
   </div>
@@ -613,38 +630,51 @@ function renderJob(){
     <textarea id="caption" style="min-height:110px">${esc(captionText())}</textarea>
     <div class="field" style="margin-top:10px"><label class="small muted" for="credits">Footage and music credits (added when you copy the caption)</label><textarea id="credits" readonly style="min-height:56px;font-size:13px"></textarea></div>
     <div class="btns" style="margin-top:8px"><button class="btn-sm" id="copyCap">Copy caption + credits</button><button class="btn-sm" id="dlJob">Download job file (for the PC renderer)</button></div>
-    <div class="aihost" data-key="caption"></div>
   </div>
 
   <div class="card" id="make">
-    <h2>Make the video</h2>
+    <h2>🎬 Studio <span class="small muted" style="font-weight:400">preview on the left · every adjustment on the right</span></h2>
     <div class="notice" id="gateNote" hidden></div>
-    <div class="fmtsw" role="group" aria-label="Video size" id="fmtSw" data-fmthost="make"></div>
-    <div id="widePanel" hidden></div>
-    <div id="talkPanel" hidden></div>
-    <div class="render">
-      <div>
-        <div id="layoutHost"></div>
-        <div class="row2">
-          <div class="field"><label for="vOpen">Voice & language</label><input type="hidden" id="rVoice" value="${esc(VC().voice||"Kore")}"><div class="vsum" id="voiceSummary">${voiceSummary()}</div></div>
-          <div class="field"><label for="rQual">Quality</label><select id="rQual"><option value="1080" ${store.get("quality","1080")==="1080"?"selected":""}>${isWide()?"1920 × 1080":"1080 × 1920"} (best)</option><option value="720" ${store.get("quality","1080")==="720"?"selected":""}>${isWide()?"1280 × 720":"720 × 1280"} (faster)</option></select></div>
-        </div>
-        <div class="btns" style="margin:-4px 0 12px"><button class="btn-sm primary" id="vOpen">🎙 Voice, style & language</button><button class="btn-sm" id="hearVoice">▶ Hear this voice</button></div>
-        <div class="field" id="narrHost"></div>
-        <div>
-          <div class="field"><label for="rLogo">Logo <span class="muted">(PNG)</span></label><input type="file" id="rLogo" accept="image/png,image/svg+xml,image/webp"><div class="hint" id="logoHint"></div></div>
-          <div class="field"><label for="rMusic">Music <span class="muted">(free library or your own file)</span></label><div class="btns" style="margin-bottom:6px"><button class="btn-sm primary" id="findMusic" type="button">🎵 Find free music</button></div><input type="file" id="rMusic" accept="audio/*"><div class="hint" id="musicHint"></div></div>
-        </div>
-        <div class="btns"><button class="btn" id="prepBtn">1 · Prepare preview</button><button class="btn ghost" id="playBtn" disabled>▶ Play preview</button><button class="btn" id="recBtn" disabled>2 · Record &amp; download MP4</button><button class="btn ghost" id="dlLast" hidden>⬇ Download video</button><button class="btn ghost" id="ytLast" hidden>▶ Publish to YouTube</button></div>
-        <p class="small muted" id="dlHelp" style="margin:6px 0 0">Steps: <b>1 · Prepare preview</b> → (edit) → <b>2 · Record &amp; download MP4</b>. Recording plays the whole video once; the MP4 then saves to your Downloads folder and a download button appears here.</p>
+    <div class="studio">
+      <div class="stleft">
+        <div class="stage"><canvas id="cv" width="1080" height="1920" aria-label="Video preview"></canvas></div>
+        <div class="btns stbtns"><button class="btn" id="prepBtn">1 · Prepare</button><button class="btn ghost" id="playBtn" disabled>▶ Play</button><button class="btn" id="recBtn" disabled>2 · Record MP4</button><button class="btn ghost" id="dlLast" hidden>⬇ Download</button><button class="btn ghost" id="ytLast" hidden>▶ YouTube</button></div>
+        <div id="stScrub"></div>
+        <div id="stStrip" class="ststrip" role="list" aria-label="Scenes"></div>
         <div class="bar"><i id="barFill"></i></div>
         <div class="log" id="log">Prepare downloads the approved footage and creates the voiceover (about a minute).</div>
-        <div class="notice small">Recording plays the video once in real time. Keep this tab open and visible until it finishes. Works best in Chrome or Edge on a computer.</div>
         <div id="resultBox"></div>
-        <div id="editor" class="editor" hidden></div>
       </div>
-      <div><div class="stage" style="position:sticky;top:12px"><canvas id="cv" width="1080" height="1920" aria-label="Video preview"></canvas></div></div>
+      <div class="stright">
+        <div class="sttabs" role="tablist">${STTABS.map(([k,t])=>`<button type="button" role="tab" data-st="${k}" aria-selected="${stTab()===k}">${t}</button>`).join("")}</div>
+        <div class="stpane" data-pane="video" ${stTab()==="video"?"":"hidden"}>
+          <div class="stgrp"><b class="small">Size</b><div class="fmtsw" role="group" aria-label="Video size" id="fmtSw" data-fmthost="make"></div>
+            <div class="field"><label for="rQual">Quality</label><select id="rQual"><option value="1080" ${store.get("quality","1080")==="1080"?"selected":""}>${isWide()?"1920 × 1080":"1080 × 1920"} (best)</option><option value="720" ${store.get("quality","1080")==="720"?"selected":""}>${isWide()?"1280 × 720":"720 × 1280"} (faster)</option></select></div></div>
+          <div id="widePanel" hidden></div>
+          <div class="stgrp"><b class="small">Language</b><div class="fmtsw fmtmini" role="group" aria-label="Language version" id="langBar"></div></div>
+          <div class="stgrp"><b class="small">Logo &amp; music</b>
+            <div class="field"><label for="rLogo">Logo <span class="muted">(PNG)</span></label><input type="file" id="rLogo" accept="image/png,image/svg+xml,image/webp"><div class="hint" id="logoHint"></div></div>
+            <div class="field"><label for="rMusic">Music <span class="muted">(free library or your own file)</span></label><div class="btns" style="margin-bottom:6px"><button class="btn-sm primary" id="findMusic" type="button">🎵 Find free music</button></div><input type="file" id="rMusic" accept="audio/*"><div class="hint" id="musicHint"></div></div></div>
+          <p class="small muted">Steps: <b>1 · Prepare</b> → adjust → <b>2 · Record MP4</b>. Recording plays the whole video once in real time; keep this tab visible. Works best in Chrome or Edge on a computer.</p>
+        </div>
+        <div class="stpane" data-pane="clip" ${stTab()==="clip"?"":"hidden"}><div id="clipHost"></div></div>
+        <div class="stpane" data-pane="text" ${stTab()==="text"?"":"hidden"}><div id="textHost"></div><div id="layoutHost"></div></div>
+        <div class="stpane" data-pane="voice" ${stTab()==="voice"?"":"hidden"}>
+          <div class="stgrp"><b class="small">Voice &amp; language of the voice-over</b><input type="hidden" id="rVoice" value="${esc(VC().voice||"Kore")}"><div class="vsum" id="voiceSummary">${voiceSummary()}</div>
+            <div class="btns" style="margin-top:6px"><button class="btn-sm primary" id="vOpen">🎙 Voice, style &amp; language</button><button class="btn-sm" id="hearVoice">▶ Hear this voice</button></div>
+            <div class="field" id="narrHost" style="margin-top:8px"></div></div>
+          <div id="voiceHost"></div>
+          <div id="talkPanel" hidden></div>
+        </div>
+        <div class="stpane" data-pane="look" ${stTab()==="look"?"":"hidden"}><div id="lookHost"></div></div>
+        <div class="stpane" data-pane="ai" ${stTab()==="ai"?"":"hidden"}>
+          <p class="small muted" style="margin:0 0 6px"><b style="color:var(--accent)">✦ One AI for everything</b> · tell it what to change anywhere: script, scenes, order, footage, framing and zoom, titles, captions, voice, language, size, music, introduction/conclusion, caption for posting. It shows the exact changes; you apply them. It never spends money by itself.</p>
+          <div class="director"><div class="aihost" data-key="director"></div></div>
+          <div id="aiFit"></div><div id="fitReport"></div>
+        </div>
+      </div>
     </div>
+    <div id="editor" hidden></div>
   </div>`;
   renderScenes();
   bindJob();
@@ -652,16 +682,14 @@ function renderJob(){
   $("#saveBtn").onclick=()=>{ SAVE.dirty=true; saveNow(); };
   $("#jobName").addEventListener("change",e=>renameJob(e.target.value.trim()));
   renderSaveState();
-  mountChat(document.querySelector('.aihost[data-key="script"]'), "script", scriptDef());
   if(!S.chats.director) S.chats.director={open:true,msgs:[],draft:""};
   mountDirector();
-  mountChat(document.querySelector('.aihost[data-key="caption"]'), "caption", captionDef());
-  renderNarr(); resumeShotPolls();
+  bindStudioTabs(); renderEditor(); renderNarr(); resumeShotPolls();
   if(!S.chats.bookends) S.chats.bookends={open:true,msgs:[],draft:""};
-  renderBookends(); mountChat(document.querySelector('.aihost[data-key="bookends"]'), "bookends", bookendsDef());
+  renderBookends();
   applyPendingPresenter(); renderPresBar();
-  if(!$("#aiFab")){ const f=document.createElement("button"); f.id="aiFab"; f.className="aifab"; f.type="button"; f.textContent="✦ AI: change the whole video"; document.body.appendChild(f);
-    f.onclick=()=>{ const h=document.querySelector('.aihost[data-key="director"]'); if(!h) return; S.chats.director=S.chats.director||{msgs:[],draft:""}; S.chats.director.open=true; mountDirector(); h.scrollIntoView({behavior:"smooth",block:"center"}); setTimeout(()=>{ const t=h.querySelector("textarea"); if(t) t.focus(); },400); }; }
+  if(!$("#aiFab")){ const f=document.createElement("button"); f.id="aiFab"; f.className="aifab"; f.type="button"; f.textContent="✦ AI"; f.title="Ask the AI to change anything in the video"; f.setAttribute("aria-label","Ask the AI to change anything in the video"); document.body.appendChild(f);
+    f.onclick=()=>{ setStTab("ai"); S.chats.director=S.chats.director||{msgs:[],draft:""}; S.chats.director.open=true; mountDirector(); $("#make").scrollIntoView({behavior:"smooth",block:"start"}); setTimeout(()=>{ const t=document.querySelector('.aihost[data-key="director"] textarea'); if(t) t.focus(); },500); }; }
   $("#aiFab").hidden=false;
 }
 
@@ -697,9 +725,8 @@ function sceneHtml(sc,i){
         ${c&&!sc.card?`<button class="btn-sm" data-reject="${i}">✗ Reject</button>`:""}
         <button class="btn-sm" data-toggle="${i}">${open?"Hide choices":`Choose footage (${cands.length})`}</button>
         <button class="btn-sm" data-people="${i}">👤 People in this scene</button>
-        <button class="btn-sm" data-text="${i}" aria-expanded="${!!TEXT_OPEN[i]}">Aa Text, size &amp; position</button>
+        <button class="btn-sm" data-adjust="${i}">🎬 Adjust in Studio</button>
       </div>
-      ${TEXT_OPEN[i]?`<div data-tphost="${i}">${textPanelHtml(i)}</div>`:""}
       ${open?`<div class="picker">
         <div class="alts">${shown.map((x,k)=>`<button class="alt" data-preview="${i}:${esc(x.cid)}" aria-pressed="${!!(c&&c.cid===x.cid)}" title="${esc(x.desc||"")}">${thumbHtml(x,"")}<span class="tag">${x.verified?"✓ ":""}${esc(SRC_SHORT[x.source]||x.source)}${x.kind==="photo"?" · photo":""}</span>${x.ai_ok===false?'<span class="tag dim">not checked</span>':""}</button>`).join("")||'<span class="small muted">No choices yet. Search or upload below.</span>'}</div>
         <form class="searchrow" data-search="${i}"><input type="text" value="${esc(sc._q||sc.location||"")}" aria-label="Search footage" placeholder="Search all sources, e.g. Konark wheel"><button class="btn-sm">Search</button></form>
@@ -710,7 +737,6 @@ function sceneHtml(sc,i){
         <div class="field"><label class="small muted" for="o${i}">On-screen text</label><input type="text" id="o${i}" data-edit="${i}:on_screen_text" value="${esc(sc.on_screen_text)}" maxlength="40"></div>
         <div class="field"><label class="small muted" for="d${i}">Seconds</label><input type="number" id="d${i}" data-edit="${i}:duration_sec" value="${esc(sc.duration_sec)}" min="2" max="20"></div>
       </div>
-      <div class="aihost" data-key="scene:${esc(sc.id)}" data-i="${i}"></div>
     </div>
   </div>`;
 }
@@ -719,8 +745,7 @@ function bindScenes(){
   w.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("input",()=>{ const [i,f]=el.dataset.edit.split(":"); S.job.scenes[i][f] = f==="duration_sec" ? Math.max(2,Math.min(20,+el.value||3)) : el.value; if(R.prepared && f!=="narration"){ relayout(); scrubTo(R.scrub||0); } else invalidate(); saveLocal(); }));
   w.querySelectorAll("[data-scmv]").forEach(b=>b.addEventListener("click",()=>{ const [i,d]=b.dataset.scmv.split(":").map(Number); moveScene(i,i+d); }));
   w.querySelectorAll("[data-rm]").forEach(b=>b.addEventListener("click",()=>removeScene(+b.dataset.rm)));
-  w.querySelectorAll("[data-text]").forEach(b=>b.addEventListener("click",()=>{ const i=+b.dataset.text; TEXT_OPEN[i]=!TEXT_OPEN[i]; renderScenes(); }));
-  w.querySelectorAll("[data-tphost]").forEach(h=>bindTextPanel(h,+h.dataset.tphost));
+  w.querySelectorAll("[data-adjust]").forEach(b=>b.addEventListener("click",()=>{ selScene(+b.dataset.adjust, "clip"); $("#make").scrollIntoView({behavior:"smooth",block:"start"}); }));
   let dragFrom=null;
   w.querySelectorAll(".scene[draggable]").forEach(el=>{
     el.addEventListener("dragstart",ev=>{ const t=ev.target; if(t.closest&&t.closest("input,textarea,select,canvas")){ ev.preventDefault(); return; } dragFrom=+el.dataset.scene; el.classList.add("dragging"); ev.dataTransfer.effectAllowed="move"; try{ ev.dataTransfer.setData("text/plain",String(dragFrom)); }catch(e){} });
@@ -737,7 +762,6 @@ function bindScenes(){
   w.querySelectorAll("[data-card]").forEach(b=>b.addEventListener("click",()=>{ const sc=S.job.scenes[+b.dataset.card]; sc.card=true; invalidate(); saveLocal(); renderScenes(); updateCredits(); }));
   w.querySelectorAll("[data-preview]").forEach(b=>b.addEventListener("click",()=>{ const [i,cid]=[b.dataset.preview.slice(0,b.dataset.preview.indexOf(":")), b.dataset.preview.slice(b.dataset.preview.indexOf(":")+1)]; const sc=S.job.scenes[+i]; const c = cid==="sel" ? sc.footage : sc.candidates.find(x=>x.cid===cid); if(c) openPreview(+i, c); }));
   w.querySelectorAll("[data-search]").forEach(f=>f.addEventListener("submit",e=>{ e.preventDefault(); searchMore(+f.dataset.search, f.querySelector("input").value, f.querySelector("button")); }));
-  w.querySelectorAll(".aihost[data-i]").forEach(h=>mountChat(h, h.dataset.key, sceneDef(+h.dataset.i)));
   w.querySelectorAll("[data-upload]").forEach(inp=>inp.addEventListener("change",()=>{ const f=inp.files[0]; inp.value=""; if(f) openUpload(+inp.dataset.upload, f); }));
 }
 function updateGate(){
@@ -911,7 +935,7 @@ function saveBlob(blob, name){ const a=document.createElement("a"); a.href=URL.c
 // Everything below runs in the browser: voice from Gemini (via n8n), clips via the n8n proxy,
 // drawn on a canvas and recorded with MediaRecorder.
 const R = { prepared:null, ctx:null, playing:false, stopFn:null, logo:null, music:null };
-function invalidate(){ if(R.prepared){ R.prepared=null; const ed=$("#editor"); if(ed){ ed.hidden=true; ed.innerHTML=""; } const pb=$("#playBtn"), rb=$("#recBtn"); if(pb) pb.disabled=true; if(rb) rb.disabled=true; setLog("Changes made. Prepare the preview again."); } }
+function invalidate(){ if(R.prepared){ R.prepared=null; setTimeout(()=>{ if(!R.prepared){ renderEditor(); drawPoster(); } },0); const pb=$("#playBtn"), rb=$("#recBtn"); if(pb) pb.disabled=true; if(rb) rb.disabled=true; setLog("Changes made. Prepare the preview again."); } }
 function setLog(t){ const l=$("#log"); if(l) l.textContent=t; }
 function setBar(f){ const b=$("#barFill"); if(b) b.style.width=Math.round(Math.max(0,Math.min(1,f))*100)+"%"; }
 
@@ -1129,7 +1153,7 @@ function renderFmtSw(){
 }
 function applyFormat(){
   renderWidePanel(); if(typeof renderTalkPanel==='function') renderTalkPanel(); const w=isWide(), cv=$("#cv"); if(cv){ const [W,H]=fmtDims(store.get("quality","1080")); if(!R.prepared||R.prepared.W!==W||R.prepared.H!==H){ cv.width=W; cv.height=H; } const st0=cv.parentElement; if(st0) st0.classList.toggle("wide",w); }
-  const r=document.querySelector("#make .render"); if(r) r.classList.toggle("wide",w);
+  const r=document.querySelector("#make .studio"); if(r) r.classList.toggle("wide",w); setTimeout(()=>{ if(typeof renderEditor==="function") renderEditor(); },0);
   const q=$("#rQual"); if(q){ const [a,b]=w?["1920 × 1080","1280 × 720"]:["1080 × 1920","720 × 1280"]; q.options[0].text=a+" (best)"; q.options[1].text=b+" (faster)"; }
   document.querySelectorAll(".tpcv").forEach(c=>{ c.classList.toggle("wide",w); c.width=w?640:360; c.height=w?360:640; const i=+c.dataset.tpcv; if(S.job&&S.job.scenes[i]) drawLayout(i,c); });
 }
@@ -1363,118 +1387,138 @@ async function scrubTo(t){
   if(prev && prev.video && s.e.transition==="fade" && t-s.t0<0.5){ await seek(prev.video, clipTimeAt(prev, prev.t1-0.01)); }
   drawFrame(t);
   const lab=$("#scrubLab"); if(lab) lab.textContent=`${t.toFixed(1)}s / ${P.total.toFixed(1)}s · scene ${P.scenes.indexOf(s)+1}`;
+  const sr=$("#scrub"); if(sr && document.activeElement!==sr) sr.value=t.toFixed(2);
+  const si=P.scenes.indexOf(s); if(!R.playing && si>=0 && si!==S.editSel){ S.editSel=si; LAYOUT.main=si; renderEditor(); }
   const sl=$("#scrub"); if(sl && document.activeElement!==sl) sl.value=t;
 }
 
 // ---------------------------------------------------------------- editor UI (step 2)
+const STTABS=[["video","⚙ Video"],["clip","🎬 Clip"],["text","Aa Text"],["voice","🎙 Voice"],["look","🎨 Look"],["ai","✦ AI"]];
+function stTab(){ return S.stTab||"video"; }
+function setStTab(t){ S.stTab=t; document.querySelectorAll("#make .sttabs [data-st]").forEach(b=>b.setAttribute("aria-selected", String(b.dataset.st===t))); document.querySelectorAll("#make .stpane").forEach(p=>p.hidden=p.dataset.pane!==t); if(t==="ai") mountDirector(); }
+function bindStudioTabs(){ document.querySelectorAll("#make .sttabs [data-st]").forEach(b=>b.onclick=()=>setStTab(b.dataset.st)); }
+function selScene(i, tab){
+  if(!S.job) return; S.editSel=Math.max(0,Math.min(S.job.scenes.length-1,i)); LAYOUT.main=S.editSel;
+  renderEditor(); if(tab) setStTab(tab);
+  const P=R.prepared; if(P){ const s=P.scenes[S.editSel]; if(s) scrubTo(Math.min(s.t0+Math.min(1.2,s.dur/2),P.total-0.01)); } else drawPoster();
+}
+function studioRedraw(layout){ saveLocal(); if(R.prepared){ if(layout) relayout(); scrubTo(R.scrub||0); } else drawPoster(); }
+function srcDims(sc){ const a=ASSETS.get(sc.id)||{}, m=a.video||a.image||(sc.footage&&LAYOUT.img.get(sc.footage.cid)); if(m&&(m.videoWidth||m.naturalWidth)) return [m.videoWidth||m.naturalWidth, m.videoHeight||m.naturalHeight];
+  const f=sc.footage||{}; return f.width&&f.height?[+f.width,+f.height]:null; }
+function frameDims(){ const [W,H]=fmtDims(store.get("quality","1080")); return [W,H]; }
 function renderEditor(){
-  const box=$("#editor"); if(!box || !R.prepared) return;
-  box.hidden=false;
-  const P=R.prepared, G=st();
-  if(S.editSel==null || S.editSel>=S.job.scenes.length) S.editSel=0;
-  const i=S.editSel, sc=S.job.scenes[i], e=ed(sc), a=ASSETS.get(sc.id)||{}, ps=P.scenes[i];
+  if(!S.job || !$("#clipHost")) return;
+  const n=S.job.scenes.length; if(S.editSel==null||S.editSel>=n) S.editSel=0; const i=S.editSel; LAYOUT.main=i;
+  const sc=S.job.scenes[i], e=ed(sc), a=ASSETS.get(sc.id)||{}, P=R.prepared, ps=P&&P.scenes[i], G=st();
   const rng=(id,label,min,max,step,val,fmt)=>`<div class="rng"><label for="${id}">${label} <output id="${id}o">${fmt?fmt(val):val}</output></label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
-  box.innerHTML = `
-    <h3 style="margin-top:6px">2 · Edit</h3>
-    <div class="scrubrow"><input type="range" id="scrub" min="0" max="${P.total.toFixed(2)}" step="0.05" value="${(R.scrub||0).toFixed(2)}" aria-label="Preview position"><span class="log" id="scrubLab"></span></div>
-    <div class="strip" role="list">${S.job.scenes.map((x,k)=>{ const c=x.card?null:x.footage; return `<div class="chip2 ${k===i?"on":""}" role="listitem"><button class="pick" data-sel="${k}" aria-pressed="${k===i}">${thumbHtml(c,"")}<span>${k+1} · ${(P.scenes[k]?P.scenes[k].dur:0).toFixed(1)}s</span></button><div class="mv"><button data-mv="${k}:-1" ${k===0?"disabled":""} aria-label="Move scene ${k+1} earlier">◀</button><button data-mv="${k}:1" ${k===S.job.scenes.length-1?"disabled":""} aria-label="Move scene ${k+1} later">▶</button></div></div>`; }).join("")}</div>
-    <div class="fitbar"><button class="btn-sm primary" id="fitAll" ${S.fitBusy?"disabled":""}>✦ AI: fit visuals to the text (all scenes)</button><button class="btn-sm" id="fitOne" ${S.fitBusy?"disabled":""}>Check scene ${i+1} only</button><span class="small muted" id="fitStatus">${esc(S.fitStatus||"Looks at the real frames of each clip and fixes framing, timing and looks to match the narration and title.")}</span></div>
-    <div class="aihost" data-key="director"></div>
-    <div id="fitReport"></div>
-    <div class="tabs2" role="tablist">${["Clip","Look & text","Audio","Text, colours & brand"].map((t,k)=>`<button role="tab" data-tab="${k}" aria-selected="${(S.editTab||0)===k}">${t}</button>`).join("")}</div>
-    <div class="insp">
-      <div data-pane="0" ${(S.editTab||0)===0?"":"hidden"}>
-        <p class="small muted" style="margin:0 0 8px">Scene ${i+1}: <b>${esc(sc.location||"")}</b> · ${sc.card?"title card":(sc.footage&&sc.footage.kind==="photo"?"photo":"video")}</p>
-        ${a.video?rng("eStart","Start from (s)",0,Math.max(0.1,(a.video.duration||1)-0.2).toFixed(1),0.1,(ps&&ps.offset||0).toFixed(1)):""}
-        ${a.video?`<div class="field"><label for="eSpeed">Speed</label><select id="eSpeed">${[0.5,0.75,1,1.25,1.5,2].map(v=>`<option value="${v}" ${e.speed==v?"selected":""}>${v}×${v<1?" (slow-mo)":""}</option>`).join("")}</select></div>`:""}
-        ${rng("eZoom","Zoom",1,2,0.05,e.zoom,v=>(+v).toFixed(2)+"×")}
-        ${rng("ePanX","Move left / right",-1,1,0.05,e.panX)}
-        ${rng("ePanY","Move up / down",-1,1,0.05,e.panY)}
-        <div class="field"><label for="eMotion">Camera motion</label><select id="eMotion">${[["auto","Auto (gentle push)"],["in","Slow zoom in"],["out","Slow zoom out"],["left","Pan left"],["right","Pan right"],["none","Still"]].map(([v,l])=>`<option value="${v}" ${e.motion===v?"selected":""}>${l}</option>`).join("")}</select></div>
-        <div class="row2"><div class="field"><label for="eDur">Length (s)</label><input type="number" id="eDur" min="2" max="20" step="0.5" value="${esc(sc.duration_sec)}"></div>
-        <div class="field"><label for="eTrans">Transition in</label><select id="eTrans">${[["dip","Dip to black"],["fade","Cross-fade"],["flash","White flash"],["cut","Hard cut"]].map(([v,l])=>`<option value="${v}" ${e.transition===v?"selected":""}>${l}</option>`).join("")}</select></div></div>
-        <div class="btns"><button class="btn-sm" id="eReset">Reset this scene</button><button class="btn-sm" id="ePlayScene">▶ Play this scene</button></div>
-      </div>
-      <div data-pane="1" ${(S.editTab||0)===1?"":"hidden"}>
-        ${rng("eBright","Brightness",0.6,1.4,0.02,e.bright)}
-        ${rng("eContrast","Contrast",0.6,1.5,0.02,e.contrast)}
-        ${rng("eSat","Colour",0,1.8,0.05,e.sat)}
-        ${rng("eWarm","Warmth (cool ↔ warm)",-1,1,0.05,e.warmth)}
-        <div class="field"><label for="eTitle">Title text</label><input type="text" id="eTitle" maxlength="40" value="${esc(sc.on_screen_text||"")}"></div>
-        <div class="row2"><div class="field"><label for="eTitlePos">Title position</label><select id="eTitlePos">${[["top","Top"],["middle","Middle"],["bottom","Lower third"]].map(([v,l])=>`<option value="${v}" ${e.titlePos===v?"selected":""}>${l}</option>`).join("")}</select></div>
-        ${rng("eTitleSize","Title size",0.6,1.5,0.05,e.titleSize,v=>Math.round(v*100)+"%")}</div>
-        <label class="small"><input type="checkbox" id="eHideTitle" ${e.hideTitle?"checked":""}> Hide title in this scene</label>
-        <div class="sgrid" id="sceneStyle" style="margin-top:10px">${sceneStyleFields(i).map(f=>styleControl(f,"ss_")).join("")}</div>
-      </div>
-      <div data-pane="2" ${(S.editTab||0)===2?"":"hidden"}>
-        <p class="small muted" style="margin:0 0 8px">Voice for scene ${i+1}: ${a.myVoice?"<b>your recording</b>":"AI voice"}</p>
-        ${rng("eVol","This scene's voice volume",0,2,0.05,e.voiceVol,v=>Math.round(v*100)+"%")}
-        <div class="field"><label for="eDelivery">How to say this line <span class="muted">(optional)</span></label><div class="searchrow"><input type="text" id="eDelivery" maxlength="120" value="${esc(e.delivery||"")}" placeholder="e.g. whispered with awe, excited, slower" ${a.myVoice?"disabled":""}><button class="btn-sm" id="eDeliveryGo" ${a.myVoice?"disabled":""}>Apply</button></div></div>
-        <div class="btns" style="margin-bottom:10px"><button class="btn-sm" id="eRegen" ${a.myVoice?"disabled":""}>↻ New AI take of this line</button><button class="btn-sm" id="eMic">${S.micRec?"■ Stop recording":"🎙 Record my own voice"}</button>${a.myVoice?`<button class="btn-sm" id="eUseAI">Use AI voice again</button>`:""}<button class="btn-sm" id="eHearLine">▶ Hear line</button></div>
-        <p class="small muted">Recording uses your microphone. Read the narration shown in the scene card; the scene will stretch to fit your take.</p>
-        <hr class="sep">
-        ${rng("gVoice","All voices",0,2,0.05,G.voiceVol,v=>Math.round(v*100)+"%")}
-        ${rng("gMusic","Music",0,1,0.02,G.musicVol,v=>Math.round(v*100)+"%")}
-        ${P.musicBuf?rng("gMusicStart","Music starts from (s into the track)",0,Math.max(0,Math.floor(P.musicBuf.duration-5)),1,G.musicStart||0,v=>fmtDur(+v)):`<p class="small muted" style="margin:0 0 10px">No music yet. <button class="linkish" id="eFindMusic">Find free music</button></p>`}
-        <label class="small" style="margin-right:14px"><input type="checkbox" id="gFadeIn" ${G.fadeIn?"checked":""}> Fade music in</label>
-        <label class="small"><input type="checkbox" id="gFadeOut" ${G.fadeOut?"checked":""}> Fade music out</label>
-      </div>
-      <div data-pane="3" ${(S.editTab||0)===3?"":"hidden"} id="globalStyle">
-        ${(()=>{ const fs=editDef(3,0).fields(); const fm=Object.fromEntries(fs.map(f=>[f.key,f])); return STYLE_SCHEMA.map((g,gi)=>`<details class="sgroup" ${(S.openGroups||{0:1,2:1,3:1})[gi]?"open":""} data-gi="${gi}"><summary>${esc(g.g)}</summary><div class="sgrid">${g.items.map(d=>fm[d[0]]?styleControl(fm[d[0]],"gs_"):"").join("")}</div></details>`).join(""); })()}
-        <div class="btns" style="margin-top:10px"><button class="btn-sm" id="gBrandSave">Save as my default style</button><button class="btn-sm" id="gBrandApply">Use my default style</button><button class="btn-sm" id="gReset">Reset text & colours</button></div>
-      </div>
-      ${(S.editTab||0)<3?`<div class="aihost" id="editChat" data-key="scene:${esc(sc.id)}"></div>`:`<p class="small muted" style="margin:10px 0 0">For changes across the whole video, use the ✦ AI director above.</p>`}
-    </div>`;
+  const head=`<div class="stscene"><button class="btn-sm" type="button" data-stnav="-1" ${i===0?"disabled":""} aria-label="Previous scene">‹ Prev</button><b>Scene ${i+1} of ${n}</b><span class="small muted">${esc(sc.location||"")}${sc.card?" · title card":""}</span><button class="btn-sm" type="button" data-stnav="1" ${i===n-1?"disabled":""} aria-label="Next scene">Next ›</button></div>`;
+  // strip + scrub under the preview
+  $("#stStrip").innerHTML=S.job.scenes.map((x,k)=>`<button type="button" role="listitem" class="${k===i?"on":""}" data-stsel="${k}" aria-pressed="${k===i}" title="Scene ${k+1}: ${esc(x.location||"")}">${thumbHtml(x.card?null:x.footage,"")}${k+1}</button>`).join("");
+  $("#stScrub").innerHTML = P ? `<div class="scrubrow"><input type="range" id="scrub" min="0" max="${P.total.toFixed(2)}" step="0.05" value="${(R.scrub||0).toFixed(2)}" aria-label="Preview position"><span class="log" id="scrubLab"></span></div>`
+    : `<p class="small muted" style="margin:4px 0">Still preview of scene ${i+1}. Press <b>1 · Prepare</b> to play the whole video.</p>`;
+  // ---- CLIP & FRAMING
+  const isVid=!sc.card&&sc.footage&&sc.footage.kind==="video", tall=footTall(sc);
+  $("#clipHost").innerHTML = head + (sc.card ? `<p class="small muted">This scene is a title card, so there is no clip to frame. Pick footage for it in <b>Scenes &amp; footage</b> to show a clip.</p>` : `
+    <div class="stgrp"><b class="small">Framing (zoom &amp; position)</b>
+      ${rng("eZoom","Zoom",0.4,2.5,0.05,e.zoom,v=>(+v).toFixed(2)+"×")}
+      ${rng("ePanX","Move left ↔ right",-1,1,0.05,e.panX)}
+      ${rng("ePanY","Move up ↕ down",-1,1,0.05,e.panY)}
+      <div class="btns"><button class="btn-sm" type="button" data-frame="whole">Show whole clip</button><button class="btn-sm" type="button" data-frame="fill">Fill the frame</button><button class="btn-sm" type="button" data-frame="face">Keep faces (top)</button><button class="btn-sm" type="button" data-frame="reset">Reset framing</button></div>
+      <p class="small muted" style="margin:6px 0 0">Zoom below 1× shows the whole clip on a soft blurred fill, so faces and scenery are never cut. You can also drag the sliders while watching the preview.</p>
+      <div class="field" style="margin-top:8px"><label for="eMotion">Camera motion</label><select id="eMotion">${[["auto","Auto (gentle push)"],["in","Slow zoom in"],["out","Slow zoom out"],["left","Pan left"],["right","Pan right"],["none","Still (no movement)"]].map(([v,l])=>`<option value="${v}" ${e.motion===v?"selected":""}>${l}</option>`).join("")}</select></div>
+    </div>
+    ${isWide()&&tall!==false?`<div class="stgrp"><b class="small">Vertical clip in the 16:9 frame</b>
+      <div class="field"><select id="eWfit">${wideOk(sc)?`<option value="ai" ${(!e.wfit||e.wfit==="ai")?"selected":""}>✦ AI wide version</option>`:`<option value="" ${!e.wfit?"selected":""}>Default (${(S.job.wideFit||"blur")==="fill"?"zoom to fill":"blurred sides"})</option>`}<option value="blur" ${e.wfit==="blur"?"selected":""}>Blurred sides</option><option value="fill" ${e.wfit==="fill"?"selected":""}>Zoom to fill</option></select></div>
+      ${sc.wide&&sc.wide.for===sc.footage.cid&&sc.wide.pending?`<span class="pill warn">✦ animating wide clip…</span>`:`<button class="btn-sm" type="button" id="eWiden">✦ ${wideOk(sc)?"Re-make":"Make"} AI wide version (≈ ₹${Math.round(wideCost(sc))})</button>`}</div>`:""}
+    <div class="stgrp"><b class="small">Timing</b>
+      ${a.video?rng("eStart","Start from (s into the clip)",0,Math.max(0.1,(a.video.duration||1)-0.2).toFixed(1),0.1,(ps&&ps.offset||0).toFixed(1)):""}
+      ${a.video?`<div class="field"><label for="eSpeed">Speed</label><select id="eSpeed">${[0.5,0.75,1,1.25,1.5,2].map(v=>`<option value="${v}" ${e.speed==v?"selected":""}>${v}×${v<1?" (slow-mo)":""}</option>`).join("")}</select></div>`:""}
+      ${isVid?`<div class="field"><label for="eFill">If the clip is shorter than the scene</label><select id="eFill">${[["slow","Slow it down to fit (default)"],["smooth","Repeat with a soft cross-fade"],["hold","Play once, then hold the last frame"],["loop","Loop it"]].map(([v,l])=>`<option value="${v}" ${(e.fill||"slow")===v?"selected":""}>${l}</option>`).join("")}</select></div>`:""}
+      ${!P&&isVid?`<p class="small muted" style="margin:0 0 6px">Start point and speed appear after <b>1 · Prepare</b>.</p>`:""}
+    </div>`) + `
+    <div class="stgrp"><b class="small">Scene</b>
+      <div class="row2"><div class="field"><label for="eDur">Length (s)</label><input type="number" id="eDur" min="2" max="20" step="0.5" value="${esc(sc.duration_sec)}"></div>
+      <div class="field"><label for="eTrans">Transition in</label><select id="eTrans">${[["dip","Dip to black"],["fade","Cross-fade"],["flash","White flash"],["cut","Hard cut"]].map(([v,l])=>`<option value="${v}" ${e.transition===v?"selected":""}>${l}</option>`).join("")}</select></div></div>
+      <div class="btns">${P?`<button class="btn-sm" type="button" id="ePlayScene">▶ Play this scene</button>`:""}<button class="btn-sm" type="button" id="eReset">Reset this scene</button></div></div>`;
+  // ---- TEXT (selected scene) + all-scene layout below
+  $("#textHost").innerHTML = head + `<div data-tphost="${i}">${textPanelHtml(i)}</div>`;
+  // ---- VOICE (selected scene)
+  $("#voiceHost").innerHTML = `<div class="stgrp"><b class="small">Scene ${i+1} line</b>
+    ${!P?`<p class="small muted" style="margin:0">Press <b>1 · Prepare</b> to hear, re-take or record each line.</p>`:`
+      <p class="small muted" style="margin:0 0 8px">${a.myVoice?"Using <b>your recording</b>":"AI voice"} · “${esc(String(sc.narration||"").slice(0,90))}${String(sc.narration||"").length>90?"…":""}”</p>
+      ${rng("eVol","This line's volume",0,2,0.05,e.voiceVol,v=>Math.round(v*100)+"%")}
+      <div class="field"><label for="eDelivery">How to say this line <span class="muted">(optional)</span></label><div class="searchrow"><input type="text" id="eDelivery" maxlength="120" value="${esc(e.delivery||"")}" placeholder="e.g. whispered with awe, excited, slower" ${a.myVoice?"disabled":""}><button class="btn-sm" id="eDeliveryGo" ${a.myVoice?"disabled":""}>Apply</button></div></div>
+      <div class="btns"><button class="btn-sm" id="eRegen" ${a.myVoice?"disabled":""}>↻ New AI take</button><button class="btn-sm" id="eMic">${S.micRec?"■ Stop recording":"🎙 Record my own voice"}</button>${a.myVoice?`<button class="btn-sm" id="eUseAI">Use AI voice again</button>`:""}<button class="btn-sm" id="eHearLine">▶ Hear line</button></div>`}
+    </div>
+    <div class="stgrp"><b class="small">Volumes &amp; music (whole video)</b>
+      ${rng("gVoice","All voices",0,2,0.05,G.voiceVol,v=>Math.round(v*100)+"%")}
+      ${rng("gMusic","Music",0,1,0.02,G.musicVol,v=>Math.round(v*100)+"%")}
+      ${P&&P.musicBuf?rng("gMusicStart","Music starts from (s into the track)",0,Math.max(0,Math.floor(P.musicBuf.duration-5)),1,G.musicStart||0,v=>fmtDur(+v)):""}
+      <label class="small" style="margin-right:14px"><input type="checkbox" id="gFadeIn" ${G.fadeIn?"checked":""}> Fade music in</label>
+      <label class="small"><input type="checkbox" id="gFadeOut" ${G.fadeOut?"checked":""}> Fade music out</label></div>`;
+  // ---- LOOK
+  $("#lookHost").innerHTML = head + `<div class="stgrp"><b class="small">Scene ${i+1} colours</b>
+      ${rng("eBright","Brightness",0.6,1.4,0.02,e.bright)}${rng("eContrast","Contrast",0.6,1.5,0.02,e.contrast)}${rng("eSat","Colour",0,1.8,0.05,e.sat)}${rng("eWarm","Warmth (cool ↔ warm)",-1,1,0.05,e.warmth)}
+      <div class="sgrid" id="sceneStyle" style="margin-top:6px">${sceneStyleFields(i).map(f=>styleControl(f,"ss_")).join("")}</div></div>
+    <div class="stgrp" id="globalStyle"><b class="small">Whole video: fonts, colours, captions, call-to-action, brand</b>
+      ${(()=>{ const fs=editDef(3,0).fields(); const fm=Object.fromEntries(fs.map(f=>[f.key,f])); return STYLE_SCHEMA.map((g,gi)=>`<details class="sgroup" ${(S.openGroups||{})[gi]?"open":""} data-gi="${gi}"><summary>${esc(g.g)}</summary><div class="sgrid">${g.items.map(d=>fm[d[0]]?styleControl(fm[d[0]],"gs_"):"").join("")}</div></details>`).join(""); })()}
+      <div class="btns" style="margin-top:10px"><button class="btn-sm" id="gBrandSave">Save as my default style</button><button class="btn-sm" id="gBrandApply">Use my default style</button><button class="btn-sm" id="gReset">Reset text &amp; colours</button></div></div>`;
+  // ---- AI extras
+  const af=$("#aiFit"); if(af) af.innerHTML = P ? `<div class="fitbar" style="margin-top:10px"><button class="btn-sm primary" id="fitAll" ${S.fitBusy?"disabled":""}>✦ AI: check visuals fit the text (all scenes)</button><button class="btn-sm" id="fitOne" ${S.fitBusy?"disabled":""}>Check scene ${i+1} only</button></div>` : `<p class="small muted" style="margin-top:10px">After <b>1 · Prepare</b>, the AI can also check that every clip matches its line.</p>`;
   bindEditor();
-  const eh=$("#editChat"); if(eh) mountChat(eh, eh.dataset.key, sceneDef(i));
-  renderFitReport();
-  mountDirector();
-  $("#fitAll").onclick=()=>runFit(S.job.scenes.map((_,k)=>k));
-  $("#fitOne").onclick=()=>runFit([S.editSel||0]);
-  scrubTo(R.scrub||0);
+  if(P && typeof renderFitReport==="function") renderFitReport();
+  if(stTab()==="ai") mountDirector();
 }
 function bindEditor(){
-  const box=$("#editor"), i=S.editSel, sc=S.job.scenes[i], e=ed(sc), G=st();
-  const live=(fn,layout)=>()=>{ fn(); saveLocal(); if(layout) relayout(); scrubTo(R.scrub||0); };
-  const bindR=(id,set,fmt)=>{ const el=$("#"+id); if(!el) return; el.addEventListener("input",()=>{ set(+el.value); const o=$("#"+id+"o"); if(o) o.textContent=fmt?fmt(+el.value):el.value; live(()=>{},true)(); }); };
-  $("#scrub").addEventListener("input",ev=>{ R.scrub=+ev.target.value; scrubTo(R.scrub); });
-  box.querySelectorAll("[data-sel]").forEach(b=>b.addEventListener("click",()=>{ S.editSel=+b.dataset.sel; const P=R.prepared; R.scrub=P.scenes[S.editSel].t0+0.3; renderEditor(); }));
-  box.querySelectorAll("[data-mv]").forEach(b=>b.addEventListener("click",()=>{ const [k,d]=b.dataset.mv.split(":").map(Number); const arr=S.job.scenes; const j=k+d; if(j<0||j>=arr.length) return; [arr[k],arr[j]]=[arr[j],arr[k]]; S.editSel=j; saveLocal(); relayout(); renderScenes(); renderEditor(); }));
-  box.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>{ S.editTab=+b.dataset.tab; renderEditor(); }));
+  const i=S.editSel, sc=S.job.scenes[i], e=ed(sc), G=st();
+  const live=(fn,layout)=>()=>{ fn(); studioRedraw(layout); };
+  const bindR=(id,set,fmt)=>{ const el=$("#"+id); if(!el) return; el.addEventListener("input",()=>{ set(+el.value); const o=$("#"+id+"o"); if(o) o.textContent=fmt?fmt(+el.value):el.value; studioRedraw(true); }); };
+  const on=(id,ev,fn)=>{ const el=$("#"+id); if(el) el["on"+ev]=fn; };
+  const sr=$("#scrub"); if(sr) sr.addEventListener("input",ev=>{ R.scrub=+ev.target.value; scrubTo(R.scrub); });
+  document.querySelectorAll("#stStrip [data-stsel]").forEach(b=>b.onclick=()=>selScene(+b.dataset.stsel));
+  document.querySelectorAll("#make [data-stnav]").forEach(b=>b.onclick=()=>selScene(i+(+b.dataset.stnav)));
   // clip
   bindR("eStart",v=>{ e.start=v; });
-  const sp=$("#eSpeed"); if(sp) sp.onchange=live(()=>{ e.speed=+sp.value; },true);
+  on("eSpeed","change",live(()=>{ e.speed=+$("#eSpeed").value; },true));
   bindR("eZoom",v=>{ e.zoom=v; },v=>v.toFixed(2)+"×"); bindR("ePanX",v=>{ e.panX=v; }); bindR("ePanY",v=>{ e.panY=v; });
-  $("#eMotion").onchange=live(()=>{ e.motion=$("#eMotion").value; });
-  $("#eDur").oninput=live(()=>{ sc.duration_sec=Math.max(2,Math.min(20,+$("#eDur").value||3)); const d=document.querySelector(`#d${i}`); if(d) d.value=sc.duration_sec; },true);
-  $("#eTrans").onchange=live(()=>{ e.transition=$("#eTrans").value; });
-  $("#eReset").onclick=()=>{ sc.edit=null; ed(sc); R.scrub=R.prepared.scenes[i].t0+0.3; saveLocal(); relayout(); renderEditor(); };
-  $("#ePlayScene").onclick=()=>{ const s=R.prepared.scenes[i]; play(false, s.t0, s.t1); };
-  // look & text
+  document.querySelectorAll("#clipHost [data-frame]").forEach(b=>b.onclick=()=>{ const k=b.dataset.frame;
+    if(k==="whole"){ const d=srcDims(sc), [W,H]=frameDims(); if(d){ const z=Math.min(W/d[0],H/d[1])/Math.max(W/d[0],H/d[1]); e.zoom=Math.max(0.4,Math.round(z*100)/100); } else e.zoom=0.6; e.panX=0; e.panY=0; if(e.motion==="auto") e.motion="none"; }
+    else if(k==="fill"){ e.zoom=1; e.panX=0; e.panY=0; }
+    else if(k==="face"){ e.zoom=Math.max(1,e.zoom); e.panY=-0.7; }
+    else { e.zoom=1; e.panX=0; e.panY=0; e.motion="auto"; }
+    studioRedraw(true); renderEditor(); });
+  on("eMotion","change",live(()=>{ e.motion=$("#eMotion").value; }));
+  on("eFill","change",live(()=>{ e.fill=$("#eFill").value; },true));
+  on("eWfit","change",()=>{ const was=!!wideFoot(sc); e.wfit=$("#eWfit").value; saveLocal(); if(was!==!!wideFoot(sc)) invalidate(); renderWidePanel(); studioRedraw(false); });
+  on("eWiden","click",()=>{ if(!confirm(`Make an AI wide (16:9) version of scene ${i+1}? This uses Google AI and costs about ₹${Math.round(wideCost(sc))}.`)) return; widenScene(i).then(()=>renderEditor()); });
+  on("eDur","input",live(()=>{ sc.duration_sec=Math.max(2,Math.min(20,+$("#eDur").value||3)); const d=document.querySelector(`#d${i}`); if(d) d.value=sc.duration_sec; },true));
+  on("eTrans","change",live(()=>{ e.transition=$("#eTrans").value; }));
+  on("eReset","click",()=>{ sc.edit=null; ed(sc); studioRedraw(true); renderEditor(); });
+  on("ePlayScene","click",()=>{ const s=R.prepared.scenes[i]; play(false, s.t0, s.t1); });
+  // text (selected scene)
+  const tph=document.querySelector('#textHost [data-tphost]'); if(tph) bindTextPanel(tph,i);
+  // look
   bindR("eBright",v=>{ e.bright=v; }); bindR("eContrast",v=>{ e.contrast=v; }); bindR("eSat",v=>{ e.sat=v; }); bindR("eWarm",v=>{ e.warmth=v; });
-  $("#eTitle").oninput=live(()=>{ sc.on_screen_text=$("#eTitle").value; const o=document.querySelector(`#o${i}`); if(o) o.value=sc.on_screen_text; });
-  $("#eTitlePos").onchange=live(()=>{ e.titlePos=$("#eTitlePos").value; });
-  bindR("eTitleSize",v=>{ e.titleSize=v; },v=>Math.round(v*100)+"%");
-  $("#eHideTitle").onchange=live(()=>{ e.hideTitle=$("#eHideTitle").checked; });
   // audio
   bindR("eVol",v=>{ e.voiceVol=v; },v=>Math.round(v*100)+"%");
   bindR("gVoice",v=>{ G.voiceVol=v; },v=>Math.round(v*100)+"%");
   bindR("gMusic",v=>{ G.musicVol=v; },v=>Math.round(v*100)+"%");
   bindR("gMusicStart",v=>{ G.musicStart=v; },v=>fmtDur(+v));
-  const efm=$("#eFindMusic"); if(efm) efm.onclick=openMusic;
-  $("#gFadeIn").onchange=live(()=>{ G.fadeIn=$("#gFadeIn").checked; }); $("#gFadeOut").onchange=live(()=>{ G.fadeOut=$("#gFadeOut").checked; });
-  $("#eRegen").onclick=()=>regenVoice(i);
-  $("#eDeliveryGo").onclick=()=>{ e.delivery=$("#eDelivery").value.trim(); saveLocal(); regenVoice(i); };
-  $("#eDelivery").onkeydown=ev=>{ if(ev.key==="Enter"){ ev.preventDefault(); $("#eDeliveryGo").click(); } };
-  $("#eMic").onclick=()=>S.micRec ? S.micRec.stop() : recordVoice(i);
-  const ua=$("#eUseAI"); if(ua) ua.onclick=async()=>{ const a=ASSETS.get(sc.id)||{}; a.myVoice=false; ASSETS.set(sc.id,a); await regenVoice(i,true); };
-  $("#eHearLine").onclick=async()=>{ const a=ASSETS.get(sc.id); if(!a||!a.voice) return; const ctx=audioCtx(); await Promise.race([ctx.resume(),sleep(1500)]); const s=ctx.createBufferSource(); s.buffer=a.voice; const gn=ctx.createGain(); gn.gain.value=e.voiceVol*G.voiceVol; s.connect(gn); gn.connect(ctx.destination); s.start(); };
-  // text, colours & brand
+  on("gFadeIn","change",live(()=>{ G.fadeIn=$("#gFadeIn").checked; })); on("gFadeOut","change",live(()=>{ G.fadeOut=$("#gFadeOut").checked; }));
+  on("eRegen","click",()=>regenVoice(i));
+  on("eDeliveryGo","click",()=>{ e.delivery=$("#eDelivery").value.trim(); saveLocal(); regenVoice(i); });
+  const dl=$("#eDelivery"); if(dl) dl.onkeydown=ev=>{ if(ev.key==="Enter"){ ev.preventDefault(); $("#eDeliveryGo").click(); } };
+  on("eMic","click",()=>S.micRec ? S.micRec.stop() : recordVoice(i));
+  on("eUseAI","click",async()=>{ const a=ASSETS.get(sc.id)||{}; a.myVoice=false; ASSETS.set(sc.id,a); await regenVoice(i,true); });
+  on("eHearLine","click",async()=>{ const a=ASSETS.get(sc.id); if(!a||!a.voice) return; const ctx=audioCtx(); await Promise.race([ctx.resume(),sleep(1500)]); const s=ctx.createBufferSource(); s.buffer=a.voice; const gn=ctx.createGain(); gn.gain.value=e.voiceVol*G.voiceVol; s.connect(gn); gn.connect(ctx.destination); s.start(); });
+  // whole-video style
   const gsb=$("#globalStyle"); if(gsb){ bindStyleControls(gsb, editDef(3,0).fields(), ()=>styleChanged());
-    gsb.querySelectorAll("details.sgroup").forEach(d=>d.addEventListener("toggle",()=>{ S.openGroups=S.openGroups||{0:1,2:1,3:1}; S.openGroups[d.dataset.gi]=d.open?1:0; }));
-    $("#gBrandSave").onclick=brandSave; $("#gBrandApply").onclick=brandApply; }
+    gsb.querySelectorAll("details.sgroup").forEach(d=>d.addEventListener("toggle",()=>{ S.openGroups=S.openGroups||{}; S.openGroups[d.dataset.gi]=d.open?1:0; }));
+    on("gBrandSave","click",brandSave); on("gBrandApply","click",brandApply); }
   const ssb=$("#sceneStyle"); if(ssb) bindStyleControls(ssb, sceneStyleFields(i), ()=>styleChanged());
-  $("#gReset").onclick=()=>{ const G0=st(); BRAND_KEYS.forEach(k=>{ G0[k]=STYLE_DEFAULTS[k]; }); G0.website=(S.job.branding&&S.job.branding.website)||"negotrip.com"; S._fontsDirty=true; styleChanged().then(()=>renderEditor()); };
+  on("gReset","click",()=>{ const G0=st(); BRAND_KEYS.forEach(k=>{ G0[k]=STYLE_DEFAULTS[k]; }); G0.website=(S.job.branding&&S.job.branding.website)||"negotrip.com"; S._fontsDirty=true; styleChanged().then(()=>renderEditor()); });
+  on("fitAll","click",()=>runFit(S.job.scenes.map((_,k)=>k))); on("fitOne","click",()=>runFit([S.editSel||0]));
+  ["clipHost","voiceHost","lookHost"].forEach(id=>addStepButtons($("#"+id)));
 }
 async function regenVoice(i, keepMsg){
   const sc=S.job.scenes[i], voice=$("#rVoice").value, txt=(sc.narration||"").trim(); if(!txt) return;
@@ -1552,52 +1596,53 @@ function textPanelHtml(i){
   const sc=S.job.scenes[i], e=ed(sc), G=st();
   const fontOpts=(v)=>`<option value="">Same as video (${esc(G.titleFont)})</option>`+FONTS.map(f=>`<option ${v===f?"selected":""} style="font-family:'${esc(f)}'">${esc(f)}</option>`).join("");
   const col=(k,v,def)=>`<div class="cn"><input type="color" data-tp="${k}" value="${esc(toHex(v)||toHex(def)||"#ffffff")}"><label class="small"><input type="checkbox" data-tpoff="${k}" ${v?"":"checked"}> same as video</label></div>`;
+  const r=(k,label,min,max,step,val)=>`<div class="rng"><label>${label} <output>${(+val).toFixed(2)}</output></label><input type="range" data-tp="${k}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
+  const showCard = sc.card || e.cardOn;
   return `<div class="textpanel">
-    <div class="tpgrid">
-      <div><canvas class="tpcv${isWide()?" wide":""}" width="${isWide()?640:360}" height="${isWide()?360:640}" data-tpcv="${i}" aria-label="Text layout preview"></canvas><div class="hint" style="text-align:center">Drag the text to move it</div></div>
-      <div>
-        <div class="tpsec"><b class="small">Top title</b> <span class="small muted">(the on-screen text above)</span>
-          <label class="small chk"><input type="checkbox" data-tp="hideTitle" ${e.hideTitle?"checked":""}> Hide title in this scene</label>
-          <div class="rng"><label>Size <output>${(+e.titleSize).toFixed(2)}</output></label><input type="range" data-tp="titleSize" min="0.4" max="2.5" step="0.05" value="${e.titleSize}"></div>
-          <div class="field"><label class="small">Font</label><select data-tp="titleFont">${fontOpts(e.titleFont)}</select></div>
-          <div class="field"><label class="small">Colour</label>${col("titleColor",e.titleColor,G.titleColor)}</div>
-          <div class="field"><label class="small">Box behind</label>${col("titleBg",e.titleBg,G.titleBg||"#000000")}</div>
-          <div class="btns"><span class="small muted">Position:</span>${[["top","Top"],["middle","Middle"],["bottom","Bottom"]].map(([k,t])=>`<button type="button" class="btn-sm" data-tppos="${k}">${t}</button>`).join("")}</div>
-        </div>
-        ${sc.card?`<div class="tpsec"><b class="small">Title-card text</b> <span class="small muted">(the big middle line)</span>
-          <div class="field"><label class="small">Text</label><input type="text" data-tp="cardText" maxlength="60" value="${esc(e.cardText||"")}" placeholder="${esc(cardTextOf(sc,{}))}"></div>
-          <label class="small chk"><input type="checkbox" data-tp="cardHide" ${e.cardHide?"checked":""}> Hide this line</label>
-          <div class="rng"><label>Size <output>${(+e.cardSize||1).toFixed(2)}</output></label><input type="range" data-tp="cardSize" min="0.4" max="2.5" step="0.05" value="${e.cardSize||1}"></div>
-          <div class="field"><label class="small">Font</label><select data-tp="cardFont">${fontOpts(e.cardFont)}</select></div>
-          <div class="field"><label class="small">Colour</label>${col("cardColor",e.cardColor,G.cardText)}</div>
-        </div>`:""}
-        <div class="btns"><button type="button" class="btn-sm" data-tpreset="1">Reset positions</button><button type="button" class="btn-sm" data-tpall="1">Use this look on every scene</button></div>
-      </div>
-    </div></div>`;
+    <p class="small muted" style="margin:0 0 8px">Changes here apply to <b>scene ${i+1}</b>. You can also drag the text on the preview.</p>
+    <div class="stgrp"><b class="small">Top line (title)</b>
+      <div class="field"><label class="small">Text</label><input type="text" data-tptext="on_screen_text" maxlength="40" value="${esc(sc.on_screen_text||"")}"></div>
+      <label class="small chk"><input type="checkbox" data-tp="hideTitle" ${e.hideTitle?"checked":""}> Hide in this scene</label>
+      ${r("titleY","Up ↕ down",0.04,0.95,0.005,titleYOf(e).toFixed(3))}
+      ${r("titleX","Left ↔ right",0.15,0.85,0.005,(e.titleX!=null?e.titleX:0.5).toFixed(3))}
+      ${r("titleSize","Size",0.4,2.5,0.05,e.titleSize)}
+      <div class="btns"><span class="small muted">Quick place:</span>${[["top","Top"],["middle","Middle"],["bottom","Bottom"]].map(([k,t])=>`<button type="button" class="btn-sm" data-tppos="${k}">${t}</button>`).join("")}</div>
+      <div class="row2"><div class="field"><label class="small">Font</label><select data-tp="titleFont">${fontOpts(e.titleFont)}</select></div><div class="field"><label class="small">Colour</label>${col("titleColor",e.titleColor,G.titleColor)}</div></div>
+      <div class="field"><label class="small">Box behind</label>${col("titleBg",e.titleBg,G.titleBg||"#000000")}</div>
+    </div>
+    <div class="stgrp"><b class="small">Description (the big line)</b>
+      ${sc.card?"":`<label class="small chk"><input type="checkbox" data-tp="cardOn" ${e.cardOn?"checked":""}> Show it on this scene's clip too</label>`}
+      ${showCard?`<div class="field"><label class="small">Text</label><input type="text" data-tp="cardText" maxlength="60" value="${esc(e.cardText||"")}" placeholder="${esc(cardTextOf(sc,{}))}"></div>
+      <label class="small chk"><input type="checkbox" data-tp="cardHide" ${e.cardHide?"checked":""}> Hide this line</label>
+      ${r("cardY","Up ↕ down",0.06,0.94,0.005,cardYOf(e).toFixed(3))}
+      ${r("cardSize","Size",0.4,2.5,0.05,e.cardSize||1)}
+      <div class="row2"><div class="field"><label class="small">Font</label><select data-tp="cardFont">${fontOpts(e.cardFont)}</select></div><div class="field"><label class="small">Colour</label>${col("cardColor",e.cardColor,G.cardText)}</div></div>`:`<p class="small muted" style="margin:4px 0 0">Shown on title cards. Tick the box to show it over this clip as well.</p>`}
+    </div>
+    <div class="btns"><button type="button" class="btn-sm" data-tpreset="1">Reset positions</button><button type="button" class="btn-sm primary" data-tpall="1">Use this text layout on every scene</button></div>
+  </div>`;
 }
 function bindTextPanel(host, i){
-  const sc=S.job.scenes[i], e=ed(sc), cv=host.querySelector("[data-tpcv]");
-  let pend=false; const redraw=()=>{ if(pend) return; pend=true; requestAnimationFrame(()=>{ pend=false; drawLayout(i,cv); }); };
-  const changed=(big)=>{ saveLocal(); redraw(); if(R.prepared){ if(big) loadStyleFonts().then(()=>scrubTo(R.scrub||0)); else drawFrame(R.scrub||0); } };
+  const sc=S.job.scenes[i], e=ed(sc);
+  let pend=false; const redraw=()=>{ if(pend) return; pend=true; requestAnimationFrame(()=>{ pend=false; if(R.prepared) drawFrame(R.scrub||0); else drawPoster(); }); };
+  const changed=(big)=>{ saveLocal(); if(big) loadStyleFonts().then(redraw); else redraw(); };
   host.querySelectorAll("[data-tp]").forEach(el=>{
     const k=el.dataset.tp, ev=el.type==="range"||el.type==="color"||el.type==="text"?"input":"change";
     el.addEventListener(ev,()=>{ let v=el.type==="checkbox"?el.checked:el.type==="range"?+el.value:el.value;
       e[k]=v; const off=host.querySelector(`[data-tpoff="${k}"]`); if(off&&el.type==="color") off.checked=false;
-      const o=(el.closest(".rng")||el.parentElement).querySelector("output"); if(o) o.textContent=(+v).toFixed(2); changed(/Font$/.test(k)); });
+      const o=(el.closest(".rng")||el.parentElement).querySelector("output"); if(o&&el.type==="range") o.textContent=(+v).toFixed(2); changed(/Font$/.test(k)); if(k==="cardOn") renderEditor(); });
   });
+  host.querySelectorAll("[data-tptext]").forEach(el=>el.addEventListener("input",()=>{ sc[el.dataset.tptext]=el.value; const o=document.querySelector(`#o${i}`); if(o) o.value=el.value; changed(false); }));
   host.querySelectorAll("[data-tpoff]").forEach(cb=>cb.addEventListener("change",()=>{ const k=cb.dataset.tpoff; if(cb.checked) e[k]=""; else { const c=host.querySelector(`input[type=color][data-tp="${k}"]`); e[k]=c?c.value:""; } changed(false); }));
-  host.querySelectorAll("[data-tppos]").forEach(b=>b.onclick=()=>{ e.titlePos=b.dataset.tppos; e.titleY=null; e.titleX=null; changed(false); });
-  host.querySelector("[data-tpreset]").onclick=()=>{ e.titleY=null; e.titleX=null; e.cardY=null; e.titlePos="top"; changed(false); };
-  host.querySelector("[data-tpall]").onclick=()=>{ const keys=["titleSize","titleFont","titleColor","titleBg","titlePos","titleX","titleY","cardSize","cardFont","cardColor","cardY"]; S.job.scenes.forEach(o=>{ if(o===sc) return; const oe=ed(o); keys.forEach(k=>oe[k]=e[k]); }); changed(true); toast("Applied to every scene"); };
+  host.querySelectorAll("[data-tppos]").forEach(b=>b.onclick=()=>{ e.titlePos=b.dataset.tppos; e.titleY=null; e.titleX=null; changed(false); renderEditor(); });
+  host.querySelector("[data-tpreset]").onclick=()=>{ e.titleY=null; e.titleX=null; e.cardY=null; e.titlePos="top"; changed(false); renderEditor(); };
+  host.querySelector("[data-tpall]").onclick=()=>{ const keys=["titleSize","titleFont","titleColor","titleBg","titlePos","titleX","titleY","cardSize","cardFont","cardColor","cardY"]; S.job.scenes.forEach(o=>{ if(o===sc) return; const oe=ed(o); keys.forEach(k=>oe[k]=e[k]); }); changed(true); toast("Text layout applied to every scene"); };
   addStepButtons(host);
-  enableTextDrag(cv, ()=>sc, (sync)=>{ if(sync){ return; } redraw(); }, ()=>{ changed(false); });
-  drawLayout(i,cv);
 }
 // main preview canvas: drag after Prepare too
 function enableMainDrag(){
   const cv=$("#cv"); if(!cv) return;
   enableTextDrag(cv, ()=>{ if(!R.prepared) return S.job&&S.job.scenes[Math.min(LAYOUT.main||0,S.job.scenes.length-1)]; const P=R.prepared, t=R.scrub||0; const s=P.scenes.find(x=>t>=x.t0&&t<x.t1)||P.scenes[P.scenes.length-1]; return s&&s.sc; },
-    (sync)=>{ if(R.prepared) drawFrame(R.scrub||0); else drawPoster(); }, (d)=>{ const i=S.job.scenes.indexOf(d.sc); const h=document.querySelector(`[data-tphost="${i}"]`); if(h&&TEXT_OPEN[i]) drawLayout(i,h.querySelector("[data-tpcv]")); if(typeof renderEditor==="function"&&R.prepared){ /* keep editor values in sync */ } });
+    (sync)=>{ if(R.prepared) drawFrame(R.scrub||0); else drawPoster(); }, (d)=>{ const i=S.job.scenes.indexOf(d.sc); if(i>=0){ S.editSel=i; LAYOUT.main=i; } renderEditor(); });
 }
 
 // ---------------------------------------------------------------- scene blocks: move up/down, drag to reorder, remove (with undo)
@@ -1644,6 +1689,7 @@ const LAYOUT_GROUPS=[
   ["🖼 Logo",["logoSize","logoPos","logoOpacity"]],
   ["Title (top line)",["titleSizeAll","titleFont","titleColor","titleY","titleBg"]],
   ["Description (main line on title cards)",["cardSizeAll","cardFont","cardText","cardGap"]],
+  ["Captions (spoken words on screen)",["capSize","capPos","capWords","capStyle","hideCaps"]],
   ["📇 Website & contact (last scene)",["website","phone","email","address","extraLine","showWebsite","contactEvery","webSize","webColor","ctaPos"]]
 ];
 const LAYOUT_LABEL={ logoSize:"Size", logoPos:"Position", logoOpacity:"Opacity", titleSizeAll:"Size", titleFont:"Font", titleColor:"Colour", titleY:"Height on screen", titleBg:"Box behind",
@@ -1651,8 +1697,8 @@ const LAYOUT_LABEL={ logoSize:"Size", logoPos:"Position", logoOpacity:"Opacity",
   website:"Website (e.g. negotrip.in)", phone:"Phone / WhatsApp", email:"Email", address:"Address", extraLine:"Extra line", showWebsite:"Show on the last scene", contactEvery:"Small contact bar on every scene", webSize:"Text size", webColor:"Text colour", ctaPos:"Height of the call-to-action box (move up to fit more lines)" };
 function layoutSectionHtml(){
   const opts=S.job.scenes.map((sc,i)=>`<option value="${i}" ${(LAYOUT.main||0)===i?"selected":""}>${i+1}. ${esc(sc.location||"")}${sc.card?" (title card)":""}</option>`).join("");
-  return `<details class="layoutsec" id="layoutSec" ${store.get("layoutOpen",true)?"open":""}><summary>🎨 Logo &amp; text layout <span class="small muted">(all scenes; preview on the right)</span></summary>
-    <div class="field" style="margin:8px 0"><label class="small" for="layScene">Preview scene</label><select id="layScene">${opts}</select><div class="hint">Drag the title or description on the preview to move them. Per-scene changes: “Aa Text, size &amp; position” on each scene.</div></div>
+  return `<details class="layoutsec" id="layoutSec" ${store.get("layoutOpen",true)?"open":""}><summary>All scenes: logo, title, description, captions, contact</summary>
+    <div class="hint" style="margin:6px 0 8px">These apply to <b>all scenes</b>. Settings for the selected scene are above.</div>
     <div class="laygrid">${LAYOUT_GROUPS.map(([t,keys])=>`<div class="laygrp"><b class="small">${t}</b>${keys.map(k=>{ const f=styleFieldByKey(k); if(!f) return ""; f.label=LAYOUT_LABEL[k]||f.label; return styleControl(f,"lay_"); }).join("")}</div>`).join("")}</div>
     <div class="laygrp" style="margin-top:10px"><b class="small">🔎 Find &amp; replace text everywhere</b><span class="small muted">Script, titles, CTA, website, contact lines, caption, introduction &amp; conclusion.</span>
       <div class="row2" style="grid-template-columns:1fr 1fr auto;align-items:end"><input type="text" id="frFind" placeholder="Find, e.g. negotrip.com"><input type="text" id="frRepl" placeholder="Replace with, e.g. negotrip.in"><button class="btn-sm primary" type="button" id="frGo">Replace all</button></div></div>
@@ -1664,7 +1710,6 @@ function renderLayoutSec(){
   const box=$("#layoutSec"); box.addEventListener("toggle",()=>store.set("layoutOpen",box.open)); addStepButtons(box);
   const fields=LAYOUT_GROUPS.flatMap(g=>g[1]).map(styleFieldByKey).filter(Boolean);
   bindStyleControls(box, fields, async(k)=>{ if(k==="website"){ S.job.branding=Object.assign({},S.job.branding||{},{website:st().website}); } saveLocal(); if(/Font$/.test(k)) await loadStyleFonts(); if(R.prepared) drawFrame(R.scrub||0); else drawPoster(); });
-  $("#layScene").onchange=e=>{ LAYOUT.main=+e.target.value; if(R.prepared){ const s=R.prepared.scenes[LAYOUT.main]; if(s) scrubTo(Math.min(s.t0+Math.min(1.2,s.dur/2),R.prepared.total-0.01)); } else drawPoster(); };
   $("#layReset").onclick=()=>{ const G=st(); Object.assign(G,{logoPos:"top-right",logoSize:1,logoOpacity:1,titleY:0.156,cardSizeAll:1,cardFont:"",cardGap:0.27,titleSizeAll:1}); S.job.scenes.forEach(sc=>{ const e=ed(sc); e.titleY=null; e.titleX=null; e.cardY=null; }); saveLocal(); renderLayoutSec(); if(R.prepared) drawFrame(R.scrub||0); else drawPoster(); };
   $("#frGo").onclick=()=>{ const f=$("#frFind").value.trim(); if(!f){ toast("Type the text to find"); return; } const n=findReplaceAll(f,$("#frRepl").value); toast(n?`Replaced ${n} place${n===1?"":"s"}`:`“${f}” wasn't found`); };
   $("#layBrand").onclick=()=>{ const G=st(), b={}; BRAND_KEYS.forEach(k=>b[k]=G[k]); store.set("brandStyle",b); toast("Saved as your default style for new videos"); };
@@ -1710,6 +1755,7 @@ function drawMedia(g,s,idx,p,W,H,k){
     g.save(); g.filter=`blur(${Math.round(28*k)}px) brightness(${0.62*e.bright}) saturate(${e.sat})`; g.drawImage(src,(W-bw)/2,(H-bh)/2,bw,bh); g.restore();
   }
   const sc=(fitTall?Math.min(W/sw,H/sh):Math.max(W/sw,H/sh))*z, dw=sw*sc, dh=sh*sc;
+  if(!fitTall && (dw<W-2 || dh<H-2)){ const bs=Math.max(W/sw,H/sh)*1.1, bw=sw*bs, bh=sh*bs; g.save(); g.filter=`blur(${Math.round(28*k)}px) brightness(${0.62*e.bright}) saturate(${e.sat})`; g.drawImage(src,(W-bw)/2,(H-bh)/2,bw,bh); g.restore(); }
   const x=(W-dw)/2 + (fitTall?0:Math.max(-1,Math.min(1,px))*(dw-W)/2), y=(H-dh)/2 + Math.max(-1,Math.min(1,py))*(dh-H)/2;
   g.save();
   if(fitTall){ g.beginPath(); g.rect(Math.max(0,x),0,Math.min(W,dw),H); g.clip(); }
@@ -1720,6 +1766,12 @@ function drawMedia(g,s,idx,p,W,H,k){
   if(e.warmth){ g.save(); g.globalCompositeOperation="soft-light"; g.fillStyle = e.warmth>0 ? `rgba(255,150,40,${0.45*e.warmth})` : `rgba(40,120,255,${-0.45*e.warmth})`; g.fillRect(0,0,W,H); g.restore(); }
   const G=st(), tc=e.sceneTint||(G.tintOpacity>0?G.tintColor:""), to=e.sceneTint?e.sceneTintOpacity:G.tintOpacity;
   if(tc && to>0){ g.save(); g.fillStyle=rgba(tc,to); g.fillRect(0,0,W,H); g.restore(); }
+  if(e.cardOn && !e.cardHide){ const ctext=cardTextOf(s.sc,e); if(ctext){
+    const fs=88*k*(e.cardSize||1)*(+G.cardSizeAll||1), lh=fs*1.14, cy=H*cardYOf(e);
+    g.save(); g.fillStyle=e.cardColor||G.cardText; g.textAlign="center"; g.textBaseline="middle"; g.font=`${G.titleWeight} ${fs}px ${fontStack(e.cardFont||G.cardFont||e.titleFont||G.titleFont)}`;
+    const lines=wrap(g,ctext.toUpperCase(),W-160*k); let mw=0;
+    lines.forEach((ln,j,arr)=>{ mw=Math.max(mw,g.measureText(ln).width); const y=cy+(j-(arr.length-1)/2)*lh; strokeText(g,ln,W/2,y,10*k); });
+    const hh=lines.length*lh; HIT.card={x:W/2-mw/2-20*k,y:cy-hh/2-10*k,w:mw+40*k,h:hh+20*k}; g.restore(); } }
 }
 function drawFrame(t, P0, cv0){
   const P=P0||R.prepared; if(!P||!P.scenes.length) return;
@@ -2874,7 +2926,7 @@ function openShot(i){
         ${c.kind==="photo"?(av.pending?`<span class="pill warn">Animating… 1–3 min</span>`:`<button class="btn-sm" type="button" data-anim="${esc(c.cid)}:${animSecsFor(sc)}">▶ Animate ${animSecsFor(sc)} s (fits the scene) · ${rupees(animSecsFor(sc)*COST.videoPerSec)}</button>`):""}
         ${c.kind==="video"&&!av.pending&&(+c.duration||0)<sceneNeedSecs(sc)?(()=>{ const still=c.from||((sc.candidates||[]).find(x=>x.source==="AI avatar"&&x.kind==="photo")||{}).cid; return still?`<button class="btn-sm" type="button" data-refit="${esc(still)}:${sceneNeedSecs(sc)}">↻ Re-make at ${sceneNeedSecs(sc)} s to last the whole scene · ${rupees(sceneNeedSecs(sc)*COST.videoPerSec)}</button>`:""; })():""}</div></div>`).join("")}</div>
       ${(()=>{ const c=sc.footage; if(!(c&&c.source==="AI avatar"&&c.kind==="video")) return ""; const need=R.prepared?((R.prepared.scenes.find(x=>x.sc===sc)||{}).dur||sceneNeedSecs(sc)):sceneNeedSecs(sc); const len=+c.duration||4; return len<need-0.5?`<p class="notice small">This clip is ${len} s but the narration lasts about ${Math.round(need)} s, so slowing it down makes it ${Math.round(len/need*100)}% speed. For natural movement, use ↻ Re-make (up to 10 s), or shorten the narration.</p>`:""; })()}
-      <div class="field" style="margin-top:8px"><label class="small" for="shFill">If a moving clip is shorter than the scene</label><select id="shFill" style="width:auto;height:34px;font-size:13px">${[["slow","Slow it down so it lasts until the narration ends (free)"],["smooth","Normal speed, repeat smoothly with a blend (free)"],["hold","Freeze on the last frame"],["loop","Repeat it (hard cut)"]].map(([k,t])=>`<option value="${k}" ${(ed(sc).fill||"slow")===k?"selected":""}>${t}</option>`).join("")}</select></div>
+      <p class="small muted" style="margin-top:8px">How a short clip fills a longer scene, zoom and framing: <b>🎬 Studio → Clip &amp; framing</b>.</p>
       <p class="hint">Animation keeps the face and place, adds natural movement and props in use; the AI's own sound is muted and your voiceover plays. Instagram and YouTube ask you to switch on their “AI-generated” label for realistic AI people.</p></div>`:""}`);
   m.querySelector(".modal-card").classList.add("wide");
   const q=s=>m.querySelector(s);
@@ -3324,7 +3376,7 @@ function bkPullAll(){ if(!S.job) return; for(const k of ["intro","outro"]){ cons
 function bkChanged(kind, big){ bkSync(kind); saveLocal(); if(big) invalidate(); else if(R.prepared){ relayout(); scrubTo(R.scrub||0); } renderScenes(); updateCredits(); }
 function bookendsCardHtml(){ return `<div class="card" id="bkCard"><h2>Introduction &amp; conclusion</h2><p class="small muted" style="margin:-4px 0 10px">An opening line before the first scene and a closing line after the last, written to fit the video's theme and flow into (and out of) your scenes. Each becomes its own clip with a background you choose, voiced like the rest.</p>
   <div class="bkthemes"><span class="small muted">Theme</span> <span class="chips" id="bkThemes"></span></div>
-  <div id="bkBody"></div><div class="aihost" data-key="bookends"></div></div>`; }
+  <div id="bkBody"></div></div>`; }
 function bkThumb(c){ return thumbHtml(c,""); }
 function bkPartHtml(kind){
   const b=BK()[kind], styles=kind==="intro"?OPEN_STYLES:CLOSE_STYLES, name=kind==="intro"?"introduction":"conclusion";
@@ -3539,7 +3591,7 @@ function editDef(tab, idx){
   if(tab===0) fields=()=>{ const a=ASSETS.get(sc().id)||{}; const f=[];
     if(a.video) f.push(fld("start","Start from (seconds into the clip)","number",()=>ps()?+ps().offset.toFixed(1):0,v=>{ e().start=v; },{min:0,max:Math.max(0.1,(a.video.duration||1)-0.2)}),
       fld("speed","Speed","select",()=>String(e().speed),v=>{ e().speed=v; },{options:["0.5","0.75","1","1.25","1.5","2"],numeric:true}));
-    f.push(fld("zoom","Zoom","number",()=>e().zoom,v=>{ e().zoom=v; },{min:1,max:2}),
+    f.push(fld("zoom","Zoom (1 = fill the frame; below 1 shows the whole clip with a soft blurred fill so faces are not cut; above 1 zooms in)","number",()=>e().zoom,v=>{ e().zoom=v; },{min:0.4,max:2.5}),
       fld("panX","Move left(-1)/right(+1)","number",()=>e().panX,v=>{ e().panX=v; },{min:-1,max:1}),
       fld("panY","Move up(-1)/down(+1)","number",()=>e().panY,v=>{ e().panY=v; },{min:-1,max:1}),
       fld("motion","Camera motion","select",()=>e().motion,v=>{ e().motion=v; },{options:["auto","in","out","left","right","none"]}),
@@ -3691,6 +3743,7 @@ function directorFields(){
   out.push({key:"narrator", label:"Narrator for the whole video: a person's own voice (name), or empty for the normal voice", type:"select", options:["",...castActive().filter(m=>m.voice_id).map(m=>m.name)], get:()=>(castById(S.job.narrator_cast||"")||{}).name||"", set:v=>{ const m=castActive().find(x=>x.name===v); S.job.narrator_cast=m?m.cast_id:""; setTimeout(renderNarr,0); }});
   out.push({key:"replace_text", label:"Find & replace text everywhere, as 'old => new' (e.g. negotrip.com => negotrip.in)", type:"text", max:160, get:()=>"", set:v=>{ const m=String(v||"").split(/\s*=>\s*/); if(m.length===2&&m[0]) setTimeout(()=>{ const n=findReplaceAll(m[0],m[1]); toast(`Replaced ${n} place${n===1?"":"s"}`); },50); }, late:1});
   out.push({key:"music_search", label:"Search the free music library (1-2 words, e.g. sitar, calm flute); opens the results to choose from", type:"text", max:40, get:()=>"", set:v=>{ if(v){ MUSIC.q=v; MUSIC.results=[]; S._openMusicAfter=true; } }, late:1});
+  out.push({key:"video_size", label:"Video size: short = vertical 9:16 (Shorts/Reels), wide = 16:9 (YouTube)", type:"select", options:["short","wide"], get:()=>isWide()?"wide":"short", set:v=>{ S._fmtAfter=v; }, late:1});
   out.push({key:"translate_to", label:"Translate the whole script to another language and switch the voice to it", type:"select", options:ALL_LANGS.map(l=>l[0]), get:()=>scriptLang(), set:v=>{ if(v && v!==scriptLang()){ setVC({lang:v}); S._translateAfter=true; } }, late:1});
   return out;
 }
@@ -3704,6 +3757,7 @@ function directorDef(){
       const big = keys.some(k=>/^(intro|outro)_/.test(k)) || keys.some(k=>/\.(narration|remove|avatar_speaks)$|^(narrator|narration|voice|stylePreset|pace|voiceAccent|voiceDirection|translate_to|scene_order)$/.test(k) || /\.footage_cid$/.test(k));
       if(S._translateAfter){ S._translateAfter=false; translateScript({disabled:false,textContent:""}).catch(()=>{}); }
       if(S._openMusicAfter){ S._openMusicAfter=false; setTimeout(openMusic,50); }
+      if(S._fmtAfter){ const v=S._fmtAfter; S._fmtAfter=null; setFormat(v); }
       const c=$("#caption"); if(c) c.value=captionText();
       if(big){ invalidate(); renderScenes(); updateCredits(); if(keys.some(k=>/narration|voice|stylePreset|pace|Accent|Direction|translate/.test(k))) toast("Press Prepare again to hear the changes."); }
       else { renderScenes(); if(R.prepared){ relayout(); renderEditor(); } }
