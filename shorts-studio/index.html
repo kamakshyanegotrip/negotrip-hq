@@ -144,7 +144,7 @@ img.thumb{display:block;object-fit:cover;width:100%;aspect-ratio:9/16;height:aut
 .stage.wide{aspect-ratio:16/9;max-width:640px}
 .render.wide{grid-template-columns:1fr}.render.wide>div:last-child{order:-1}.render.wide .stage{position:relative!important;top:auto!important}
 .tpcv.wide{aspect-ratio:16/9}
-.fmtsw{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}.fmtsw button{flex:1 1 180px;min-height:44px;border-radius:10px;border:1.5px solid var(--line,#ccc);background:var(--surface,#fff);color:inherit;font:inherit;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px;justify-content:center;padding:6px 12px}.fmtsw button[aria-pressed=true]{border-color:var(--accent,#A8321E);box-shadow:inset 0 0 0 1px var(--accent,#A8321E)}.fmtsw i{display:inline-block;border:2px solid currentColor;border-radius:3px}.fmtsw small{font-weight:400;opacity:.75}
+.fmtsw{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}.fmtsw button{flex:1 1 180px;min-height:44px;border-radius:10px;border:1.5px solid var(--line,#ccc);background:var(--surface,#fff);color:inherit;font:inherit;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px;justify-content:center;padding:6px 12px}.fmtsw button[aria-pressed=true]{border-color:var(--accent,#A8321E);box-shadow:inset 0 0 0 1px var(--accent,#A8321E)}.fmtmini{margin:10px 0 0}.fmtmini button{flex:0 1 auto;min-height:40px;font-size:14px;padding:4px 12px}.fmtsw i{display:inline-block;border:2px solid currentColor;border-radius:3px}.fmtsw small{font-weight:400;opacity:.75}
 .bar{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin:10px 0 6px}
 .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 .log{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);min-height:18px}
@@ -340,7 +340,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261022054150";
+const BUILD = "20261022055957";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -579,6 +579,7 @@ function renderJob(){
         <input class="namein" id="jobName" maxlength="120" value="${esc(j._name||"")}" placeholder="${esc(j.title||"Name this video")}" aria-label="Video name">
         <div class="muted small">${esc(j._name?j.title:"")}${j._name?" · ":""}Planned length about ${total}s · ${j.scenes.length} scenes</div></div>
       <div class="btns"><span class="pill" id="saveState"></span><button class="btn-sm" id="saveBtn">💾 Save</button><span class="pill num" id="readyPill"></span><a class="btn" href="#make" id="toMake">Make the video ↓</a></div>
+      <div class="fmtsw fmtmini" role="group" aria-label="Video size" data-fmthost="top"></div>
     </div>
     <div class="notice small" id="conflictBox" hidden></div>
     <div class="director"><div class="small muted" style="margin:12px 0 6px"><b style="color:var(--accent)">✦ AI director</b> · tell the AI what you want changed anywhere in the video: script, scenes, order, footage, framing, looks, titles, captions, voice, language, music, caption for posting. It proposes the exact changes; you apply them.</div><div class="aihost" data-key="director"></div></div>
@@ -610,7 +611,7 @@ function renderJob(){
   <div class="card" id="make">
     <h2>Make the video</h2>
     <div class="notice" id="gateNote" hidden></div>
-    <div class="fmtsw" role="group" aria-label="Video size" id="fmtSw"></div>
+    <div class="fmtsw" role="group" aria-label="Video size" id="fmtSw" data-fmthost="make"></div>
     <div class="render">
       <div>
         <div id="layoutHost"></div>
@@ -908,9 +909,9 @@ function setBar(f){ const b=$("#barFill"); if(b) b.style.width=Math.round(Math.m
 function isWide(){ return !!(S.job && S.job.format==="wide"); }
 function fmtDims(q){ const hi=q!=="720"; return isWide() ? (hi?[1920,1080]:[1280,720]) : (hi?[1080,1920]:[720,1280]); }
 function renderFmtSw(){
-  const h=$("#fmtSw"); if(!h) return; const w=isWide();
-  h.innerHTML=`<button type="button" data-fmt="short" aria-pressed="${!w}"><i style="width:10px;height:18px"></i><span>Shorts / Reels<br><small>vertical 9:16</small></span></button><button type="button" data-fmt="wide" aria-pressed="${w}"><i style="width:22px;height:12px"></i><span>YouTube video<br><small>wide 16:9</small></span></button>`;
-  h.querySelectorAll("[data-fmt]").forEach(b=>b.onclick=()=>setFormat(b.dataset.fmt));
+  const w=isWide();
+  document.querySelectorAll("[data-fmthost]").forEach(h=>{ h.innerHTML=(h.dataset.fmthost==="top"?`<span class="small muted" style="align-self:center">Video size:</span>`:"")+`<button type="button" data-fmt="short" aria-pressed="${!w}"><i style="width:10px;height:18px"></i><span>Shorts / Reels<br><small>vertical 9:16</small></span></button><button type="button" data-fmt="wide" aria-pressed="${w}"><i style="width:22px;height:12px"></i><span>YouTube video<br><small>wide 16:9</small></span></button>`;
+  h.querySelectorAll("[data-fmt]").forEach(b=>b.onclick=()=>setFormat(b.dataset.fmt)); });
 }
 function applyFormat(){
   const w=isWide(), cv=$("#cv"); if(cv){ const [W,H]=fmtDims(store.get("quality","1080")); if(!R.prepared||R.prepared.W!==W||R.prepared.H!==H){ cv.width=W; cv.height=H; } const st0=cv.parentElement; if(st0) st0.classList.toggle("wide",w); }
