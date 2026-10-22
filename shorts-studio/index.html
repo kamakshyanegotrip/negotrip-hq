@@ -144,6 +144,11 @@ img.thumb{display:block;object-fit:cover;width:100%;aspect-ratio:9/16;height:aut
 .stage.wide{aspect-ratio:16/9;max-width:640px}
 .render.wide{grid-template-columns:1fr}.render.wide>div:last-child{order:-1}.render.wide .stage{position:relative!important;top:auto!important}
 .tpcv.wide{aspect-ratio:16/9}
+#widePanel{border:1.5px solid var(--line,#ddd);border-radius:12px;padding:12px 14px;margin:0 0 14px;background:var(--surface-2,#faf7f2)}
+.wrow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line,#eee)}
+.wrow img,.wrow .ph{width:96px;aspect-ratio:16/9;object-fit:cover;border-radius:6px;background:#000;display:block}
+.wrow select{width:auto;max-width:100%}
+@media (max-width:560px){.wrow{grid-template-columns:64px minmax(0,1fr)}.wrow img,.wrow .ph{width:64px}}
 .fmtsw{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}.fmtsw button{flex:1 1 180px;min-height:44px;border-radius:10px;border:1.5px solid var(--line,#ccc);background:var(--surface,#fff);color:inherit;font:inherit;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px;justify-content:center;padding:6px 12px}.fmtsw button[aria-pressed=true]{border-color:var(--accent,#A8321E);box-shadow:inset 0 0 0 1px var(--accent,#A8321E)}.fmtmini{margin:10px 0 0}.fmtmini button{flex:0 1 auto;min-height:40px;font-size:14px;padding:4px 12px}.fmtsw i{display:inline-block;border:2px solid currentColor;border-radius:3px}.fmtsw small{font-weight:400;opacity:.75}
 .bar{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin:10px 0 6px}
 .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
@@ -340,7 +345,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261022055957";
+const BUILD = "20261022061514";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -612,6 +617,7 @@ function renderJob(){
     <h2>Make the video</h2>
     <div class="notice" id="gateNote" hidden></div>
     <div class="fmtsw" role="group" aria-label="Video size" id="fmtSw" data-fmthost="make"></div>
+    <div id="widePanel" hidden></div>
     <div class="render">
       <div>
         <div id="layoutHost"></div>
@@ -908,13 +914,96 @@ function setBar(f){ const b=$("#barFill"); if(b) b.style.width=Math.round(Math.m
 // ---- video size: Shorts 9:16 or YouTube 16:9
 function isWide(){ return !!(S.job && S.job.format==="wide"); }
 function fmtDims(q){ const hi=q!=="720"; return isWide() ? (hi?[1920,1080]:[1280,720]) : (hi?[1080,1920]:[720,1280]); }
+function footTall(sc){
+  const f=sc&&!sc.card&&sc.footage; if(!f) return false;
+  if(f.source==="AI avatar") return true;
+  if(f.width&&f.height) return f.height > f.width*0.85;
+  const a=ASSETS.get(sc.id)||{}, m=a.video||a.image; if(m&&(m.videoWidth||m.naturalWidth)) return (m.videoHeight||m.naturalHeight) > (m.videoWidth||m.naturalWidth)*0.85;
+  return null;
+}
+function wideOk(sc){ const w=sc&&sc.wide, f=sc&&sc.footage; return !!(w && f && w.for===f.cid && w.drive_id && !w.pending); }
+function wideFoot(sc){ if(!isWide() || !wideOk(sc) || sc.card) return null; const e=ed(sc); if(e.wfit && e.wfit!=="ai") return null; const w=sc.wide; return { cid:"wide:"+w.drive_id, kind:w.kind, drive_id:w.drive_id, source:"AI avatar" }; }
+function wideFitOf(sc){ const e=sc?ed(sc):{}; const m=e.wfit||""; if(m==="blur"||m==="fill") return m; return (S.job&&S.job.wideFit)||"blur"; }
+function wideSecs(sc){ const f=sc.footage||{}; const need=typeof sceneNeedSecs==="function"?sceneNeedSecs(sc):Math.round(+sc.duration_sec||6); return Math.max(4,Math.min(10, Math.round(Math.max(+f.duration||0, need)) || 6)); }
+function wideCost(sc){ const f=sc.footage||{}; return f.kind==="photo" ? COST.image : COST.image + wideSecs(sc)*COST.videoPerSec; }
+const WIDE_BUSY=new Set();
+function renderWidePanel(){
+  const h=$("#widePanel"); if(!h) return; if(!isWide()||!S.job){ h.hidden=true; h.innerHTML=""; return; }
+  const rows=S.job.scenes.map((sc,i)=>({sc,i,tall:footTall(sc)})).filter(x=>!x.sc.card && x.sc.footage);
+  const tallRows=rows.filter(x=>x.tall!==false), todo=tallRows.filter(x=>!wideOk(x.sc) && !(x.sc.wide&&x.sc.wide.pending) && x.sc.footage.kind);
+  const total=todo.reduce((a,x)=>a+wideCost(x.sc),0), G=S.job.wideFit||"blur";
+  const status=(x)=>{ const w=x.sc.wide, f=x.sc.footage;
+    if(WIDE_BUSY.has(x.sc.id)) return `<span class="pill warn">✦ making wide picture…</span>`;
+    if(w&&w.for===f.cid&&w.pending) return `<span class="pill warn">✦ animating wide clip… (1–3 min)</span>`;
+    if(wideOk(x.sc)) return `<span class="pill ok">✦ AI wide version ready</span>`;
+    if(w&&w.for===f.cid&&w.error) return `<span class="pill bad">AI failed: ${esc(String(w.error).slice(0,80))}</span>`;
+    return x.tall===false ? `<span class="pill ok">Already wide ✓</span>` : x.tall==null ? `<span class="pill">Shape known after Prepare</span>` : `<span class="pill warn">Vertical clip</span>`; };
+  h.hidden=false;
+  h.innerHTML=`<b>📐 Fit vertical clips to 16:9</b>
+    <p class="small muted" style="margin:4px 0 8px">Vertical clips (like AI influencer shots) don't fill a wide frame. Choose per scene: <b>Blurred sides</b> (free), <b>Zoom to fill</b> (free, crops top and bottom) or <b>✦ AI wide version</b>: the AI extends the picture to the left and right and, for clips, re-animates it in 16:9 so it fills the frame naturally.</p>
+    <div class="btns" style="margin-bottom:6px"><label class="small">Default for vertical clips <select id="wDef"><option value="blur" ${G==="blur"?"selected":""}>Blurred sides</option><option value="fill" ${G==="fill"?"selected":""}>Zoom to fill</option></select></label>
+    ${todo.length?`<button class="btn-sm primary" id="wAll" type="button">✦ AI wide versions for ${todo.length} scene${todo.length===1?"":"s"} (≈ ₹${Math.round(total)})</button>`:""}</div>
+    ${rows.map(x=>{ const e=ed(x.sc), v=e.wfit||"", f=x.sc.footage, ws=x.sc.wide&&x.sc.wide.for===f.cid&&x.sc.wide.still_drive_id&&S.media.get("own:"+x.sc.wide.still_drive_id), thumb=ws||f.thumbnail||f.local_thumb||"";
+      return `<div class="wrow">${thumb?`<img src="${esc(thumb)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph'}))">`:`<div class="ph"></div>`}<div><div class="small"><b>Scene ${x.i+1}</b> · ${esc(placeOf(x.sc))} ${status(x)}</div>
+      ${x.tall===false?"":`<div class="btns" style="margin-top:4px"><select data-wfit="${x.i}" aria-label="How scene ${x.i+1} fills the wide frame"><option value="" ${!v?"selected":""}>${wideOk(x.sc)?"✦ AI wide version":"Default ("+(G==="fill"?"zoom to fill":"blurred sides")+")"}</option>${wideOk(x.sc)?`<option value="blur" ${v==="blur"?"selected":""}>Blurred sides</option><option value="fill" ${v==="fill"?"selected":""}>Zoom to fill</option>`:`<option value="blur" ${v==="blur"?"selected":""}>Blurred sides</option><option value="fill" ${v==="fill"?"selected":""}>Zoom to fill</option>`}</select>
+      ${WIDE_BUSY.has(x.sc.id)||(x.sc.wide&&x.sc.wide.for===f.cid&&x.sc.wide.pending)?"":`<button class="btn-sm" type="button" data-widen="${x.i}">✦ ${wideOk(x.sc)?"Re-make":"Make"} AI wide version (≈ ₹${Math.round(wideCost(x.sc))})</button>`}</div>`}</div></div>`; }).join("")}`;
+  const dsel=h.querySelector("#wDef"); dsel.onchange=()=>{ S.job.wideFit=dsel.value; saveLocal(); renderWidePanel(); redrawNow(); };
+  h.querySelectorAll("[data-wfit]").forEach(sel=>sel.onchange=()=>{ const sc=S.job.scenes[+sel.dataset.wfit]; const e=ed(sc); const was=!!wideFoot(sc); e.wfit=sel.value==="" ? "" : sel.value; if(wideOk(sc)&&sel.value==="") e.wfit="ai"; saveLocal(); if(was!==!!wideFoot(sc)) invalidate(); renderWidePanel(); redrawNow(); });
+  h.querySelectorAll("[data-widen]").forEach(b=>b.onclick=()=>{ const i=+b.dataset.widen, sc=S.job.scenes[i]; if(!confirm(`Make an AI wide (16:9) version of scene ${i+1}? This uses Google AI and costs about ₹${Math.round(wideCost(sc))}.`)) return; widenScene(i); });
+  const all=h.querySelector("#wAll"); if(all) all.onclick=async()=>{ if(!confirm(`Make AI wide (16:9) versions of ${todo.length} scene${todo.length===1?"":"s"}? This uses Google AI and costs about ₹${Math.round(total)} in total.`)) return; for(const x of todo){ await widenScene(x.i, true); } toast("Wide pictures done; clips are animating (1–3 min each). You can keep working."); };
+}
+function redrawNow(){ if(R.prepared) drawFrame(R.scrub||0); else drawPoster(); }
+async function frameFull(url){
+  const v=await loadVideo(url); await seek(v, Math.min(1.0, (v.duration||2)/3));
+  const s=Math.min(1, 1280/Math.max(v.videoWidth,v.videoHeight)), c=document.createElement("canvas"); c.width=Math.round(v.videoWidth*s); c.height=Math.round(v.videoHeight*s);
+  c.getContext("2d").drawImage(v,0,0,c.width,c.height); return { mime:"image/jpeg", data:c.toDataURL("image/jpeg",0.92).split(",")[1] };
+}
+async function widenScene(i, quiet){
+  const sc=S.job.scenes[i], f=sc&&sc.footage; if(!f||sc.card||WIDE_BUSY.has(sc.id)) return;
+  WIDE_BUSY.add(sc.id); renderWidePanel();
+  try{
+    let src;
+    if(f.kind==="photo") src=await toJpegB64(await getClipUrl(sc,"1080"),1280,0.92);
+    else { const still=f.source==="AI avatar" && f.from && (sc.candidates||[]).find(c=>c.cid===f.from && c.drive_id);
+      src = still ? await toJpegB64(await driveUrl(still.drive_id),1280,0.92) : await frameFull(await getClipUrl(sc,"1080")); }
+    const r=await api("shot_image",{ widen:true, source:{mime:src.mime,data:src.data}, setting:placeOf(sc) });
+    if(!r||!r.ok) throw new Error((r&&r.error)||"No wide picture came back. Try again.");
+    S.media.set("own:"+r.drive_id, URL.createObjectURL(b64ToBlob(r.data, r.mime))); aiSpend().images++;
+    sc.wide={ for:f.cid, still_drive_id:r.drive_id, kind:f.kind==="photo"?"photo":"video", drive_id:f.kind==="photo"?r.drive_id:null, at:Date.now() };
+    const e=ed(sc); if(e.wfit!=="blur"&&e.wfit!=="fill") e.wfit="ai";
+    if(f.kind!=="photo"){
+      const av=sc.avatar||{}, person=f.source==="AI avatar", secs=wideSecs(sc);
+      const vr=await api("shot_video",{ image:{mime:r.mime||"image/png", data:r.data}, seconds:secs, aspect:"16:9", scenery:!person,
+        what:person?(av.action||""):"", motion:person?(av.motion||""):"", talk:person&&!!av.talk, props:person?(av.props||[]).join(", "):"", camera:av.camera||"" });
+      if(!vr||!vr.ok||!vr.operation) throw new Error((vr&&vr.error)||"Couldn't start the wide animation");
+      sc.wide.pending={ operation:vr.operation, seconds:secs }; saveLocal(); pollWide(sc.id);
+      if(!quiet) toast(`Scene ${i+1}: wide picture made. Animating it in 16:9 (1–3 min); you can keep working.`);
+    } else { invalidate(); if(!quiet) toast(`Scene ${i+1}: AI wide version ready. Press 1 · Prepare preview.`); }
+    saveLocal(); updateCredits();
+  }catch(e){ sc.wide=Object.assign({}, sc.wide&&sc.wide.for===f.cid?sc.wide:{for:f.cid}, {pending:null, error:e.message}); saveLocal(); toast(`Scene ${i+1}: ${e.message}`); }
+  finally{ WIDE_BUSY.delete(sc.id); renderWidePanel(); }
+}
+const WIDE_POLL=new Set();
+async function pollWide(scId){
+  if(WIDE_POLL.has(scId)) return; WIDE_POLL.add(scId); const jobId=S.jobId;
+  try{ for(let k=0;k<60;k++){ await sleep(10000);
+    if(S.jobId!==jobId||!S.job) return; const sc=S.job.scenes.find(s=>s.id===scId), w=sc&&sc.wide; if(!w||!w.pending||!w.pending.operation) return;
+    let r; try{ r=await api("shot_status",{operation:w.pending.operation}); }catch(e){ continue; }
+    if(!r||!r.done) continue;
+    const secs=w.pending.seconds; w.pending=null;
+    if(r.ok&&r.drive_id){ w.drive_id=r.drive_id; w.duration=secs; w.error=""; aiSpend().video_sec+=secs; invalidate(); toast(`Scene ${S.job.scenes.indexOf(sc)+1}: the 16:9 clip is ready. Press 1 · Prepare preview to see it.`); }
+    else { w.error=(r&&r.error)||"animation failed"; toast(`Scene ${S.job.scenes.indexOf(sc)+1}: wide animation failed: ${w.error}`); }
+    saveLocal(); updateCredits(); renderWidePanel(); return; }
+  } finally { WIDE_POLL.delete(scId); }
+}
+function resumeWidePolls(){ if(!S.job) return; S.job.scenes.forEach(sc=>{ if(sc.wide&&sc.wide.pending&&sc.wide.pending.operation) pollWide(sc.id); }); }
 function renderFmtSw(){
   const w=isWide();
   document.querySelectorAll("[data-fmthost]").forEach(h=>{ h.innerHTML=(h.dataset.fmthost==="top"?`<span class="small muted" style="align-self:center">Video size:</span>`:"")+`<button type="button" data-fmt="short" aria-pressed="${!w}"><i style="width:10px;height:18px"></i><span>Shorts / Reels<br><small>vertical 9:16</small></span></button><button type="button" data-fmt="wide" aria-pressed="${w}"><i style="width:22px;height:12px"></i><span>YouTube video<br><small>wide 16:9</small></span></button>`;
   h.querySelectorAll("[data-fmt]").forEach(b=>b.onclick=()=>setFormat(b.dataset.fmt)); });
 }
 function applyFormat(){
-  const w=isWide(), cv=$("#cv"); if(cv){ const [W,H]=fmtDims(store.get("quality","1080")); if(!R.prepared||R.prepared.W!==W||R.prepared.H!==H){ cv.width=W; cv.height=H; } const st0=cv.parentElement; if(st0) st0.classList.toggle("wide",w); }
+  renderWidePanel(); const w=isWide(), cv=$("#cv"); if(cv){ const [W,H]=fmtDims(store.get("quality","1080")); if(!R.prepared||R.prepared.W!==W||R.prepared.H!==H){ cv.width=W; cv.height=H; } const st0=cv.parentElement; if(st0) st0.classList.toggle("wide",w); }
   const r=document.querySelector("#make .render"); if(r) r.classList.toggle("wide",w);
   const q=$("#rQual"); if(q){ const [a,b]=w?["1920 × 1080","1280 × 720"]:["1080 × 1920","720 × 1280"]; q.options[0].text=a+" (best)"; q.options[1].text=b+" (faster)"; }
   document.querySelectorAll(".tpcv").forEach(c=>{ c.classList.toggle("wide",w); c.width=w?640:360; c.height=w?360:640; const i=+c.dataset.tpcv; if(S.job&&S.job.scenes[i]) drawLayout(i,c); });
@@ -1064,15 +1153,16 @@ async function prepare(){
     // footage, three at a time
     const urls=new Array(n); let nextClip=0, gotClips=0;
     async function clipWorker(){ while(nextClip<n){ const i=nextClip++;
-      try{ urls[i]=await getClipUrl(job.scenes[i], quality); }catch(e){ urls[i]=null; toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
+      try{ const wf=wideFoot(job.scenes[i]); urls[i]=await getClipUrl(wf?{footage:wf}:job.scenes[i], quality); }catch(e){ urls[i]=null; toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
       gotClips++; tick(`Footage ${gotClips}/${n} downloaded`); } }
     await Promise.all([clipWorker(),clipWorker(),clipWorker()]);
     await waitVisible();
     for(let i=0;i<n;i++){
       const sc=job.scenes[i], a=ASSETS.get(sc.id)||{};
-      a.video=null; a.image=null; a.video2=null;
-      if(urls[i]) try{ if(sc.footage && sc.footage.kind==="photo") a.image=await loadImg(urls[i]); else a.video=await loadVideo(urls[i]); }catch(e){ toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
-      if(a.video && sc.footage && sc.footage.source==="AI avatar"){ try{ a.video2=await loadVideo(urls[i]); a.video2.loop=false; }catch(e){ a.video2=null; } }
+      a.video=null; a.image=null; a.video2=null; const wf=wideFoot(sc); a.wideUsed=!!wf; const kindNow=wf?wf.kind:(sc.footage&&sc.footage.kind);
+      if(urls[i]) try{ if(kindNow==="photo") a.image=await loadImg(urls[i]); else a.video=await loadVideo(urls[i]); }catch(e){ toast(`Scene ${i+1}: ${e.message}. Using a title card.`); }
+      if(!wf && sc.footage && !sc.footage.width){ const m=a.video||a.image; if(m){ sc.footage.width=m.videoWidth||m.naturalWidth; sc.footage.height=m.videoHeight||m.naturalHeight; } }
+      if(a.video && sc.footage && (sc.footage.source==="AI avatar"||wf)){ try{ a.video2=await loadVideo(urls[i]); a.video2.loop=false; }catch(e){ a.video2=null; } }
       ASSETS.set(sc.id,a);
       setLog(`Opening footage ${i+1}/${n}`);
     }
@@ -1084,6 +1174,7 @@ async function prepare(){
     R.prepared={scenes:[],total:0,W,H,musicBuf,cta:job.cta||{},website:(job.branding&&job.branding.website)||"negotrip.com",keyword:(job.request&&job.request.cta_keyword)||""};
     relayout();
     R.scrub=0.2; await scrubTo(0.2);
+    if(isWide()) renderWidePanel();
     setLog(`Ready · ${R.prepared.total.toFixed(1)} seconds. Edit below, play the preview, then record.`);
     $("#playBtn").disabled=false; $("#recBtn").disabled=false;
     renderEditor();
@@ -1108,7 +1199,7 @@ function relayout(){
     s.speechEnd = s.aStart + b.end;
     s.representative = !sc.card && (s.video||s.image) && sc.match==="representative" && sc.footage && sc.footage.source!=="Your library";
     if(s.video){ const len=s.video.duration||0; const def = len > s.dur*e.speed+1.5 ? Math.min(1, len-s.dur*e.speed) : 0; s.offset = e.start!=null ? Math.max(0,Math.min(e.start, Math.max(0,len-0.2))) : def; s.clipLen=len; }
-    s.spd=e.speed; s.hold=!!(s.video && sc.footage && sc.footage.source==="AI avatar");
+    s.spd=e.speed; s.hold=!!(s.video && sc.footage && (sc.footage.source==="AI avatar"||a.wideUsed));
     if(s.video && s.hold && e.fill==="loop") s.hold=false;
     if(s.video){ s.video.loop=!s.hold; if(s.hold){ const len=s.clipLen||s.video.duration||0; if(e.start==null) s.offset=0; const fm=e.fill||"slow";
       if((fm==="slow"||fm==="smooth") && e.speed===1 && len>0.5 && len-s.offset < s.dur){
@@ -1485,7 +1576,9 @@ function drawMedia(g,s,idx,p,W,H,k){
   const amt = s.image ? 0.12 : 0.05;
   let z=e.zoom, px=e.panX, py=e.panY;
   if(m==="in") z*=1+amt*p; else if(m==="out") z*=1+amt*(1-p); else if(m==="left") { z*=1.08; px+=0.6-1.2*p; } else if(m==="right"){ z*=1.08; px+=-0.6+1.2*p; }
-  const fitTall = W>H && sw/sh < 1.2;   // vertical clip in a wide (16:9) frame: show it whole on a blurred backdrop
+  const wfm = W>H && sw/sh < 1.2 ? wideFitOf(s.sc) : "";
+  const fitTall = wfm==="blur";
+  if(wfm==="fill") py = Math.max(-1, py-0.35);   // keep faces (upper part) in a zoomed crop   // vertical clip in a wide (16:9) frame: show it whole on a blurred backdrop
   if(fitTall){
     const bs=Math.max(W/sw,H/sh)*1.1, bw=sw*bs, bh=sh*bs;
     g.save(); g.filter=`blur(${Math.round(28*k)}px) brightness(${0.62*e.bright}) saturate(${e.sat})`; g.drawImage(src,(W-bw)/2,(H-bh)/2,bw,bh); g.restore();
@@ -2774,7 +2867,7 @@ async function pollShot(scId){
     toast("The animation is taking unusually long. It will be checked again when you reopen this video.");
   } finally { CAST.polling.delete(scId); }
 }
-function resumeShotPolls(){ if(!S.job) return; S.job.scenes.forEach(sc=>{ if(sc.avatar && sc.avatar.pending){ if(sc.avatar.pending.operation) pollShot(sc.id); else sc.avatar.pending=null; } }); }
+function resumeShotPolls(){ if(!S.job) return; resumeWidePolls(); S.job.scenes.forEach(sc=>{ if(sc.avatar && sc.avatar.pending){ if(sc.avatar.pending.operation) pollShot(sc.id); else sc.avatar.pending=null; } }); }
 
 
 // ---------------------------------------------------------------- presenter: choose exactly which clips the presenter appears in
