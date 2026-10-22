@@ -369,7 +369,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261022163832";
+const BUILD = "20261022173255";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -2035,7 +2035,7 @@ function openYouTube(){
     <div class="row2"><div class="field"><label for="ytPriv">Visibility</label><select id="ytPriv">${[["private","Private (only you)"],["unlisted","Unlisted (anyone with the link)"],["public","Public"]].map(([k,t])=>`<option value="${k}" ${d.privacy===k?"selected":""}>${t}</option>`).join("")}</select></div>
       <div class="field"><label>&nbsp;</label><label class="small chk"><input type="checkbox" id="ytSyn" ${d.synthetic?"checked":""}> Contains realistic AI-generated people (YouTube's “altered or synthetic content” label)</label></div></div>
     <p class="small muted" style="margin:0 0 8px">Category: Travel &amp; Events · Not made for kids · ${(r.fmt||"short")==="wide"?"<b>Wide 16:9 video</b>, published as a normal YouTube video":"<b>Vertical 9:16 video</b> under 3 minutes, so YouTube shows it as a Short"}. ${(S.lastResult.blob.size/1048576).toFixed(1)} MB.</p>
-    ${YT.channel?`<p class="small">Uploading to channel <b>${esc(YT.channel)}</b> · <button class="linkish" type="button" id="ytSwitch">use another account</button></p>`:""}
+    ${YT.channel?`<p class="small">Uploading to channel <b>${esc(YT.channel)}</b> · <button class="linkish" type="button" id="ytSwitch">change channel</button></p>`:`<p class="small muted">Google will ask which account to use. To post on your business channel, pick <b>the channel itself</b> (e.g. NegoTrip) in Google's list, not your personal name.</p>`}
     <div class="btns"><button class="btn" type="button" id="ytGo" ${cid?"":"disabled"}>${ytRec()?"Upload again":"Sign in with Google & upload"}</button><span class="log" id="ytLog"></span></div>
     <div class="bar" id="ytBar" hidden><i id="ytFill"></i></div>
     ${ytRec()?`<p class="small">This ${isWide()?"16:9":"9:16"} version is already on YouTube: <a href="${esc(ytRec().url)}" target="_blank" rel="noopener">${esc(ytRec().url)}</a> (${esc(ytRec().privacy)}, ${esc(ago(ytRec().at))})</p>`:""}`);
@@ -2055,7 +2055,7 @@ function ytToken(){
     const tc=google.accounts.oauth2.initTokenClient({ client_id:ytClientId(), scope:"https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
       callback:(r)=>{ if(r.error) return rej(new Error("Google sign-in: "+(r.error_description||r.error))); YT.token=r.access_token; YT.exp=Date.now()+(+r.expires_in||3600)*1000; res(YT.token); },
       error_callback:(e)=>rej(new Error(e&&e.type==="popup_closed"?"Sign-in window was closed.":"Google sign-in failed: "+(e&&e.message||e&&e.type||""))) });
-    tc.requestAccessToken({prompt: YT.channel?"":"select_account"});
+    tc.requestAccessToken({prompt: YT.channel?"":"select_account consent"});
   });
 }
 async function ytPublish(m){
@@ -2083,7 +2083,7 @@ async function ytPublish(m){
   ytRec(); S.job.yt[r.fmt||"short"]={ id:res.id, url, privacy:(res.status&&res.status.privacyStatus)||d.privacy, at:new Date().toISOString(), channel:YT.channel, by:S.email, fmt:r.fmt||"short" }; if((r.fmt||"short")==="short") S.job.youtube=S.job.yt.short; saveLocal(); showDlLast();
   log(""); if(bar) bar.hidden=true;
   const body=m.querySelector(".modal-card");
-  body.insertAdjacentHTML("beforeend",`<div class="notice small" style="background:color-mix(in srgb,var(--ok) 16%,transparent)"><b>Uploaded ✓</b> <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a> · ${esc(S.job.yt[r.fmt||"short"].privacy)}. YouTube is processing it; it can take a few minutes to appear. Manage it in <a href="https://studio.youtube.com/video/${esc(res.id)}/edit" target="_blank" rel="noopener">YouTube Studio</a>.
+  body.insertAdjacentHTML("beforeend",`<div class="notice small" style="background:color-mix(in srgb,var(--ok) 16%,transparent)"><b>Uploaded ✓</b> <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a> · ${esc(S.job.yt[r.fmt||"short"].privacy)}. Uploaded to the channel <b>${esc(YT.channel||"")}</b>: while it is private, the link only opens when YouTube is switched to that same channel (profile picture → Switch account). YouTube may need a few minutes to process it. Manage it in <a href="https://studio.youtube.com/video/${esc(res.id)}/edit" target="_blank" rel="noopener">YouTube Studio</a>.
     ${S.job.yt[r.fmt||"short"].privacy!=="public"?`<br>Note: Google keeps uploads from new, unaudited apps private until the app passes YouTube's API check; you can still make it public yourself in YouTube Studio.`:""}</div>`);
   showDlLast(); toast("Uploaded to YouTube");
 }
