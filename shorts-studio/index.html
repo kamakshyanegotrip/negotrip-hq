@@ -369,7 +369,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261022173255";
+const BUILD = "20261022173838";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -2035,27 +2035,39 @@ function openYouTube(){
     <div class="row2"><div class="field"><label for="ytPriv">Visibility</label><select id="ytPriv">${[["private","Private (only you)"],["unlisted","Unlisted (anyone with the link)"],["public","Public"]].map(([k,t])=>`<option value="${k}" ${d.privacy===k?"selected":""}>${t}</option>`).join("")}</select></div>
       <div class="field"><label>&nbsp;</label><label class="small chk"><input type="checkbox" id="ytSyn" ${d.synthetic?"checked":""}> Contains realistic AI-generated people (YouTube's “altered or synthetic content” label)</label></div></div>
     <p class="small muted" style="margin:0 0 8px">Category: Travel &amp; Events · Not made for kids · ${(r.fmt||"short")==="wide"?"<b>Wide 16:9 video</b>, published as a normal YouTube video":"<b>Vertical 9:16 video</b> under 3 minutes, so YouTube shows it as a Short"}. ${(S.lastResult.blob.size/1048576).toFixed(1)} MB.</p>
-    ${YT.channel?`<p class="small">Uploading to channel <b>${esc(YT.channel)}</b> · <button class="linkish" type="button" id="ytSwitch">change channel</button></p>`:`<p class="small muted">Google will ask which account to use. To post on your business channel, pick <b>the channel itself</b> (e.g. NegoTrip) in Google's list, not your personal name.</p>`}
-    <div class="btns"><button class="btn" type="button" id="ytGo" ${cid?"":"disabled"}>${ytRec()?"Upload again":"Sign in with Google & upload"}</button><span class="log" id="ytLog"></span></div>
+    <div class="stgrp" id="ytChan"><b class="small">Channel</b>${YT.ch?`<div style="display:flex;gap:10px;align-items:center;margin-top:6px">${YT.ch.thumb?`<img src="${esc(YT.ch.thumb)}" alt="" width="40" height="40" style="border-radius:50%">`:""}<div style="flex:1;min-width:0"><b>${esc(YT.ch.title)}</b><div class="small muted">${esc(YT.ch.handle||"")}${YT.ch.handle?" · ":""}signed in with Google</div></div><button class="btn-sm" type="button" id="ytSwitch">Change channel</button></div>
+      ${store.get("ytPrefCh",null)&&store.get("ytPrefCh").id!==YT.ch.id?`<div class="notice small" style="margin-top:6px">Last time you posted to <b>${esc(store.get("ytPrefCh").title)}</b>. Check this is the channel you want.</div>`:""}`
+      :`<p class="small muted" style="margin:6px 0">Choose the YouTube channel first. In Google's window, pick the <b>channel itself</b> (for example <b>NegoTrip</b>), not your personal name.${store.get("ytPrefCh",null)?` Last used: <b>${esc(store.get("ytPrefCh").title)}</b>.`:""}</p><button class="btn-sm primary" type="button" id="ytPick" ${cid?"":"disabled"}>Choose channel</button>`}</div>
+    <div class="btns"><button class="btn" type="button" id="ytGo" ${cid&&YT.ch?"":"disabled"}>${YT.ch?`${ytRec()?"Upload again":"Upload"} to ${esc(YT.ch.title)}`:"Choose the channel first"}</button><span class="log" id="ytLog"></span></div>
     <div class="bar" id="ytBar" hidden><i id="ytFill"></i></div>
     ${ytRec()?`<p class="small">This ${isWide()?"16:9":"9:16"} version is already on YouTube: <a href="${esc(ytRec().url)}" target="_blank" rel="noopener">${esc(ytRec().url)}</a> (${esc(ytRec().privacy)}, ${esc(ago(ytRec().at))})</p>`:""}`);
-  const q=x=>m.querySelector(x);
+  const q=x=>m.querySelector(x); loadScript("https://accounts.google.com/gsi/client").catch(()=>{});
   m.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>{ if(YT.busy&&!confirmLeave()) return; closeModal(); });
   const keepDraft=()=>{ S.job.ytDraft={title:q("#ytTitle").value, description:q("#ytDesc").value, tags:q("#ytTags").value, privacy:q("#ytPriv").value, synthetic:q("#ytSyn").checked}; saveLocal(); };
   ["#ytTitle","#ytDesc","#ytTags"].forEach(id=>q(id).oninput=keepDraft); q("#ytPriv").onchange=keepDraft; q("#ytSyn").onchange=keepDraft;
   if(q("#ytCidSave")) q("#ytCidSave").onclick=()=>{ const v=q("#ytCid").value.trim(); if(!/\.apps\.googleusercontent\.com$/.test(v)){ toast("That doesn't look like a Google Client ID"); return; } store.set("ytClientId",v); keepDraft(); openYouTube(); };
-  if(q("#ytSwitch")) q("#ytSwitch").onclick=()=>{ YT.token=null; YT.channel=null; keepDraft(); openYouTube(); };
+  const pick=async()=>{ keepDraft(); YT.token=null; YT.ch=null; YT.channel=null; const b=q("#ytSwitch")||q("#ytPick"); if(b){ b.disabled=true; b.textContent="Waiting for Google…"; }
+    try{ await ytChannel(true); store.set("ytPrefCh",{id:YT.ch.id,title:YT.ch.title}); }catch(e){ toast(e.message||String(e)); } openYouTube(); };
+  if(q("#ytSwitch")) q("#ytSwitch").onclick=pick; if(q("#ytPick")) q("#ytPick").onclick=pick;
   q("#ytGo").onclick=()=>{ keepDraft(); ytPublish(m).catch(e=>{ YT.busy=false; const l=q("#ytLog"); if(l) l.textContent=""; toast(e.message||String(e)); const g=q("#ytGo"); if(g) g.disabled=false; }); };
 }
+async function ytChannel(fresh){
+  const tok=await ytToken(fresh);
+  const c=await (await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",{headers:{Authorization:"Bearer "+tok}})).json();
+  const it=c.items&&c.items[0]; if(!it) throw new Error("This Google account has no YouTube channel. Choose another account or the brand channel.");
+  const sn=it.snippet||{}; const ch={ id:it.id, title:sn.title||"your channel", handle:sn.customUrl||"", thumb:(sn.thumbnails&&(sn.thumbnails.default||{}).url)||"" };
+  if(!fresh && YT.ch && YT.ch.id!==ch.id) throw new Error(`Google signed in to “${ch.title}”, not “${YT.ch.title}”. Press Change channel and pick “${YT.ch.title}”.`);
+  YT.ch=ch; YT.channel=ch.title; return ch;
+}
 function confirmLeave(){ toast("Upload in progress: keep this window open until it finishes."); return false; }
-function ytToken(){
+function ytToken(fresh){
   return new Promise(async(res,rej)=>{
-    if(YT.token && Date.now()<YT.exp-60000) return res(YT.token);
+    if(!fresh && YT.token && Date.now()<YT.exp-60000) return res(YT.token);
     try{ await loadScript("https://accounts.google.com/gsi/client"); }catch(e){ return rej(new Error("Couldn't load Google sign-in. Check your connection.")); }
     const tc=google.accounts.oauth2.initTokenClient({ client_id:ytClientId(), scope:"https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
       callback:(r)=>{ if(r.error) return rej(new Error("Google sign-in: "+(r.error_description||r.error))); YT.token=r.access_token; YT.exp=Date.now()+(+r.expires_in||3600)*1000; res(YT.token); },
       error_callback:(e)=>rej(new Error(e&&e.type==="popup_closed"?"Sign-in window was closed.":"Google sign-in failed: "+(e&&e.message||e&&e.type||""))) });
-    tc.requestAccessToken({prompt: YT.channel?"":"select_account consent"});
+    tc.requestAccessToken({prompt: fresh||!YT.ch ? "select_account consent" : ""});
   });
 }
 async function ytPublish(m){
@@ -2063,8 +2075,9 @@ async function ytPublish(m){
   const r=S.lastResult; if(!r||!r.blob) throw new Error("The video file isn't available. Record it again.");
   const d=S.job.ytDraft||ytDefaults(); if(!String(d.title||"").trim()) throw new Error("Give the video a title.");
   go.disabled=true; YT.busy=true; log("Signing in to Google…");
+  if(!YT.ch) throw new Error("Choose the channel first.");
+  const want=YT.ch.id; await ytChannel(false); if(YT.ch.id!==want) throw new Error("Channel changed during sign-in. Choose the channel again.");
   const tok=await ytToken();
-  if(!YT.channel){ try{ const c=await (await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",{headers:{Authorization:"Bearer "+tok}})).json(); YT.channel=(c.items&&c.items[0]&&c.items[0].snippet.title)||"your channel"; }catch(e){ YT.channel="your channel"; } }
   log(`Uploading to ${YT.channel}…`);
   const meta={ snippet:{ title:String(d.title).slice(0,100), description:String(d.description||"").replace(/[<>]/g,"").slice(0,4900), tags:String(d.tags||"").split(",").map(x=>x.trim().replace(/[<>]/g,"")).filter(Boolean).slice(0,30), categoryId:"19", defaultLanguage:(scriptLang()||"en").split("-")[0] },
     status:{ privacyStatus:d.privacy||"private", selfDeclaredMadeForKids:false, containsSyntheticMedia:!!d.synthetic, embeddable:true } };
@@ -2080,7 +2093,7 @@ async function ytPublish(m){
     x.onerror=()=>bad(new Error("Network error during upload. Check your connection and try again.")); x.send(r.blob); });
   YT.busy=false;
   const url=(isWide()?"https://youtu.be/":"https://youtube.com/shorts/")+res.id;
-  ytRec(); S.job.yt[r.fmt||"short"]={ id:res.id, url, privacy:(res.status&&res.status.privacyStatus)||d.privacy, at:new Date().toISOString(), channel:YT.channel, by:S.email, fmt:r.fmt||"short" }; if((r.fmt||"short")==="short") S.job.youtube=S.job.yt.short; saveLocal(); showDlLast();
+  ytRec(); S.job.yt[r.fmt||"short"]={ id:res.id, url, privacy:(res.status&&res.status.privacyStatus)||d.privacy, at:new Date().toISOString(), channel:YT.channel, channel_id:YT.ch&&YT.ch.id, by:S.email, fmt:r.fmt||"short" }; if((r.fmt||"short")==="short") S.job.youtube=S.job.yt.short; saveLocal(); showDlLast();
   log(""); if(bar) bar.hidden=true;
   const body=m.querySelector(".modal-card");
   body.insertAdjacentHTML("beforeend",`<div class="notice small" style="background:color-mix(in srgb,var(--ok) 16%,transparent)"><b>Uploaded ✓</b> <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a> · ${esc(S.job.yt[r.fmt||"short"].privacy)}. Uploaded to the channel <b>${esc(YT.channel||"")}</b>: while it is private, the link only opens when YouTube is switched to that same channel (profile picture → Switch account). YouTube may need a few minutes to process it. Manage it in <a href="https://studio.youtube.com/video/${esc(res.id)}/edit" target="_blank" rel="noopener">YouTube Studio</a>.
