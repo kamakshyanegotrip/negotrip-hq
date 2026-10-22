@@ -347,7 +347,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261022070756";
+const BUILD = "20261022125033";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -1033,7 +1033,7 @@ async function lipsyncScene(i, quiet){
       body.prompt=`A real person talking naturally to the camera like a friendly travel vlogger${av.action?", "+av.action:""}; natural head movement, blinking and small hand gestures; keep the face, clothes and place exactly as in the photo.`; }
     const r=await api("lipsync", body); if(!r||!r.ok||!r.operation) throw new Error((r&&r.error)||"Couldn't start the lip-sync");
     sc.talks=sc.talks||{}; sc.talks[key]={ pending:{operation:r.operation, seconds:Math.ceil(audio.secs)}, mode:plan.mode, lang:scriptLang(), at:Date.now() };
-    saveLocal(); pollTalk(sc.id, key); if(!quiet) toast(`Scene ${i+1}: making the influencer speak the line (1–4 min). You can keep working.`);
+    saveLocal(); pollTalk(sc.id, key); if(!quiet) toast(`Scene ${i+1}: making the influencer speak the line (about 5 min). You can keep working.`);
   }catch(e){ sc.talks=sc.talks||{}; sc.talks[key]={ error:e.message, lang:scriptLang(), at:Date.now() }; saveLocal(); toast(`Scene ${i+1}: ${e.message}`); }
   finally{ TALK_BUSY.delete(sc.id); renderTalkPanel(); }
 }
@@ -1058,7 +1058,7 @@ function renderTalkPanel(){
   if(!rows.length){ h.hidden=true; h.innerHTML=""; return; }
   const todo=talkTodo(), total=todo.reduce((a,x)=>a+talkPlan(x.sc).cost,0);
   const st=(x)=>{ if(x.sc.talkOff) return `<span class="pill">Off: voice-over only</span>`; if(TALK_BUSY.has(x.sc.id)) return `<span class="pill warn">Preparing the voice…</span>`; const t=talkOf(x.sc);
-    if(t&&t.pending) return `<span class="pill warn">👄 Lip-syncing… (1–4 min)</span>`; if(t&&t.drive_id) return `<span class="pill ok">👄 Speaks the line ✓</span>`; if(t&&t.error) return `<span class="pill bad">Failed: ${esc(String(t.error).slice(0,90))}</span>`;
+    if(t&&t.pending) return `<span class="pill warn">👄 Lip-syncing… (about 5 min)</span>`; if(t&&t.drive_id) return `<span class="pill ok">👄 Speaks the line ✓</span>`; if(t&&t.error) return `<span class="pill bad">Failed: ${esc(String(t.error).slice(0,90))}</span>`;
     return `<span class="pill warn">Not lip-synced in ${esc(langName(scriptLang()))}${isWide()?" (16:9)":""} yet</span>`; };
   h.hidden=false;
   h.innerHTML=`<b>👄 Influencers speaking the narration</b>
@@ -1072,7 +1072,7 @@ function renderTalkPanel(){
   h.querySelectorAll("[data-talk]").forEach(b=>b.onclick=()=>{ const i=+b.dataset.talk, sc=S.job.scenes[i]; if(!confirm(`Make the influencer in scene ${i+1} speak the line in ${langName(scriptLang())}? This uses AI lip-sync (fal.ai) and costs about ₹${Math.round(talkPlan(sc).cost)}.`)) return; lipsyncScene(i); });
   const all=h.querySelector("#talkAll"); if(all) all.onclick=()=>{ if(!confirm(`Lip-sync ${todo.length} scene${todo.length===1?"":"s"} in ${langName(scriptLang())}? This uses AI lip-sync (fal.ai) and costs about ₹${Math.round(total)}.`)) return; lipsyncAll(); };
 }
-async function lipsyncAll(){ const todo=talkTodo(); for(const x of todo) await lipsyncScene(x.i, true); if(todo.length) toast(`Lip-sync started for ${todo.length} scene${todo.length===1?"":"s"} (1–4 min each). You can keep working.`); }
+async function lipsyncAll(){ const todo=talkTodo(); for(const x of todo) await lipsyncScene(x.i, true); if(todo.length) toast(`Lip-sync started for ${todo.length} scene${todo.length===1?"":"s"} (about 5 min each). You can keep working.`); }
 
 // ---- language versions (dubbing)
 function langSnapshot(){ const j=S.job; return { at:Date.now(), vc:Object.assign({},VC()), cta:Object.assign({},j.cta||{}), caption:captionText(),
