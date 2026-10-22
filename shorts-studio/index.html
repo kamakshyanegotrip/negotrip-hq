@@ -369,7 +369,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261022144340";
+const BUILD = "20261022154045";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -1599,10 +1599,16 @@ function textPanelHtml(i){
   const fontOpts=(v)=>`<option value="">Same as video (${esc(G.titleFont)})</option>`+FONTS.map(f=>`<option ${v===f?"selected":""} style="font-family:'${esc(f)}'">${esc(f)}</option>`).join("");
   const col=(k,v,def)=>`<div class="cn"><input type="color" data-tp="${k}" value="${esc(toHex(v)||toHex(def)||"#ffffff")}"><label class="small"><input type="checkbox" data-tpoff="${k}" ${v?"":"checked"}> same as video</label></div>`;
   const r=(k,label,min,max,step,val)=>`<div class="rng"><label>${label} <output>${(+val).toFixed(2)}</output></label><input type="range" data-tp="${k}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
-  const showCard = sc.card || e.cardOn;
+  const showCard = sc.card || e.cardOn, isLast = i===S.job.scenes.length-1;
+  const g=(k,label,min,max,step)=>`<div class="rng"><label>${label} <output>${(+G[k]).toFixed(2)}</output></label><input type="range" data-tg="${k}" min="${min}" max="${max}" step="${step}" value="${G[k]}"></div>`;
   return `<div class="textpanel">
     <p class="small muted" style="margin:0 0 8px">Changes here apply to <b>scene ${i+1}</b>. You can also drag the text on the preview.</p>
+    ${isLast?`<div class="stgrp"><b class="small">Call-to-action box &amp; contact (closing scene)</b>
+      <div class="field"><label class="small">Call-to-action text</label><input type="text" data-ctatext="1" maxlength="60" value="${esc((S.job.cta&&S.job.cta.on_screen)||"")}"></div>
+      ${g("ctaPos","Box up ↕ down",0.2,0.9,0.005)}${g("ctaSize","Box text size",0.5,1.8,0.05)}${g("webSize","Website & contact size",0.5,1.8,0.05)}
+      <p class="small muted" style="margin:4px 0 0">Website, phone, email and address: in “All scenes” below (📇 Website &amp; contact).</p></div>`:""}
     <div class="stgrp"><b class="small">Top line (title)</b>
+      ${isLast?`<label class="small chk"><input type="checkbox" data-tp="showTitle" ${e.showTitle?"checked":""}> Show the title on the closing scene <span class="muted">(off by default: the call-to-action box is shown instead)</span></label>`:""}
       <div class="field"><label class="small">Text</label><input type="text" data-tptext="on_screen_text" maxlength="40" value="${esc(sc.on_screen_text||"")}"></div>
       <label class="small chk"><input type="checkbox" data-tp="hideTitle" ${e.hideTitle?"checked":""}> Hide in this scene</label>
       ${r("titleY","Up ↕ down",0.04,0.95,0.005,titleYOf(e).toFixed(3))}
@@ -1627,15 +1633,19 @@ function bindTextPanel(host, i){
   const sc=S.job.scenes[i], e=ed(sc);
   let pend=false; const redraw=()=>{ if(pend) return; pend=true; requestAnimationFrame(()=>{ pend=false; if(R.prepared) drawFrame(R.scrub||0); else drawPoster(); }); };
   const changed=(big)=>{ saveLocal(); if(big) loadStyleFonts().then(redraw); else redraw(); };
+  const isLast=i===S.job.scenes.length-1, TITLEK=/^(title|on_screen_text)/;
+  const autoShow=(k)=>{ if(isLast && TITLEK.test(k) && !e.showTitle){ e.showTitle=true; const cb=host.querySelector('[data-tp="showTitle"]'); if(cb) cb.checked=true; } };
+  host.querySelectorAll("[data-tg]").forEach(el=>el.addEventListener("input",()=>{ const G=st(); G[el.dataset.tg]=+el.value; const o=el.closest(".rng").querySelector("output"); if(o) o.textContent=(+el.value).toFixed(2); changed(false); }));
+  host.querySelectorAll("[data-ctatext]").forEach(el=>el.addEventListener("input",()=>{ S.job.cta=Object.assign({},S.job.cta||{},{on_screen:el.value}); changed(false); }));
   host.querySelectorAll("[data-tp]").forEach(el=>{
     const k=el.dataset.tp, ev=el.type==="range"||el.type==="color"||el.type==="text"?"input":"change";
     el.addEventListener(ev,()=>{ let v=el.type==="checkbox"?el.checked:el.type==="range"?+el.value:el.value;
-      e[k]=v; const off=host.querySelector(`[data-tpoff="${k}"]`); if(off&&el.type==="color") off.checked=false;
+      e[k]=v; autoShow(k); const off=host.querySelector(`[data-tpoff="${k}"]`); if(off&&el.type==="color") off.checked=false;
       const o=(el.closest(".rng")||el.parentElement).querySelector("output"); if(o&&el.type==="range") o.textContent=(+v).toFixed(2); changed(/Font$/.test(k)); if(k==="cardOn") renderEditor(); });
   });
-  host.querySelectorAll("[data-tptext]").forEach(el=>el.addEventListener("input",()=>{ sc[el.dataset.tptext]=el.value; const o=document.querySelector(`#o${i}`); if(o) o.value=el.value; changed(false); }));
+  host.querySelectorAll("[data-tptext]").forEach(el=>el.addEventListener("input",()=>{ sc[el.dataset.tptext]=el.value; autoShow("on_screen_text"); const o=document.querySelector(`#o${i}`); if(o) o.value=el.value; changed(false); }));
   host.querySelectorAll("[data-tpoff]").forEach(cb=>cb.addEventListener("change",()=>{ const k=cb.dataset.tpoff; if(cb.checked) e[k]=""; else { const c=host.querySelector(`input[type=color][data-tp="${k}"]`); e[k]=c?c.value:""; } changed(false); }));
-  host.querySelectorAll("[data-tppos]").forEach(b=>b.onclick=()=>{ e.titlePos=b.dataset.tppos; e.titleY=null; e.titleX=null; changed(false); renderEditor(); });
+  host.querySelectorAll("[data-tppos]").forEach(b=>b.onclick=()=>{ e.titlePos=b.dataset.tppos; e.titleY=null; e.titleX=null; autoShow("titlePos"); changed(false); renderEditor(); });
   host.querySelector("[data-tpreset]").onclick=()=>{ e.titleY=null; e.titleX=null; e.cardY=null; e.titlePos="top"; changed(false); renderEditor(); };
   host.querySelector("[data-tpall]").onclick=()=>{ const keys=["titleSize","titleFont","titleColor","titleBg","titlePos","titleX","titleY","cardSize","cardFont","cardColor","cardY"]; S.job.scenes.forEach(o=>{ if(o===sc) return; const oe=ed(o); keys.forEach(k=>oe[k]=e[k]); }); changed(true); toast("Text layout applied to every scene"); };
   addStepButtons(host);
@@ -1795,7 +1805,7 @@ function drawFrame(t, P0, cv0){
   const alignX=(al,w)=> al==="left"?75*k : al==="right"?W-75*k : W/2;
   // scene title
   const title=applyCase(s.sc.on_screen_text||"", G.titleCase);
-  if(title && !last && !e.hideTitle){
+  if(title && (!last || e.showTitle) && !e.hideTitle){
     const a=Math.min(1,into/0.25, (s.t1-t)/0.2); g.globalAlpha=Math.max(0,a);
     const fs=86*k*e.titleSize*G.titleSizeAll; g.font=`${G.titleWeight} ${fs}px ${fontStack(e.titleFont||G.titleFont)}`;
     const free=e.titleX!=null; g.textAlign=free?"center":G.titleAlign; const tx=free?W*e.titleX:alignX(G.titleAlign);
