@@ -369,7 +369,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261022154045";
+const BUILD = "20261022163832";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -527,7 +527,7 @@ async function poll(){
       if(id !== S.jobId) return;
       S.job = normalizeJob(job); renderWork();
       const j = S.jobs.find(x=>String(x.job_id)===id); if(j){ j.status="done"; j.title=r.job.title; renderJobs(); }
-      getVideo(id).then(v=>{ if(v && v.blob && id===S.jobId){ S.lastResult={jobId:id, blob:v.blob, name:v.name}; showDlLast(); } });
+      loadLastVideo();
       return;
     }
     if(r.status === "error"){ S.job=null; renderWork("error", r.error); return; }
@@ -1162,7 +1162,7 @@ function applyFormat(){
 function setFormat(f){
   if(!S.job) return; const was=S.job.format||"short"; if(was===f) return;
   S.job.format = f==="wide" ? "wide" : "short"; if(S.job.ytDraft) delete S.job.ytDraft.title;
-  SAVE.dirty=true; saveLocal(); invalidate(); renderFmtSw(); applyFormat(); drawPoster();
+  SAVE.dirty=true; saveLocal(); invalidate(); renderFmtSw(); applyFormat(); drawPoster(); loadLastVideo(); const rb=$("#resultBox"); if(rb) rb.innerHTML="";
   toast(f==="wide" ? "YouTube size (16:9). Press 1 · Prepare preview to rebuild." : "Shorts size (9:16). Press 1 · Prepare preview to rebuild.");
 }
 async function initRenderPanel(){
@@ -1985,8 +1985,9 @@ function showResult(blob, mime, original, convFailed){
   const name = `negotrip-${(S.job.request?.destination||"short").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")}-${S.job.job_id}.${ext}`;
   const url=URL.createObjectURL(blob);
   const mb=(blob.size/1048576).toFixed(1);
-  S.lastResult={jobId:S.jobId, blob, name, mime, url};
-  if(!convFailed && S.job){ S.job.video_at=new Date().toISOString(); saveLocal(); keepVideo(S.jobId, blob, name); }
+  const fmt = R.prepared ? (R.prepared.W>R.prepared.H?"wide":"short") : curFmt();
+  S.lastResult={jobId:S.jobId, blob, name:fmt==="wide"?name.replace(/(\.\w+)$/,"-16x9$1"):name, mime, url, fmt};
+  if(!convFailed && S.job){ S.job.video_at=new Date().toISOString(); saveLocal(); keepVideo(vidKey(S.jobId,fmt), blob, S.lastResult.name); }
   const origLink = original ? (()=>{ const u=URL.createObjectURL(original); return `<a class="linkish small" href="${u}" download="${esc(name.replace(/\.mp4$/,"-original."+(original.type.includes("mp4")?"mp4":"webm")))}">original recording</a>`; })() : "";
   $("#resultBox").innerHTML = `<div class="card resultcard" style="margin-top:14px;background:var(--bg)"><h3>Your video is ready ✓</h3>
     ${original?`<p class="small" style="margin:0 0 6px"><span class="pill ok">Phone-ready MP4</span> H.264 + AAC, 30 fps: plays on WhatsApp, Instagram, Facebook and YouTube.</p>`:""}
@@ -1994,7 +1995,7 @@ function showResult(blob, mime, original, convFailed){
     <p class="small" style="margin:0 0 8px">It has been saved to your <b>Downloads</b> folder as <b>${esc(name)}</b>. If your browser blocked it, use the button below.</p>
     <div class="stage${isWide()?" wide":""}" style="max-width:${isWide()?"420px":"220px"};margin:0 0 10px"><video src="${url}" controls playsinline></video></div>
     <div class="btns"><a class="btn" id="dlBtn" href="${url}" download="${esc(name)}">⬇ Download ${ext.toUpperCase()} (${mb} MB)</a>${convFailed?"":`<button class="btn ghost" type="button" id="ytNow">▶ Publish to YouTube</button>`}</div>
-    ${S.job&&S.job.youtube?`<p class="small" style="margin:6px 0 0">On YouTube: <a href="${esc(S.job.youtube.url)}" target="_blank" rel="noopener">${esc(S.job.youtube.url)}</a> (${esc(S.job.youtube.privacy)})</p>`:""}
+    ${ytRec()?`<p class="small" style="margin:6px 0 0">On YouTube: <a href="${esc(ytRec().url)}" target="_blank" rel="noopener">${esc(ytRec().url)}</a> (${esc(ytRec().privacy)})</p>`:""}
     ${origLink?`<p class="small muted">Also available: ${origLink} (unconverted, for troubleshooting).</p>`:""}
     <p class="small muted">Tick off the checks above before you post.</p></div>`;
   showDlLast(); const yn=$("#ytNow"); if(yn) yn.onclick=()=>openYouTube();
@@ -2006,8 +2007,9 @@ function showResult(blob, mime, original, convFailed){
 }
 function showDlLast(){
   const b=$("#dlLast"); if(!b) return; const r=S.lastResult;
-  if(r && r.jobId===S.jobId){ b.hidden=false; b.onclick=()=>saveBlob(r.blob, r.name); } else b.hidden=true;
-  const y=$("#ytLast"); if(y){ y.hidden=!(r && r.jobId===S.jobId); y.onclick=()=>openYouTube(); if(S.job&&S.job.youtube) y.textContent="▶ YouTube ✓ (publish again)"; }
+  const ok=!!(r && r.jobId===S.jobId && (r.fmt||"short")===curFmt());
+  if(ok){ b.hidden=false; b.onclick=()=>saveBlob(r.blob, r.name); } else b.hidden=true;
+  const y=$("#ytLast"); if(y){ y.hidden=!ok; y.onclick=()=>openYouTube(); y.textContent = ytRec() ? "▶ YouTube ✓ (publish again)" : "▶ YouTube"; }
 }
 
 
@@ -2022,7 +2024,7 @@ function ytDefaults(){
   return { title, description:(cap+(cr?"\n\n"+cr:"")).slice(0,4900), tags:[...new Set(["Odisha","travel","NegoTrip",...tags])].slice(0,15).join(", "), privacy:"private", synthetic:typeof hasAiPeople==="function"&&hasAiPeople() };
 }
 function openYouTube(){
-  const r=S.lastResult; if(!r||r.jobId!==S.jobId){ toast("Make the video first (2 · Record & download MP4)."); return; }
+  const r=S.lastResult; if(!r||r.jobId!==S.jobId||(r.fmt||"short")!==curFmt()){ toast(isWide()?"Record the 16:9 version first: press 1 · Prepare, then 2 · Record MP4 in YouTube size.":"Make the video first (2 · Record MP4)."); return; }
   const d=Object.assign(ytDefaults(), S.job.ytDraft||{}), cid=ytClientId();
   const m=modal(`<div class="mhead"><b>▶ Publish to YouTube</b><button class="btn-sm" data-close>Close</button></div>
     ${!cid?`<div class="notice small"><b>One-time setup needed.</b> YouTube uploads need a Google sign-in “Client ID” from your Google Cloud project (YouTube Data API v3 enabled, OAuth client of type Web application, authorised JavaScript origin <code>https://kamakshyanegotrip.github.io</code>). Paste it here once:
@@ -2032,11 +2034,11 @@ function openYouTube(){
     <div class="field"><label for="ytTags">Tags <span class="muted">(comma-separated)</span></label><input type="text" id="ytTags" maxlength="480" value="${esc(d.tags)}"></div>
     <div class="row2"><div class="field"><label for="ytPriv">Visibility</label><select id="ytPriv">${[["private","Private (only you)"],["unlisted","Unlisted (anyone with the link)"],["public","Public"]].map(([k,t])=>`<option value="${k}" ${d.privacy===k?"selected":""}>${t}</option>`).join("")}</select></div>
       <div class="field"><label>&nbsp;</label><label class="small chk"><input type="checkbox" id="ytSyn" ${d.synthetic?"checked":""}> Contains realistic AI-generated people (YouTube's “altered or synthetic content” label)</label></div></div>
-    <p class="small muted" style="margin:0 0 8px">Category: Travel &amp; Events · Not made for kids · Vertical video under 3 minutes, so YouTube shows it as a Short. ${(S.lastResult.blob.size/1048576).toFixed(1)} MB.</p>
+    <p class="small muted" style="margin:0 0 8px">Category: Travel &amp; Events · Not made for kids · ${(r.fmt||"short")==="wide"?"<b>Wide 16:9 video</b>, published as a normal YouTube video":"<b>Vertical 9:16 video</b> under 3 minutes, so YouTube shows it as a Short"}. ${(S.lastResult.blob.size/1048576).toFixed(1)} MB.</p>
     ${YT.channel?`<p class="small">Uploading to channel <b>${esc(YT.channel)}</b> · <button class="linkish" type="button" id="ytSwitch">use another account</button></p>`:""}
-    <div class="btns"><button class="btn" type="button" id="ytGo" ${cid?"":"disabled"}>${S.job.youtube?"Upload again":"Sign in with Google & upload"}</button><span class="log" id="ytLog"></span></div>
+    <div class="btns"><button class="btn" type="button" id="ytGo" ${cid?"":"disabled"}>${ytRec()?"Upload again":"Sign in with Google & upload"}</button><span class="log" id="ytLog"></span></div>
     <div class="bar" id="ytBar" hidden><i id="ytFill"></i></div>
-    ${S.job.youtube?`<p class="small">Already on YouTube: <a href="${esc(S.job.youtube.url)}" target="_blank" rel="noopener">${esc(S.job.youtube.url)}</a> (${esc(S.job.youtube.privacy)}, ${esc(ago(S.job.youtube.at))})</p>`:""}`);
+    ${ytRec()?`<p class="small">This ${isWide()?"16:9":"9:16"} version is already on YouTube: <a href="${esc(ytRec().url)}" target="_blank" rel="noopener">${esc(ytRec().url)}</a> (${esc(ytRec().privacy)}, ${esc(ago(ytRec().at))})</p>`:""}`);
   const q=x=>m.querySelector(x);
   m.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>{ if(YT.busy&&!confirmLeave()) return; closeModal(); });
   const keepDraft=()=>{ S.job.ytDraft={title:q("#ytTitle").value, description:q("#ytDesc").value, tags:q("#ytTags").value, privacy:q("#ytPriv").value, synthetic:q("#ytSyn").checked}; saveLocal(); };
@@ -2078,11 +2080,11 @@ async function ytPublish(m){
     x.onerror=()=>bad(new Error("Network error during upload. Check your connection and try again.")); x.send(r.blob); });
   YT.busy=false;
   const url=(isWide()?"https://youtu.be/":"https://youtube.com/shorts/")+res.id;
-  S.job.youtube={ id:res.id, url, privacy:(res.status&&res.status.privacyStatus)||d.privacy, at:new Date().toISOString(), channel:YT.channel, by:S.email }; saveLocal();
+  ytRec(); S.job.yt[r.fmt||"short"]={ id:res.id, url, privacy:(res.status&&res.status.privacyStatus)||d.privacy, at:new Date().toISOString(), channel:YT.channel, by:S.email, fmt:r.fmt||"short" }; if((r.fmt||"short")==="short") S.job.youtube=S.job.yt.short; saveLocal(); showDlLast();
   log(""); if(bar) bar.hidden=true;
   const body=m.querySelector(".modal-card");
-  body.insertAdjacentHTML("beforeend",`<div class="notice small" style="background:color-mix(in srgb,var(--ok) 16%,transparent)"><b>Uploaded ✓</b> <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a> · ${esc(S.job.youtube.privacy)}. YouTube is processing it; it can take a few minutes to appear. Manage it in <a href="https://studio.youtube.com/video/${esc(res.id)}/edit" target="_blank" rel="noopener">YouTube Studio</a>.
-    ${S.job.youtube.privacy!=="public"?`<br>Note: Google keeps uploads from new, unaudited apps private until the app passes YouTube's API check; you can still make it public yourself in YouTube Studio.`:""}</div>`);
+  body.insertAdjacentHTML("beforeend",`<div class="notice small" style="background:color-mix(in srgb,var(--ok) 16%,transparent)"><b>Uploaded ✓</b> <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a> · ${esc(S.job.yt[r.fmt||"short"].privacy)}. YouTube is processing it; it can take a few minutes to appear. Manage it in <a href="https://studio.youtube.com/video/${esc(res.id)}/edit" target="_blank" rel="noopener">YouTube Studio</a>.
+    ${S.job.yt[r.fmt||"short"].privacy!=="public"?`<br>Note: Google keeps uploads from new, unaudited apps private until the app passes YouTube's API check; you can still make it public yourself in YouTube Studio.`:""}</div>`);
   showDlLast(); toast("Uploaded to YouTube");
 }
 
@@ -2545,6 +2547,12 @@ async function setArchived(id, archived){
 // local copy of finished videos (this computer only) so they can be downloaded again later
 async function keepVideo(id, blob, name){ try{ await idb.set("video."+id, {blob, name, at:new Date().toISOString()}); }catch(e){} }
 async function getVideo(id){ try{ return await idb.get("video."+id); }catch(e){ return null; } }
+function curFmt(){ return isWide()?"wide":"short"; }
+function vidKey(id,fmt){ return id+(fmt==="wide"?".wide":""); }
+// the last recorded video of THIS size (9:16 and 16:9 are kept separately)
+async function loadLastVideo(){ const id=S.jobId, fmt=curFmt(); if(S.lastResult&&S.lastResult.jobId===id&&S.lastResult.fmt===fmt){ showDlLast(); return; }
+  S.lastResult=null; showDlLast(); const v=await getVideo(vidKey(id,fmt)); if(v && v.blob && id===S.jobId && fmt===curFmt()){ S.lastResult={jobId:id, blob:v.blob, name:v.name, fmt}; showDlLast(); } }
+function ytRec(fmt){ const j=S.job; if(!j) return null; j.yt=j.yt||{}; if(!j.yt.short && j.youtube) j.yt.short=j.youtube; return j.yt[fmt||curFmt()]||null; }
 
 // ================================================================ CAST: avatars from photos, AI influencers, their voices, and AI shots of them inside a scene
 // Cheapest path: one still image per shot (~₹3, Nano Banana) and, only if wanted, a 4–8 s animation of it (Veo Lite, ~₹4.4/s).
