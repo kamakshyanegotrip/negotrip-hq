@@ -369,7 +369,7 @@ div.look{cursor:default}
 const SUPABASE_URL = "https://wbynfjiaxpcoxthfuusk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9LY7RvJpP7wY8rxp8edMmQ_eT-FcbuC"; // public browser key (same as NegoTrip HQ)
 const API = "https://n8n.assignover.in/webhook/shorts-studio-api";
-const BUILD = "20261022173838";
+const BUILD = "20261025062709";
 const HQ_URL = new URL("../", location.href).href;
 const VOICES = [
   ["Kore","Kore · female, firm"],["Aoede","Aoede · female, breezy"],["Sulafat","Sulafat · female, warm"],["Leda","Leda · female, youthful"],
@@ -411,8 +411,12 @@ async function token(){
 async function api(action, payload={}, asBlob=false){
   const r = await fetch(API, {method:"POST", headers:{"Content-Type":"application/json", "Authorization":"Bearer "+await token()}, body:JSON.stringify({action, ...payload})});
   if(r.status===403) throw Object.assign(new Error("Your account doesn't have Shorts Studio yet."),{code:"not_allowed"});
-  if(!r.ok){ let m=""; try{ m=(await r.json()).message||""; }catch(e){} throw new Error(m || ("Server error "+r.status)); }
-  return asBlob ? r.blob() : r.json();
+  const down=()=>new Error(`The NegoTrip automation server (n8n) isn't answering right now (error ${r.status}). It may be restarting or down: open n8n.assignover.in to check, restart it from Hostinger if it doesn't load, then try again.`);
+  if(!r.ok){ if([502,503,504,520,521,522,523,524].includes(r.status)) throw down(); let m=""; try{ m=(await r.json()).message||""; }catch(e){} throw new Error(m || ("Server error "+r.status)); }
+  if(asBlob) return r.blob();
+  const t=await r.text(); try{ return JSON.parse(t); }catch(e){
+    if(/<html|bad gateway|cloudflare|nginx/i.test(t)) throw down();
+    throw new Error(t.trim() ? `The server sent an unexpected reply for “${action}”. Try again in a minute.` : `The server sent an empty reply for “${action}” (the n8n workflow stopped before answering). Try again; if it repeats, the n8n workflow needs checking.`); }
 }
 
 // ---------------------------------------------------------------- state
