@@ -32,22 +32,22 @@
   .status.bad { color: var(--bad); }
   .thanks { display:none; background:#fff; border:1px solid var(--line); border-radius:12px; padding:22px; }
   .hp { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
-  /* Header and footer. To use a logo image, put its URL in the <img> src in the header and remove the wordmark text. */
+  /* Header with B2B Tour Deals logo (logo.png), footer with the three office addresses. */
   .site-header { background:#fff; border-bottom:1px solid var(--line); }
   .site-header .wrap { max-width: 680px; margin: 0 auto; padding: 14px 18px; display:flex; align-items:center; gap:12px; }
+  .logo { height: 52px; width: auto; display:block; }
   .brand { font-weight:800; font-size:1.25rem; color:var(--brand); letter-spacing:.2px; }
   .brand small { display:block; font-size:.72rem; font-weight:600; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; }
   .site-footer { background:#fff; border-top:1px solid var(--line); margin-top:8px; }
-  .site-footer .wrap { max-width: 680px; margin: 0 auto; padding: 22px 18px 28px; display:grid; gap:14px; grid-template-columns: 1fr 1fr; font-size:.88rem; color:var(--muted); }
-  @media (max-width: 560px) { .site-footer .wrap { grid-template-columns: 1fr; } }
-  .site-footer strong { display:block; color:var(--ink); font-size:.92rem; margin-bottom:2px; }
+  .site-footer .wrap { max-width: 680px; margin: 0 auto; padding: 22px 18px 28px; display:grid; gap:14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); font-size:.88rem; color:var(--muted); }
+    .site-footer strong { display:block; color:var(--ink); font-size:.92rem; margin-bottom:2px; }
   .site-footer p { margin:0; }
 </style>
 </head>
 <body>
 <header class="site-header">
   <div class="wrap">
-    <div class="brand">B2B Tour Deals<small>Tour packages for travel partners</small></div>
+    <img class="logo" src="logo.png" alt="B2B Tour Deals" width="130" height="61">
   </div>
 </header>
 <main>
@@ -298,12 +298,15 @@
   <div class="wrap">
     <div>
       <strong>Registered office</strong>
-      <p>Negotrip Private Limited<br>Bhubaneswar, Odisha, India</p>
+      <p>58/90, Lane-3, Gangtree Nagar<br>Sishupalgarh, Bhubaneswar, Odisha<br>Pin: 751002</p>
     </div>
     <div>
-      <strong>Operational office</strong>
-      <p>Mohali, Punjab, India</p>
-      <p>Regional tie-ups: Kashmir and Port Blair</p>
+      <strong>Working office, Bhubaneswar</strong>
+      <p>Plot No. 98, Madhusudan Nagar<br>Bhubaneswar, Odisha<br>Pin: 751001</p>
+    </div>
+    <div>
+      <strong>Branch office, Punjab</strong>
+      <p>47, D-185, Prosperity Square, Phase 8B<br>Sector 74, Mohali (Chandigarh), Punjab<br>Pin: 140307</p>
     </div>
   </div>
 </footer>
