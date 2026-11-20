@@ -32,9 +32,24 @@
   .status.bad { color: var(--bad); }
   .thanks { display:none; background:#fff; border:1px solid var(--line); border-radius:12px; padding:22px; }
   .hp { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
+  /* Header and footer. To use a logo image, put its URL in the <img> src in the header and remove the wordmark text. */
+  .site-header { background:#fff; border-bottom:1px solid var(--line); }
+  .site-header .wrap { max-width: 680px; margin: 0 auto; padding: 14px 18px; display:flex; align-items:center; gap:12px; }
+  .brand { font-weight:800; font-size:1.25rem; color:var(--brand); letter-spacing:.2px; }
+  .brand small { display:block; font-size:.72rem; font-weight:600; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; }
+  .site-footer { background:#fff; border-top:1px solid var(--line); margin-top:8px; }
+  .site-footer .wrap { max-width: 680px; margin: 0 auto; padding: 22px 18px 28px; display:grid; gap:14px; grid-template-columns: 1fr 1fr; font-size:.88rem; color:var(--muted); }
+  @media (max-width: 560px) { .site-footer .wrap { grid-template-columns: 1fr; } }
+  .site-footer strong { display:block; color:var(--ink); font-size:.92rem; margin-bottom:2px; }
+  .site-footer p { margin:0; }
 </style>
 </head>
 <body>
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">NegoTrip<small>Destination Management Company</small></div>
+  </div>
+</header>
 <main>
   <h1>B2B tour package query</h1>
   <p class="lead">Share your travel requirements below to receive B2B rates and a customised tour package quotation. If you do not have a ready itinerary, fill in what you know and our team will prepare one.</p>
@@ -278,6 +293,20 @@
     <p>Your tour query is in. Our team will share the B2B rates and quotation on WhatsApp or email.</p>
   </section>
 </main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div>
+      <strong>Registered office</strong>
+      <p>Negotrip Private Limited<br>Bhubaneswar, Odisha, India</p>
+    </div>
+    <div>
+      <strong>Operational office</strong>
+      <p>Mohali, Punjab, India</p>
+      <p>Regional tie-ups: Kashmir and Port Blair</p>
+    </div>
+  </div>
+</footer>
 
 <script>
 (() => {
