@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>B2B tour package query</title>
+<title>B2B Tour Deals – Tour package request</title>
 <meta name="description" content="Share your travel requirements with us to receive B2B rates and a customised tour package quotation.">
 <style>
   :root { --ink:#1d2b33; --muted:#5b6b73; --line:#d6dee2; --brand:#1f5e7a; --bg:#f6f8f9; --ok:#1e7a4a; --bad:#a3322b; }
@@ -47,11 +47,11 @@
 <body>
 <header class="site-header">
   <div class="wrap">
-    <div class="brand">NegoTrip<small>Destination Management Company</small></div>
+    <div class="brand">B2B Tour Deals<small>Tour packages for travel partners</small></div>
   </div>
 </header>
 <main>
-  <h1>B2B tour package query</h1>
+  <h1>B2B tour package request</h1>
   <p class="lead">Share your travel requirements below to receive B2B rates and a customised tour package quotation. If you do not have a ready itinerary, fill in what you know and our team will prepare one.</p>
 
   <form id="enquiry" novalidate>
@@ -275,7 +275,7 @@
       </label>
       <label class="check">
         <input type="checkbox" name="consent_contact">
-        <span>Our team may contact this partner about this query on WhatsApp, email or phone.</span>
+        <span>Our team may contact this partner about this request on WhatsApp, email or phone.</span>
       </label>
     </fieldset>
 
@@ -284,13 +284,13 @@
     <!-- Honeypot: real visitors never see or fill this -->
     <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
 
-    <button type="submit" id="send">Send tour query</button>
+    <button type="submit" id="send">Send request</button>
     <div class="status" id="status" role="status" aria-live="polite"></div>
   </form>
 
   <section class="thanks" id="thanks" aria-live="polite">
     <h2 style="margin-top:0">Thank you</h2>
-    <p>Your tour query is in. Our team will share the B2B rates and quotation on WhatsApp or email.</p>
+    <p>Your request is in. Our team will share the B2B rates and quotation on WhatsApp or email.</p>
   </section>
 </main>
 
@@ -417,7 +417,7 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       sendBtn.disabled = false;
-      fail('Sorry, we could not send your query. Please try again.');
+      fail('Sorry, we could not send your request. Please try again.');
     }
   });
 })();
