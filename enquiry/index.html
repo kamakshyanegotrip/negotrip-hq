@@ -9,24 +9,25 @@
   :root { --ink:#1d2b33; --muted:#5b6b73; --line:#d6dee2; --brand:#1f5e7a; --bg:#f6f8f9; --ok:#1e7a4a; --bad:#a3322b; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:var(--ink); background:var(--bg); line-height:1.45; }
-  main { max-width: 680px; margin: 0 auto; padding: 28px 18px 48px; }
-  h1 { font-size: 1.6rem; margin: 0 0 6px; text-align: center; }
-  .lead { color: var(--muted); margin: 0 0 22px; }
-  form { display:grid; gap:18px; }
-  fieldset { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 18px 8px; margin:0; display:grid; gap:14px; }
-  legend { font-weight:700; padding:0 6px; color:var(--brand); }
-  .row { display:grid; gap:14px; grid-template-columns: 1fr 1fr; }
+  main { max-width: 720px; margin: 0 auto; padding: 40px 20px 56px; }
+  h1 { font-size: 1.9rem; line-height: 1.25; letter-spacing: -.01em; margin: 0 0 12px; text-align: center; }
+  .lead { color: var(--muted); margin: 0 0 32px; font-size: 1rem; }
+  form { display:grid; gap:22px; }
+  fieldset { background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px 22px 24px; margin:0; display:grid; gap:18px; box-shadow:0 1px 2px rgba(16,24,40,.05); }
+  legend { font-weight:700; font-size:1.02rem; padding:0 8px; margin-left:-8px; color:var(--brand); }
+  .row { display:grid; gap:18px 20px; grid-template-columns: 1fr 1fr; }
   @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
-  label { display:grid; gap:5px; font-size:.92rem; font-weight:600; }
+  label { display:grid; gap:7px; font-size:.92rem; font-weight:600; }
   .opt { font-weight:400; color:var(--muted); }
-  input, select, textarea { font: inherit; font-weight:400; padding:10px 11px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); width:100%; }
+  input, select, textarea { font: inherit; font-weight:400; padding:11px 13px; min-height:44px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); width:100%; }
   textarea { min-height: 70px; resize: vertical; }
   input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); outline-offset: 0; border-color: transparent; }
   .check { display:flex; gap:10px; align-items:flex-start; font-weight:400; font-size:.9rem; color:var(--muted); }
   .check input { width:auto; margin-top:3px; }
   .hint { font-size:.8rem; color:var(--muted); font-weight:400; margin:0; }
-  .note { background:#fff; border-left:4px solid var(--brand); border-radius:8px; padding:12px 14px; font-size:.92rem; color:var(--muted); margin:0; }
-  button { font: inherit; font-weight:600; background: var(--brand); color:#fff; border:0; border-radius:8px; padding:12px 16px; cursor:pointer; }
+  .note { background:#f1f6f9; border-left:4px solid var(--brand); border-radius:10px; padding:14px 16px; font-size:.92rem; color:var(--muted); margin:0; }
+  button { font: inherit; font-weight:600; background: var(--brand); color:#fff; border:0; border-radius:10px; padding:14px 20px; font-size:1rem; cursor:pointer; }
+  #send { width:100%; }
   button[disabled] { opacity:.6; cursor:default; }
   .status { min-height: 1.4em; font-size:.92rem; }
   .status.bad { color: var(--bad); }
@@ -34,13 +35,13 @@
   .hp { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
   /* Header with B2B Tour Deals logo (logo.png), footer with the three office addresses. */
   .site-header { background:#fff; border-bottom:1px solid var(--line); }
-  .site-header .wrap { max-width: 680px; margin: 0 auto; padding: 14px 18px; display:flex; align-items:center; gap:12px; }
-  .logo { height: 52px; width: auto; display:block; }
+  .site-header .wrap { max-width: 720px; margin: 0 auto; padding: 18px 20px; display:flex; align-items:center; gap:12px; }
+  .logo { height: 56px; width: auto; display:block; }
   .brand { font-weight:800; font-size:1.25rem; color:var(--brand); letter-spacing:.2px; }
   .brand small { display:block; font-size:.72rem; font-weight:600; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; }
   .site-footer { background:#fff; border-top:1px solid var(--line); margin-top:8px; }
-  .site-footer .wrap { max-width: 680px; margin: 0 auto; padding: 22px 18px 28px; display:grid; gap:14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); font-size:.88rem; color:var(--muted); }
-    .site-footer strong { display:block; color:var(--ink); font-size:.92rem; margin-bottom:2px; }
+  .site-footer .wrap { max-width: 720px; margin: 0 auto; padding: 28px 20px 32px; display:grid; gap:14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); font-size:.88rem; color:var(--muted); }
+  .site-footer strong { display:block; color:var(--ink); font-size:.92rem; margin-bottom:4px; }
   .site-footer p { margin:0; }
 </style>
 </head>
