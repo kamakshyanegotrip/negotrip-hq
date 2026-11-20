@@ -316,6 +316,18 @@
     if (toInt(v.pax_adults, 0) < 1) return fail('Please enter the number of adults.');
     if (v.gstin && !/^[0-9A-Z]{15}$/.test(v.gstin.trim().toUpperCase())) return fail('GSTIN should be 15 characters, or leave it blank.');
 
+    // The CRM intake reads plain field names; the full template goes in the message so it shows on the lead
+    const fieldsOrder = [
+      ['GSTIN', v.gstin], ['Travel date', v.travel_start], ['Flexible dates', v.flexible_dates], ['Nights', v.nights], ['Days', v.days],
+      ['Adults', v.pax_adults], ['Children', v.pax_children], ['Child ages', v.child_ages],
+      ['Hotel category', v.hotel_category], ['Rooms', v.rooms], ['Room configuration', v.room_config], ['Preferred hotel', v.preferred_hotel], ['Meal plan', v.meal_plan], ['Hotel location', v.hotel_location],
+      ['Pickup', v.pickup_location], ['Drop', v.drop_location], ['Pickup date and time', v.pickup_datetime], ['Drop date and time', v.drop_datetime], ['Vehicle', v.vehicle], ['Transport type', v.transport_type],
+      ['Places', v.places], ['Day-wise itinerary', v.day_itinerary], ['Activities', v.activities], ['Temples', v.temples], ['Guide', v.guide_required],
+      ['Budget per person (INR)', v.budget_amount], ['Budget type', v.budget_type], ['Rate type', v.rate_type], ['GST invoice', v.gst_invoice], ['Quote required by', v.quote_by],
+      ['Flight or train', v.transport_details], ['Seniors or infants', v.seniors_infants], ['Food', v.food], ['Other', v.other]
+    ];
+    const queryText = 'B2B tour query\n' + fieldsOrder.filter(([, x]) => x && String(x).trim()).map(([k, x]) => k + ': ' + String(x).trim()).join('\n');
+
     const payload = {
       source,
       audience: 'b2b',
@@ -332,17 +344,18 @@
       referrer: clean(document.referrer, 500),
       company_name: clean(v.company_name, 120),
       full_name: clean(v.full_name, 120),
-      phone_e164: digits(v.phone),
+      phone: digits(v.phone),
       email: clean(v.email && v.email.toLowerCase(), 160),
       gstin: clean(v.gstin && v.gstin.toUpperCase(), 15),
       consent_marketing: !!f.get('consent_contact'),
-      destination_text: clean(v.destination, 200),
+      destination: clean(v.destination, 200),
       travel_start: v.travel_start || null,
-      pax_adults: toInt(v.pax_adults, 1),
-      pax_children: toInt(v.pax_children, 0),
-      budget_amount: v.budget_amount ? Number(v.budget_amount) : null,
-      budget_currency: v.budget_amount ? 'INR' : null,
-      message: clean(v.other, 2000),
+      travel_end: null,
+      adults: toInt(v.pax_adults, 1),
+      children: toInt(v.pax_children, 0),
+      budget: v.budget_amount ? Number(v.budget_amount) : null,
+      currency: v.budget_amount ? 'INR' : null,
+      message: clean(queryText, 4000),
       // Full B2B query, kept as-is for the CRM's raw record
       query: {
         basic: { destination: v.destination, travel_date: v.travel_start || null, flexible_dates: v.flexible_dates || null,
